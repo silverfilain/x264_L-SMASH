@@ -1,0 +1,48 @@
+#ifndef AUDIO_INTERNAL_H_
+#define AUDIO_INTERNAL_H_
+
+#include "audio/audio.h"
+
+#include "libavcodec/avcodec.h"
+#include "libavformat/avformat.h"
+#include "libavutil/avutil.h"
+
+#define AUDIO_FILTER_COMMON \
+    audio_filter_t *self; \
+    audio_info_t *info; \
+    struct audio_hnd_t *next, *prev;
+
+typedef struct audio_info_t
+{
+    char *codec_name;
+    int samplerate; //< Sample Rate in Hz
+    enum SampleFormat samplefmt; //< Sample Format in SampleFormat
+    size_t samplesize; //< How many bytes per sample
+    int channels; //< How many channels
+    int64_t chanlayout; //< Channel layout (CH_* on avcodec.h)
+    int framelen; //< Frame length in samples
+    size_t framesize; //< Frame size in bytes
+    AVRational time_base;
+    uint8_t *extradata;
+    int extradata_size;
+} audio_info_t;
+
+// Generic audio handle (used to access fields from AUDIO_FILTER_COMMON)
+typedef struct audio_hnd_t
+{
+    AUDIO_FILTER_COMMON
+} audio_hnd_t;
+
+enum AudioTrack
+{
+    TRACK_ANY  = -1,
+    TRACK_NONE = -2
+};
+
+char **split_string( char *string, char *sep, unsigned limit );
+void free_string_array( char **array );
+
+char **split_options( const char *opt_str, char *options[] );
+char *get_option( const char *name, char **split_options );
+
+#endif /* AUDIO_INTERNAL_H_ */
