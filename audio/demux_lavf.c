@@ -20,6 +20,8 @@ typedef struct demux_lavf_t
 
 #define DEFAULT_BUFSIZE AVCODEC_MAX_AUDIO_FRAME_SIZE * 2
 
+static int buffer_next_frame( demux_lavf_t *h );
+
 static enum AudioResult init( const struct audio_filter_t *self, hnd_t base, hnd_t *handle, const char *opt_str )
 {
     assert( self );
@@ -99,10 +101,7 @@ static enum AudioResult init( const struct audio_filter_t *self, hnd_t base, hnd
     h->ctx = h->lavf->streams[tid]->codec;
     h->codec = avcodec_find_decoder( h->ctx->codec_id );
     if( avcodec_open( h->ctx, h->codec ) )
-    {
-        fprintf( stderr, "lavfsource [error]: error opening the %s codec for track %d\n", h->codec->name, h->track );
-        goto fail;
-    }
+        goto codecfail;
 
     h->info = calloc( 1, sizeof( audio_info_t ) );
 
@@ -122,8 +121,14 @@ static enum AudioResult init( const struct audio_filter_t *self, hnd_t base, hnd
     assert( h->bufsize > h->surplus * 2 );
     h->buffer = av_malloc( h->bufsize );
 
+    if( !buffer_next_frame( h ) )
+        goto codecfail;
+
     free_string_array( opts );
     return AUDIO_OK;
+
+codecfail:
+    fprintf( stderr, "lavfsource [error]: error opening the %s decoder for track %d\n", h->codec->name, h->track );
 fail:
     free_string_array( opts );
     if( h->lavf )
