@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <inttypes.h>
 
-typedef struct demux_lavf_t
+typedef struct lavf_source_t
 {
     AUDIO_FILTER_COMMON
     AVFormatContext *lavf;
@@ -16,11 +16,11 @@ typedef struct demux_lavf_t
     intptr_t surplus;
     intptr_t len;
     uint64_t bytepos;
-} demux_lavf_t;
+} lavf_source_t;
 
 #define DEFAULT_BUFSIZE AVCODEC_MAX_AUDIO_FRAME_SIZE * 2
 
-static int buffer_next_frame( demux_lavf_t *h );
+static int buffer_next_frame( lavf_source_t *h );
 
 static enum AudioResult init( const struct audio_filter_t *self, hnd_t base, hnd_t *handle, const char *opt_str )
 {
@@ -51,7 +51,7 @@ static enum AudioResult init( const struct audio_filter_t *self, hnd_t base, hnd
         fprintf( stderr, "lavfsource [error]: Could not open '%s' for reading\n", filename );
         return AUDIO_ERROR;
     }
-    demux_lavf_t *h = *handle = calloc( 1, sizeof( demux_lavf_t ) );
+    lavf_source_t *h = *handle = calloc( 1, sizeof( lavf_source_t ) );
     h->self = (audio_filter_t*) self;
 
     av_register_all();
@@ -154,7 +154,7 @@ static int free_packet( hnd_t handle, struct AVPacket *frame )
     return 0;
 }
 
-static struct AVPacket *next_packet( demux_lavf_t *h )
+static struct AVPacket *next_packet( lavf_source_t *h )
 {
     AVPacket *pkt = calloc( 1, sizeof( AVPacket ) );
 
@@ -164,7 +164,7 @@ static struct AVPacket *next_packet( demux_lavf_t *h )
             av_free_packet( pkt );
         if( av_read_frame( h->lavf, pkt ) )
         {
-            fprintf( stderr, "demux_lavf [info]: end of file reached or read error\n" );
+            fprintf( stderr, "lavfsource [info]: end of file reached or read error\n" );
             free_avpacket( pkt );
             return NULL;
         }
@@ -174,7 +174,7 @@ static struct AVPacket *next_packet( demux_lavf_t *h )
     return pkt;
 }
 
-static int low_decode_audio( demux_lavf_t *h, uint8_t *buf, intptr_t buflen )
+static int low_decode_audio( lavf_source_t *h, uint8_t *buf, intptr_t buflen )
 {
     static AVPacket pkt_temp;
     static AVPacket *pkt = NULL;
@@ -217,7 +217,7 @@ static int low_decode_audio( demux_lavf_t *h, uint8_t *buf, intptr_t buflen )
     return 0;
 }
 
-static struct AVPacket *decode_next_frame( demux_lavf_t *h )
+static struct AVPacket *decode_next_frame( lavf_source_t *h )
 {
     AVPacket *dst = calloc( 1, sizeof( AVPacket ) );
     assert( !av_new_packet( dst, AVCODEC_MAX_AUDIO_FRAME_SIZE ) );
@@ -238,7 +238,7 @@ static struct AVPacket *decode_next_frame( demux_lavf_t *h )
     return dst;
 }
 
-static int buffer_next_frame( demux_lavf_t *h )
+static int buffer_next_frame( lavf_source_t *h )
 {
     AVPacket *dec = decode_next_frame( h );
     if( !dec )
@@ -258,7 +258,7 @@ static int buffer_next_frame( demux_lavf_t *h )
     return 1;
 }
 
-static inline int not_in_cache( demux_lavf_t *h, int64_t sample )
+static inline int not_in_cache( lavf_source_t *h, int64_t sample )
 {
     int64_t samplebyte = sample * h->info->samplesize;
     if( samplebyte < h->bytepos )
@@ -268,7 +268,7 @@ static inline int not_in_cache( demux_lavf_t *h, int64_t sample )
     return 1; // after
 }
 
-static int64_t fill_buffer_until( demux_lavf_t *h, int64_t lastsample )
+static int64_t fill_buffer_until( lavf_source_t *h, int64_t lastsample )
 {
     static int errored = 0;
     if( errored )
@@ -298,7 +298,7 @@ static int64_t fill_buffer_until( demux_lavf_t *h, int64_t lastsample )
 
 static struct AVPacket *get_samples( hnd_t handle, int64_t first_sample, int64_t last_sample )
 {
-    demux_lavf_t *h = handle;
+    lavf_source_t *h = handle;
     assert( first_sample >= 0 && last_sample > first_sample );
 
     if( fill_buffer_until( h, first_sample ) < 0 )
@@ -364,9 +364,7 @@ fail:
 static enum AudioResult close( hnd_t handle )
 {
     assert( handle );
-    demux_lavf_t *h = handle;
-//    free_packet( h, h->pkt );
-//    av_destruct_packet( &h->demuxpkt );
+    lavf_source_t *h = handle;
     av_free( h->buffer );
     avcodec_close( h->ctx );
     av_close_input_file( h->lavf );
@@ -376,11 +374,11 @@ static enum AudioResult close( hnd_t handle )
     return AUDIO_OK;
 }
 
-const audio_filter_t audio_demux_lavf =
+const audio_filter_t audio_lavf_source =
 {
-        .name        = "libavformat demuxer",
-        .description = "Demuxes audio files using libavformat",
-        .help        = "Argument: filename to open",
+        .name        = "libavformat audio source",
+        .description = "Demuxes and decodes audio files using libavformat + libavcodec",
+        .help        = "Arguments: filename[:track]",
         .init        = init,
         .get_samples = get_samples,
         .free_packet = free_packet,
