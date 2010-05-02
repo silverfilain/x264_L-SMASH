@@ -1,7 +1,7 @@
 CFLAGS  = -Wall -g -std=gnu99 -I.. `pkg-config --cflags libavformat`
 LDFLAGS = -g `pkg-config --libs libavformat`
 
-AUDIO_SOURCES = demux_lavf.o
+AUDIO_SOURCES = source_lavf.o
 
 AUDIO_DEPS = audio.o audio_internal.o \
 	$(AUDIO_SOURCES) \
