@@ -1,6 +1,7 @@
 #include "audio/audio_internal.h"
 #include <assert.h>
 #include <stdio.h>
+#include <inttypes.h>
 
 typedef struct demux_lavf_t
 {
@@ -49,6 +50,7 @@ static enum AudioResult init( const struct audio_filter_t *self, hnd_t base, hnd
         return AUDIO_ERROR;
     }
     demux_lavf_t *h = *handle = calloc( 1, sizeof( demux_lavf_t ) );
+    h->self = (audio_filter_t*) self;
 
     av_register_all();
     if( !strcmp( filename, "-" ) )
@@ -270,7 +272,7 @@ static int64_t fill_buffer_until( demux_lavf_t *h, int64_t lastsample )
     {
         fprintf( stderr,
                 "lavfsource [error]: backwards seeking not supported "
-                "(requested sample %lld, first available is %lu)\n",
+                "(requested sample %"PRIu64", first available is %ld)\n",
                 lastsample, h->bytepos / h->info->samplesize );
         return -1;
     }

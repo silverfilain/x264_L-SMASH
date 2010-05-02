@@ -33,11 +33,18 @@ typedef struct audio_hnd_t
     AUDIO_FILTER_COMMON
 } audio_hnd_t;
 
-enum AudioTrack
+static inline audio_hnd_t *get_last_filter( audio_hnd_t *chain )
 {
-    TRACK_ANY  = -1,
-    TRACK_NONE = -2
-};
+    if( !chain )
+        return NULL;
+    while( chain->next )
+        chain = chain->next;
+    return chain;
+}
+
+void register_all( void );
+void unregister_all( void );
+audio_filter_t *get_filter_by_id( enum AudioFilter id );
 
 char **split_string( char *string, char *sep, unsigned limit );
 void free_string_array( char **array );
