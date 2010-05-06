@@ -26,13 +26,12 @@
 %include "x86inc.asm"
 %include "x86util.asm"
 
-SECTION_RODATA
-pb_3: times 16 db 3
-pb_shuf8x8c: db 0,0,0,0,2,2,2,2,4,4,4,4,6,6,6,6
-pw_8: times 4 dw 8
-sw_64: dd 64
-
 SECTION .text
+
+cextern pb_3
+cextern pb_shuf8x8c
+cextern pw_8
+cextern sw_64
 
 ;=============================================================================
 ; SAD MMX
@@ -78,10 +77,10 @@ SECTION .text
 %endmacro
 
 ;-----------------------------------------------------------------------------
-; int x264_pixel_sad_16x16_mmxext (uint8_t *, int, uint8_t *, int )
+; int pixel_sad_16x16( uint8_t *, int, uint8_t *, int )
 ;-----------------------------------------------------------------------------
 %macro SAD 2
-cglobal x264_pixel_sad_%1x%2_mmxext, 4,4
+cglobal pixel_sad_%1x%2_mmxext, 4,4
     pxor    mm0, mm0
 %rep %2/2
     SAD_INC_2x%1P
@@ -113,9 +112,9 @@ SAD  4,  4
 
 %macro SAD_W16 1
 ;-----------------------------------------------------------------------------
-; int x264_pixel_sad_16x16_sse2 (uint8_t *, int, uint8_t *, int )
+; int pixel_sad_16x16( uint8_t *, int, uint8_t *, int )
 ;-----------------------------------------------------------------------------
-cglobal x264_pixel_sad_16x16_%1, 4,4,8
+cglobal pixel_sad_16x16_%1, 4,4,8
     movdqu  m0, [r2]
     movdqu  m1, [r2+r3]
     lea     r2, [r2+2*r3]
@@ -180,9 +179,9 @@ cglobal x264_pixel_sad_16x16_%1, 4,4,8
     SAD_END_SSE2
 
 ;-----------------------------------------------------------------------------
-; int x264_pixel_sad_16x8_sse2 (uint8_t *, int, uint8_t *, int )
+; int pixel_sad_16x8( uint8_t *, int, uint8_t *, int )
 ;-----------------------------------------------------------------------------
-cglobal x264_pixel_sad_16x8_%1, 4,4
+cglobal pixel_sad_16x8_%1, 4,4
     movdqu  m0, [r2]
     movdqu  m2, [r2+r3]
     lea     r2, [r2+2*r3]
@@ -249,7 +248,7 @@ SAD_W16 sse2_aligned
 %endmacro
 
 ;Even on Nehalem, no sizes other than 8x16 benefit from this method.
-cglobal x264_pixel_sad_8x16_sse2, 4,4
+cglobal pixel_sad_8x16_sse2, 4,4
     SAD_INC_4x8P_SSE 0
     SAD_INC_4x8P_SSE 1
     SAD_INC_4x8P_SSE 1
@@ -258,10 +257,10 @@ cglobal x264_pixel_sad_8x16_sse2, 4,4
     RET
 
 ;-----------------------------------------------------------------------------
-; void intra_sad_x3_4x4 ( uint8_t *fenc, uint8_t *fdec, int res[3] );
+; void intra_sad_x3_4x4( uint8_t *fenc, uint8_t *fdec, int res[3] );
 ;-----------------------------------------------------------------------------
 
-cglobal x264_intra_sad_x3_4x4_mmxext, 3,3
+cglobal intra_sad_x3_4x4_mmxext, 3,3
     pxor      mm7, mm7
     movd      mm0, [r1-FDEC_STRIDE]
     movd      mm1, [r0+FENC_STRIDE*0]
@@ -305,7 +304,7 @@ cglobal x264_intra_sad_x3_4x4_mmxext, 3,3
     RET
 
 ;-----------------------------------------------------------------------------
-; void intra_sad_x3_8x8 ( uint8_t *fenc, uint8_t edge[33], int res[3]);
+; void intra_sad_x3_8x8( uint8_t *fenc, uint8_t edge[33], int res[3]);
 ;-----------------------------------------------------------------------------
 
 ;m0 = DC
@@ -343,7 +342,7 @@ cglobal x264_intra_sad_x3_4x4_mmxext, 3,3
 %endmacro
 
 INIT_MMX
-cglobal x264_intra_sad_x3_8x8_mmxext, 3,3
+cglobal intra_sad_x3_8x8_mmxext, 3,3
     movq      m7, [r1+7]
     pxor      m0, m0
     movq      m6, [r1+16]  ;V prediction
@@ -372,7 +371,7 @@ cglobal x264_intra_sad_x3_8x8_mmxext, 3,3
     RET
 
 ;-----------------------------------------------------------------------------
-; void intra_sad_x3_8x8c ( uint8_t *fenc, uint8_t *fdec, int res[3] );
+; void intra_sad_x3_8x8c( uint8_t *fenc, uint8_t *fdec, int res[3] );
 ;-----------------------------------------------------------------------------
 
 %macro INTRA_SAD_HV_ITER 2
@@ -407,7 +406,7 @@ cglobal x264_intra_sad_x3_8x8_mmxext, 3,3
 %endmacro
 
 %macro INTRA_SAD_8x8C 1
-cglobal x264_intra_sad_x3_8x8c_%1, 3,3
+cglobal intra_sad_x3_8x8c_%1, 3,3
     movq        m6, [r1 - FDEC_STRIDE]
     add         r1, FDEC_STRIDE*4
 %ifidn %1,ssse3
@@ -508,13 +507,13 @@ INTRA_SAD_8x8C ssse3
 
 
 ;-----------------------------------------------------------------------------
-; void intra_sad_x3_16x16 ( uint8_t *fenc, uint8_t *fdec, int res[3] );
+; void intra_sad_x3_16x16( uint8_t *fenc, uint8_t *fdec, int res[3] );
 ;-----------------------------------------------------------------------------
 
 ;xmm7: DC prediction    xmm6: H prediction  xmm5: V prediction
 ;xmm4: DC pred score    xmm3: H pred score  xmm2: V pred score
 %macro INTRA_SAD16 1-2 0
-cglobal x264_intra_sad_x3_16x16_%1,3,5,%2
+cglobal intra_sad_x3_16x16_%1,3,5,%2
     pxor    mm0, mm0
     pxor    mm1, mm1
     psadbw  mm0, [r1-FDEC_STRIDE+0]
@@ -526,10 +525,14 @@ cglobal x264_intra_sad_x3_16x16_%1,3,5,%2
 %endif
 %assign x 0
 %rep 16
-    movzx   r4d, byte [r1-1+FDEC_STRIDE*x]
+    movzx   r4d, byte [r1-1+FDEC_STRIDE*(x&3)]
+%if (x&3)==3 && x!=15
+    add      r1, FDEC_STRIDE*4
+%endif
     add     r3d, r4d
 %assign x x+1
 %endrep
+    sub      r1, FDEC_STRIDE*12
     add     r3d, 16
     shr     r3d, 5
     imul    r3d, 0x01010101
@@ -813,11 +816,11 @@ INTRA_SAD16 ssse3, 8
 %endmacro
 
 ;-----------------------------------------------------------------------------
-; void x264_pixel_sad_x3_16x16_mmxext( uint8_t *fenc, uint8_t *pix0, uint8_t *pix1,
-;                                      uint8_t *pix2, int i_stride, int scores[3] )
+; void pixel_sad_x3_16x16( uint8_t *fenc, uint8_t *pix0, uint8_t *pix1,
+;                          uint8_t *pix2, int i_stride, int scores[3] )
 ;-----------------------------------------------------------------------------
 %macro SAD_X 3
-cglobal x264_pixel_sad_x%1_%2x%3_mmxext, %1+2, %1+2
+cglobal pixel_sad_x%1_%2x%3_mmxext, %1+2, %1+2
 %ifdef WIN64
     %assign i %1+1
     movsxd r %+ i, r %+ i %+ d
@@ -1162,11 +1165,11 @@ SAD_X 4,  4,  4
 %endmacro
 
 ;-----------------------------------------------------------------------------
-; void x264_pixel_sad_x3_16x16_sse2( uint8_t *fenc, uint8_t *pix0, uint8_t *pix1,
-;                                    uint8_t *pix2, int i_stride, int scores[3] )
+; void pixel_sad_x3_16x16( uint8_t *fenc, uint8_t *pix0, uint8_t *pix1,
+;                          uint8_t *pix2, int i_stride, int scores[3] )
 ;-----------------------------------------------------------------------------
 %macro SAD_X_SSE2 4
-cglobal x264_pixel_sad_x%1_%2x%3_%4, 2+%1,2+%1,9
+cglobal pixel_sad_x%1_%2x%3_%4, 2+%1,2+%1,9
 %ifdef WIN64
     %assign i %1+1
     movsxd r %+ i, r %+ i %+ d
@@ -1179,7 +1182,7 @@ cglobal x264_pixel_sad_x%1_%2x%3_%4, 2+%1,2+%1,9
 %endmacro
 
 %macro SAD_X_SSE2_MISALIGN 4
-cglobal x264_pixel_sad_x%1_%2x%3_%4_misalign, 2+%1,2+%1,9
+cglobal pixel_sad_x%1_%2x%3_%4_misalign, 2+%1,2+%1,9
 %ifdef WIN64
     %assign i %1+1
     movsxd r %+ i, r %+ i %+ d
@@ -1285,11 +1288,11 @@ sad_w16_align%1_ssse3:
 %endmacro
 
 %macro SAD16_CACHELINE_FUNC 2 ; cpu, height
-cglobal x264_pixel_sad_16x%2_cache64_%1
+cglobal pixel_sad_16x%2_cache64_%1
     mov     eax, r2m
     and     eax, 0x37
     cmp     eax, 0x30
-    jle x264_pixel_sad_16x%2_sse2
+    jle pixel_sad_16x%2_sse2
     PROLOGUE 4,6
     mov     r4d, r2d
     and     r4d, 15
@@ -1320,7 +1323,7 @@ cglobal x264_pixel_sad_16x%2_cache64_%1
     mov    eax, r2m
     and    eax, 0x17|%1|(%4>>1)
     cmp    eax, 0x10|%1|(%4>>1)
-    jle x264_pixel_sad_%1x%2_mmxext
+    jle pixel_sad_%1x%2_mmxext
     and    eax, 7
     shl    eax, 3
     movd   mm6, [sw_64]
@@ -1333,7 +1336,7 @@ cglobal x264_pixel_sad_16x%2_cache64_%1
 %endmacro
 
 %macro SAD16_CACHELINE_FUNC_MMX2 2 ; height, cacheline
-cglobal x264_pixel_sad_16x%1_cache%2_mmxext
+cglobal pixel_sad_16x%1_cache%2_mmxext
     SAD_CACHELINE_START_MMX2 16, %1, %1, %2
 .loop:
     movq   mm1, [r2]
@@ -1359,7 +1362,7 @@ cglobal x264_pixel_sad_16x%1_cache%2_mmxext
 %endmacro
 
 %macro SAD8_CACHELINE_FUNC_MMX2 2 ; height, cacheline
-cglobal x264_pixel_sad_8x%1_cache%2_mmxext
+cglobal pixel_sad_8x%1_cache%2_mmxext
     SAD_CACHELINE_START_MMX2 8, %1, %1/2, %2
 .loop:
     movq   mm1, [r2+8]
@@ -1395,11 +1398,11 @@ cglobal x264_pixel_sad_8x%1_cache%2_mmxext
 %endmacro
 
 %macro SADX3_CACHELINE_FUNC 6 ; width, height, cacheline, normal_ver, split_ver, name
-cglobal x264_pixel_sad_x3_%1x%2_cache%3_%6
+cglobal pixel_sad_x3_%1x%2_cache%3_%6
     CHECK_SPLIT r1m, %1, %3
     CHECK_SPLIT r2m, %1, %3
     CHECK_SPLIT r3m, %1, %3
-    jmp x264_pixel_sad_x3_%1x%2_%4
+    jmp pixel_sad_x3_%1x%2_%4
 .split:
 %ifdef ARCH_X86_64
     PROLOGUE 6,7
@@ -1414,7 +1417,7 @@ cglobal x264_pixel_sad_x3_%1x%2_cache%3_%6
     mov  r3, r4
     mov  r10, r0
     mov  r11, r5
-    call x264_pixel_sad_%1x%2_cache%3_%5
+    call pixel_sad_%1x%2_cache%3_%5
     mov  [r11], eax
 %ifdef WIN64
     mov  r2, [rsp]
@@ -1422,7 +1425,7 @@ cglobal x264_pixel_sad_x3_%1x%2_cache%3_%6
     pop  r2
 %endif
     mov  r0, r10
-    call x264_pixel_sad_%1x%2_cache%3_%5
+    call pixel_sad_%1x%2_cache%3_%5
     mov  [r11+4], eax
 %ifdef WIN64
     mov  r2, [rsp+8]
@@ -1430,7 +1433,7 @@ cglobal x264_pixel_sad_x3_%1x%2_cache%3_%6
     pop  r2
 %endif
     mov  r0, r10
-    call x264_pixel_sad_%1x%2_cache%3_%5
+    call pixel_sad_%1x%2_cache%3_%5
     mov  [r11+8], eax
 %ifdef WIN64
     add  rsp, 24
@@ -1443,15 +1446,15 @@ cglobal x264_pixel_sad_x3_%1x%2_cache%3_%6
     push dword [esp+16]
     push dword 16
     push dword [esp+20]
-    call x264_pixel_sad_%1x%2_cache%3_%5
+    call pixel_sad_%1x%2_cache%3_%5
     mov  ecx, [esp+32]
     mov  [edi], eax
     mov  [esp+8], ecx
-    call x264_pixel_sad_%1x%2_cache%3_%5
+    call pixel_sad_%1x%2_cache%3_%5
     mov  ecx, [esp+36]
     mov  [edi+4], eax
     mov  [esp+8], ecx
-    call x264_pixel_sad_%1x%2_cache%3_%5
+    call pixel_sad_%1x%2_cache%3_%5
     mov  [edi+8], eax
     add  esp, 16
     pop  edi
@@ -1460,12 +1463,12 @@ cglobal x264_pixel_sad_x3_%1x%2_cache%3_%6
 %endmacro
 
 %macro SADX4_CACHELINE_FUNC 6 ; width, height, cacheline, normal_ver, split_ver, name
-cglobal x264_pixel_sad_x4_%1x%2_cache%3_%6
+cglobal pixel_sad_x4_%1x%2_cache%3_%6
     CHECK_SPLIT r1m, %1, %3
     CHECK_SPLIT r2m, %1, %3
     CHECK_SPLIT r3m, %1, %3
     CHECK_SPLIT r4m, %1, %3
-    jmp x264_pixel_sad_x4_%1x%2_%4
+    jmp pixel_sad_x4_%1x%2_%4
 .split:
 %ifdef ARCH_X86_64
     PROLOGUE 6,7
@@ -1480,7 +1483,7 @@ cglobal x264_pixel_sad_x4_%1x%2_cache%3_%6
     mov  r1, FENC_STRIDE
     mov  r3, r5
     mov  r10, r0
-    call x264_pixel_sad_%1x%2_cache%3_%5
+    call pixel_sad_%1x%2_cache%3_%5
     mov  [r11], eax
 %ifdef WIN64
     mov  r2, [rsp]
@@ -1488,7 +1491,7 @@ cglobal x264_pixel_sad_x4_%1x%2_cache%3_%6
     pop  r2
 %endif
     mov  r0, r10
-    call x264_pixel_sad_%1x%2_cache%3_%5
+    call pixel_sad_%1x%2_cache%3_%5
     mov  [r11+4], eax
 %ifdef WIN64
     mov  r2, [rsp+8]
@@ -1496,7 +1499,7 @@ cglobal x264_pixel_sad_x4_%1x%2_cache%3_%6
     pop  r2
 %endif
     mov  r0, r10
-    call x264_pixel_sad_%1x%2_cache%3_%5
+    call pixel_sad_%1x%2_cache%3_%5
     mov  [r11+8], eax
 %ifdef WIN64
     mov  r2, [rsp+16]
@@ -1504,7 +1507,7 @@ cglobal x264_pixel_sad_x4_%1x%2_cache%3_%6
     pop  r2
 %endif
     mov  r0, r10
-    call x264_pixel_sad_%1x%2_cache%3_%5
+    call pixel_sad_%1x%2_cache%3_%5
     mov  [r11+12], eax
 %ifdef WIN64
     add  rsp, 24
@@ -1517,19 +1520,19 @@ cglobal x264_pixel_sad_x4_%1x%2_cache%3_%6
     push dword [esp+16]
     push dword 16
     push dword [esp+20]
-    call x264_pixel_sad_%1x%2_cache%3_%5
+    call pixel_sad_%1x%2_cache%3_%5
     mov  ecx, [esp+32]
     mov  [edi], eax
     mov  [esp+8], ecx
-    call x264_pixel_sad_%1x%2_cache%3_%5
+    call pixel_sad_%1x%2_cache%3_%5
     mov  ecx, [esp+36]
     mov  [edi+4], eax
     mov  [esp+8], ecx
-    call x264_pixel_sad_%1x%2_cache%3_%5
+    call pixel_sad_%1x%2_cache%3_%5
     mov  ecx, [esp+40]
     mov  [edi+8], eax
     mov  [esp+8], ecx
-    call x264_pixel_sad_%1x%2_cache%3_%5
+    call pixel_sad_%1x%2_cache%3_%5
     mov  [edi+12], eax
     add  esp, 16
     pop  edi
