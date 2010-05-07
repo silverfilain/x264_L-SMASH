@@ -50,6 +50,7 @@ typedef struct audio_samples_t
 
 audio_filter_t *audio_get_filter( enum AudioFilter filterid );
 hnd_t audio_open_from_file( audio_filter_t *preferred_filter, char *path, int trackno );
+enum AudioResult audio_add_filter( hnd_t base, audio_filter_t *filter, const char *options );
 enum AudioResult audio_filter_samples( audio_samples_t *samples, hnd_t chain, int64_t first_sample, int64_t last_sample );
 void audio_free_samples( audio_samples_t *samples );
 int audio_close( hnd_t chain );
