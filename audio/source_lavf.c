@@ -22,11 +22,11 @@ typedef struct lavf_source_t
 
 static int buffer_next_frame( lavf_source_t *h );
 
-static enum AudioResult init( const struct audio_filter_t *self, hnd_t base, hnd_t *handle, const char *opt_str )
+static enum AudioResult init( const struct audio_filter_t *self, hnd_t previous, hnd_t *handle, const char *opt_str )
 {
     assert( self );
     assert( opt_str );
-    assert( !base ); // This must be the first filter
+    assert( !previous ); // This must be the first filter
     assert( handle );
     char *optlist[] = { "filename", "track", NULL };
     char **opts     = split_options( opt_str, optlist );
@@ -51,8 +51,8 @@ static enum AudioResult init( const struct audio_filter_t *self, hnd_t base, hnd
         fprintf( stderr, "lavfsource [error]: Could not open '%s' for reading\n", filename );
         return AUDIO_ERROR;
     }
-    lavf_source_t *h = *handle = calloc( 1, sizeof( lavf_source_t ) );
-    h->self = (audio_filter_t*) self;
+    
+    INIT_FILTER_STRUCT( lavf_source_t );
 
     av_register_all();
     if( !strcmp( filename, "-" ) )
