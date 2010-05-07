@@ -374,7 +374,7 @@ static enum AudioResult close( hnd_t handle )
     return AUDIO_OK;
 }
 
-const audio_filter_t audio_lavf_source =
+const audio_filter_t audio_source_lavf =
 {
         .name        = "libavformat audio source",
         .description = "Demuxes and decodes audio files using libavformat + libavcodec",

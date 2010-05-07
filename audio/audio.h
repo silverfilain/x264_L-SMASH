@@ -30,7 +30,8 @@ typedef struct audio_filter_t
 /* NOTE: this enum must be synchronized with audio_internal.c:register_all */
 enum AudioFilter
 {
-    AUDIO_SOURCE_LAVF = 0
+    AUDIO_SOURCE_LAVF = 0,
+    AUDIO_MUXER_RAW
 };
 
 enum AudioFlags

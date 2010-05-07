@@ -48,7 +48,8 @@ static void append_to_filter_list( audio_filter_t *f )
 void register_all( void )
 {
 #define REGISTER(typename) { extern audio_filter_t typename; append_to_filter_list( &typename ); }
-    REGISTER( audio_lavf_source );
+    REGISTER( audio_source_lavf );
+    REGISTER( audio_muxer_raw );
 #undef REGISTER
 }
 
