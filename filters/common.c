@@ -76,18 +76,22 @@ char **split_options( const char *opt_str, char *options[] )
         ++options_count;
 
     char **opts = calloc( split_count * 2 + 2, sizeof( char ** ) );
+    char **arg = NULL;
     int opt = 0;
     int found_named = 0;
     int i, invalid = 0;
     for( i = 0; split[i] != NULL; i++, invalid = 0 )
     {
-        char **arg = split_string( split[i], "=", 2 );
+        arg = split_string( split[i], "=", 2 );
         if( arg == NULL )
         {
             if( found_named )
                 invalid = 1;
             else if( i > options_count || options[i] == NULL )
-                fprintf( stderr, "options [warning]: Too many options given\n" );
+            {
+                fprintf( stderr, "options [error]: Too many options given\n" );
+                goto fail;
+            }
             else
             {
                 opts[opt++] = strdup( options[i] );
@@ -99,7 +103,10 @@ char **split_options( const char *opt_str, char *options[] )
             if( found_named )
                 invalid = 1;
             else if( i > options_count || options[i] == NULL )
-                fprintf( stderr, "options [warning]: Too many options given\n" );
+            {
+                fprintf( stderr, "options [error]: Too many options given\n" );
+                goto fail;
+            }
             else
             {
                 opts[opt++] = strdup( options[i] );
@@ -116,7 +123,10 @@ char **split_options( const char *opt_str, char *options[] )
             while( options[j] != NULL && !strcmp( arg[0], options[j] ) )
                 ++j;
             if( options[j] == NULL )
+            {
                 fprintf( stderr, "options [warning]: Invalid option '%s'\n", arg[0] );
+                goto fail;
+            }
             else
             {
                 opts[opt++] = strdup( arg[0] );
@@ -124,11 +134,20 @@ char **split_options( const char *opt_str, char *options[] )
             }
         }
         if( invalid )
-            fprintf( stderr, "options [warning]: Ordered option given after named, ignoring\n" );
+        {
+            fprintf( stderr, "options [error]: Ordered option given after named\n" );
+            goto fail;
+        }
         free_string_array( arg );
     }
     free_string_array( split );
     return opts;
+fail:
+    if( arg )
+        free_string_array( arg );
+    free_string_array( split );
+    free_string_array( opts );
+    return NULL;
 }
 
 char *get_option( const char *name, char **split_options )

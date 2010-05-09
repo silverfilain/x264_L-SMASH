@@ -18,6 +18,9 @@ static enum AudioResult init( const struct audio_filter_t *self, hnd_t previous,
     char *optlist[] = { "filename", NULL };
     char **opts     = split_options( opt_str, optlist );
 
+    if( !opts )
+        return AUDIO_ERROR;
+
     char *filename = get_option( "filename", opts );
     assert( filename );
 
