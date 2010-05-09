@@ -120,7 +120,7 @@ char **split_options( const char *opt_str, char *options[] )
         {
             found_named = 1;
             int j = 0;
-            while( options[j] != NULL && !strcmp( arg[0], options[j] ) )
+            while( options[j] != NULL && strcmp( arg[0], options[j] ) )
                 ++j;
             if( options[j] == NULL )
             {
