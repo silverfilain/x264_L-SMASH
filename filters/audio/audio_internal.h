@@ -1,7 +1,7 @@
 #ifndef AUDIO_INTERNAL_H_
 #define AUDIO_INTERNAL_H_
 
-#include "audio/audio.h"
+#include "filters/audio/audio.h"
 
 #include "libavcodec/avcodec.h"
 #include "libavformat/avformat.h"
@@ -63,11 +63,5 @@ static inline audio_hnd_t *get_last_filter( audio_hnd_t *chain )
 void register_all( void );
 void unregister_all( void );
 audio_filter_t *get_filter_by_id( enum AudioFilter id );
-
-char **split_string( char *string, char *sep, unsigned limit );
-void free_string_array( char **array );
-
-char **split_options( const char *opt_str, char *options[] );
-char *get_option( const char *name, char **split_options );
 
 #endif /* AUDIO_INTERNAL_H_ */

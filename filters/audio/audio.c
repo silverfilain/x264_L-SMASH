@@ -1,5 +1,4 @@
-#include "audio/audio.h"
-#include "audio/audio_internal.h"
+#include "filters/audio/audio_internal.h"
 
 #include <assert.h>
 

@@ -1,9 +1,8 @@
 #ifndef AUDIO_H_
 #define AUDIO_H_
 
-typedef void* hnd_t;
-
 #include <stdint.h>
+#include "filters/common.h"
 
 enum AudioResult
 {
