@@ -1,7 +1,7 @@
-#ifndef AUDIO_INTERNAL_H_
-#define AUDIO_INTERNAL_H_
+#ifndef FILTERS_AUDIO_INTERNAL_H_
+#define FILTERS_AUDIO_INTERNAL_H_
 
-#include "filters/audio/audio.h"
+#include "filters/audio/audio_filters.h"
 
 #include "libavcodec/avcodec.h"
 #include "libavformat/avformat.h"
@@ -51,7 +51,7 @@ typedef struct audio_hnd_t
     AUDIO_FILTER_COMMON
 } audio_hnd_t;
 
-static inline audio_hnd_t *get_last_filter( audio_hnd_t *chain )
+static inline audio_hnd_t *af_get_last_filter( audio_hnd_t *chain )
 {
     if( !chain )
         return NULL;
@@ -60,8 +60,8 @@ static inline audio_hnd_t *get_last_filter( audio_hnd_t *chain )
     return chain;
 }
 
-void register_all( void );
-void unregister_all( void );
-audio_filter_t *get_filter_by_id( enum AudioFilter id );
+void af_register_all( void );
+void af_unregister_all( void );
+audio_filter_t *af_get_filter_by_id( enum AudioFilter id );
 
-#endif /* AUDIO_INTERNAL_H_ */
+#endif /* FILTERS_AUDIO_INTERNAL_H_ */

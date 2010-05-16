@@ -1,4 +1,4 @@
-#include "filters/audio/audio_internal.h"
+#include "filters/audio/internal.h"
 
 #include <assert.h>
 
@@ -10,7 +10,7 @@ typedef struct audio_filter_list_t
 
 audio_filter_list_t *filter_list;
 
-audio_filter_t *get_filter_by_id( enum AudioFilter id )
+audio_filter_t *af_get_filter_by_id( enum AudioFilter id )
 {
     assert( filter_list );
     int i = 0;
@@ -45,7 +45,7 @@ static void append_to_filter_list( audio_filter_t *f )
 }
 
 /* NOTE: this function must be synchronized with the AudioFilter enum (audio.h) */
-void register_all( void )
+void af_register_all( void )
 {
 #define REGISTER(typename) { extern audio_filter_t typename; append_to_filter_list( &typename ); }
     REGISTER( audio_source_lavf );
@@ -62,7 +62,7 @@ static void free_filter_list( audio_filter_list_t *f )
     free( f );
 }
 
-void unregister_all( void )
+void af_unregister_all( void )
 {
     free_filter_list( filter_list );
     filter_list = NULL;

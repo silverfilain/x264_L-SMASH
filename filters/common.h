@@ -1,8 +1,6 @@
 #ifndef _FILTERS_COMMON_H
 #define _FILTERS_COMMON_H
 
-typedef void* hnd_t;
-
 char **split_string( char *string, char *sep, unsigned limit );
 void free_string_array( char **array );
 
