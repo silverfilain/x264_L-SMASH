@@ -2066,6 +2066,10 @@ static void *x264_slices_write( x264_t *h )
 static int x264_threaded_slices_write( x264_t *h )
 {
     void *ret = NULL;
+#ifdef HAVE_MMX
+    if( h->param.cpu&X264_CPU_SSE_MISALIGN )
+        x264_cpu_mask_misalign_sse();
+#endif
     /* set first/last mb and sync contexts */
     for( int i = 0; i < h->param.i_threads; i++ )
     {
@@ -2129,6 +2133,12 @@ static int x264_threaded_slices_write( x264_t *h )
     }
 
     return 0;
+}
+
+void x264_encoder_intra_refresh( x264_t *h )
+{
+    h = h->thread[h->i_thread_phase];
+    h->b_queued_intra_refresh = 1;
 }
 
 /****************************************************************************
@@ -2375,25 +2385,34 @@ int     x264_encoder_encode( x264_t *h,
     h->i_nal_type = i_nal_type;
     h->i_nal_ref_idc = i_nal_ref_idc;
 
-    if( h->param.b_intra_refresh && h->fenc->i_type == X264_TYPE_P )
+    if( h->param.b_intra_refresh )
     {
-        int pocdiff = (h->fdec->i_poc - h->fref0[0]->i_poc)/2;
-        float increment = X264_MAX( ((float)h->sps->i_mb_width-1) / h->param.i_keyint_max, 1 );
-        int max_position = (int)(increment * h->param.i_keyint_max);
-        if( IS_X264_TYPE_I( h->fref0[0]->i_type ) )
-            h->fdec->f_pir_position = 0;
-        else
+        if( IS_X264_TYPE_I( h->fenc->i_type ) )
         {
+            h->fdec->i_frames_since_pir = 0;
+            h->b_queued_intra_refresh = 0;
+            /* PIR is currently only supported with ref == 1, so any intra frame effectively refreshes
+             * the whole frame and counts as an intra refresh. */
+            h->fdec->f_pir_position = h->sps->i_mb_width;
+        }
+        else if( h->fenc->i_type == X264_TYPE_P )
+        {
+            int pocdiff = (h->fdec->i_poc - h->fref0[0]->i_poc)/2;
+            float increment = X264_MAX( ((float)h->sps->i_mb_width-1) / h->param.i_keyint_max, 1 );
             h->fdec->f_pir_position = h->fref0[0]->f_pir_position;
-            if( h->fdec->f_pir_position+0.5 >= max_position )
+            h->fdec->i_frames_since_pir = h->fref0[0]->i_frames_since_pir + pocdiff;
+            if( h->fdec->i_frames_since_pir >= h->param.i_keyint_max ||
+                (h->b_queued_intra_refresh && h->fdec->f_pir_position + 0.5 >= h->sps->i_mb_width) )
             {
                 h->fdec->f_pir_position = 0;
+                h->fdec->i_frames_since_pir = 0;
+                h->b_queued_intra_refresh = 0;
                 h->fenc->b_keyframe = 1;
             }
+            h->fdec->i_pir_start_col = h->fdec->f_pir_position+0.5;
+            h->fdec->f_pir_position += increment * pocdiff;
+            h->fdec->i_pir_end_col = h->fdec->f_pir_position+0.5;
         }
-        h->fdec->i_pir_start_col = h->fdec->f_pir_position+0.5;
-        h->fdec->f_pir_position += increment * pocdiff;
-        h->fdec->i_pir_end_col = h->fdec->f_pir_position+0.5;
     }
 
     if( h->fenc->b_keyframe )
@@ -2801,8 +2820,8 @@ void    x264_encoder_close  ( x264_t *h )
     /* Slices used and PSNR */
     for( int i = 0; i < 5; i++ )
     {
-        static const int slice_order[] = { SLICE_TYPE_I, SLICE_TYPE_SI, SLICE_TYPE_P, SLICE_TYPE_SP, SLICE_TYPE_B };
-        static const char *slice_name[] = { "P", "B", "I", "SP", "SI" };
+        static const uint8_t slice_order[] = { SLICE_TYPE_I, SLICE_TYPE_SI, SLICE_TYPE_P, SLICE_TYPE_SP, SLICE_TYPE_B };
+        static const char * const slice_name[] = { "P", "B", "I", "SP", "SI" };
         int i_slice = slice_order[i];
 
         if( h->stat.i_frame_count[i_slice] > 0 )

@@ -37,8 +37,8 @@ typedef void (*pf_mc_t)( uint8_t *src, int i_src,
                          uint8_t *dst, int i_dst, int i_height );
 
 
-static const int hpel_ref0[16] = {0,1,1,1,0,1,1,1,2,3,3,3,0,1,1,1};
-static const int hpel_ref1[16] = {0,0,0,0,2,2,3,2,2,2,3,2,2,2,3,2};
+static const uint8_t hpel_ref0[16] = {0,1,1,1,0,1,1,1,2,3,3,3,0,1,1,1};
+static const uint8_t hpel_ref1[16] = {0,0,0,0,2,2,3,2,2,2,3,2,2,2,3,2};
 
 
 static inline int x264_tapfilter( uint8_t *pix, int i_pix_next )
@@ -291,8 +291,8 @@ static void mc_chroma_2xh( uint8_t *dst, int i_dst_stride,
  }
 
 
-#define DO_PROCESS_W4( a )  \
-    dstv_16A = vec_mladd( src##a##v_16A, coeff##a##v, dstv_16A );   \
+#define DO_PROCESS_W4( a ) \
+    dstv_16A = vec_mladd( src##a##v_16A, coeff##a##v, dstv_16A ); \
     dstv_16B = vec_mladd( src##a##v_16B, coeff##a##v, dstv_16B )
 
 static void mc_chroma_altivec_4xh( uint8_t *dst, int i_dst_stride,
@@ -369,10 +369,10 @@ static void mc_chroma_altivec_4xh( uint8_t *dst, int i_dst_stride,
     }
 }
 
-#define DO_PROCESS_W8( a )  \
-    src##a##v_16A = vec_u8_to_u16( src##a##v_8A );  \
-    src##a##v_16B = vec_u8_to_u16( src##a##v_8B );  \
-    dstv_16A = vec_mladd( src##a##v_16A, coeff##a##v, dstv_16A );   \
+#define DO_PROCESS_W8( a ) \
+    src##a##v_16A = vec_u8_to_u16( src##a##v_8A ); \
+    src##a##v_16B = vec_u8_to_u16( src##a##v_8B ); \
+    dstv_16A = vec_mladd( src##a##v_16A, coeff##a##v, dstv_16A ); \
     dstv_16B = vec_mladd( src##a##v_16B, coeff##a##v, dstv_16B )
 
 static void mc_chroma_altivec_8xh( uint8_t *dst, int i_dst_stride,
