@@ -23,6 +23,7 @@
         if( previous )                                          \
         {                                                       \
             audio_hnd_t *p = previous;                          \
+            p->next = h;                                        \
             assert( p->info );                                  \
             h->info = malloc( sizeof( audio_info_t ) );         \
             memcpy( h->info, p->info, sizeof( audio_info_t ) ); \
