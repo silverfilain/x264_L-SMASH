@@ -331,7 +331,8 @@ void x264_mb_encode_8x8_chroma( x264_t *h, int b_inter, int i_qp )
     {
         int thresh = (x264_lambda2_tab[i_qp] + 32) >> 6;
         int ssd[2];
-        int score  = h->pixf.var2_8x8( h->mb.pic.p_fenc[1], FENC_STRIDE, h->mb.pic.p_fdec[1], FDEC_STRIDE, &ssd[0] );
+        int score = h->pixf.var2_8x8( h->mb.pic.p_fenc[1], FENC_STRIDE, h->mb.pic.p_fdec[1], FDEC_STRIDE, &ssd[0] );
+        if( score < thresh*4 )
             score += h->pixf.var2_8x8( h->mb.pic.p_fenc[2], FENC_STRIDE, h->mb.pic.p_fdec[2], FDEC_STRIDE, &ssd[1] );
         if( score < thresh*4 )
         {
@@ -458,8 +459,12 @@ void x264_mb_encode_8x8_chroma( x264_t *h, int b_inter, int i_qp )
 
 static void x264_macroblock_encode_skip( x264_t *h )
 {
-    for( int i = 0; i < sizeof( h->mb.cache.non_zero_count ); i += 16 )
-        M128( &h->mb.cache.non_zero_count[i] ) = M128_ZERO;
+    M32( &h->mb.cache.non_zero_count[x264_scan8[0]+0*8] ) = 0;
+    M32( &h->mb.cache.non_zero_count[x264_scan8[0]+1*8] ) = 0;
+    M32( &h->mb.cache.non_zero_count[x264_scan8[0]+2*8] ) = 0;
+    M32( &h->mb.cache.non_zero_count[x264_scan8[0]+3*8] ) = 0;
+    for( int i = 16; i < 24; i++ )
+        h->mb.cache.non_zero_count[x264_scan8[i]] = 0;
     h->mb.i_cbp_luma = 0;
     h->mb.i_cbp_chroma = 0;
     h->mb.cbp[h->mb.i_mb_xy] = 0;
@@ -992,10 +997,7 @@ int x264_macroblock_probe_skip( x264_t *h, int b_bidir )
         /* calculate dct coeffs */
         for( int i4x4 = 0, i_decimate_mb = 0; i4x4 < 4; i4x4++ )
         {
-            /* We don't need to zero the DC coefficient before quantization because we already
-             * checked that all the DCs were zero above at twice the precision that quant4x4
-             * uses.  This applies even though the DC here is being quantized before the 2x2
-             * transform. */
+            dct4x4[i4x4][0] = 0;
             if( !h->quantf.quant_4x4( dct4x4[i4x4], h->quant4_mf[CQM_4PC][i_qp], h->quant4_bias[CQM_4PC][i_qp] ) )
                 continue;
             h->zigzagf.scan_4x4( dctscan, dct4x4[i4x4] );

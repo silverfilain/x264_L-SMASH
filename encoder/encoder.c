@@ -603,8 +603,9 @@ static int x264_validate_parameters( x264_t *h )
     if( h->param.rc.b_stat_read )
         h->param.rc.i_lookahead = 0;
 #ifdef HAVE_PTHREAD
-    if( h->param.i_sync_lookahead )
-        h->param.i_sync_lookahead = x264_clip3( h->param.i_sync_lookahead, h->i_thread_frames + h->param.i_bframe, X264_LOOKAHEAD_MAX );
+    if( h->param.i_sync_lookahead < 0 )
+        h->param.i_sync_lookahead = h->param.i_bframe + 1;
+    h->param.i_sync_lookahead = X264_MIN( h->param.i_sync_lookahead, X264_LOOKAHEAD_MAX );
     if( h->param.rc.b_stat_read || h->i_thread_frames == 1 )
         h->param.i_sync_lookahead = 0;
 #else
@@ -784,6 +785,7 @@ static int x264_validate_parameters( x264_t *h )
     BOOLIFY( b_annexb );
     BOOLIFY( b_vfr_input );
     BOOLIFY( b_pic_struct );
+    BOOLIFY( b_fake_interlaced );
     BOOLIFY( analyse.b_transform_8x8 );
     BOOLIFY( analyse.b_weighted_bipred );
     BOOLIFY( analyse.b_chroma_me );
@@ -928,7 +930,7 @@ x264_t *x264_encoder_open( x264_param_t *param )
     h->mb.i_mb_count = h->sps->i_mb_width * h->sps->i_mb_height;
 
     /* Init frames. */
-    if( h->param.i_bframe_adaptive == X264_B_ADAPT_TRELLIS )
+    if( h->param.i_bframe_adaptive == X264_B_ADAPT_TRELLIS && !h->param.rc.b_stat_read )
         h->frames.i_delay = X264_MAX(h->param.i_bframe,3)*4;
     else
         h->frames.i_delay = h->param.i_bframe;
@@ -936,7 +938,6 @@ x264_t *x264_encoder_open( x264_param_t *param )
         h->frames.i_delay = X264_MAX( h->frames.i_delay, h->param.rc.i_lookahead );
     i_slicetype_length = h->frames.i_delay;
     h->frames.i_delay += h->i_thread_frames - 1;
-    h->frames.i_delay = X264_MIN( h->frames.i_delay, X264_LOOKAHEAD_MAX );
     h->frames.i_delay += h->param.i_sync_lookahead;
     h->frames.i_delay += h->param.b_vfr_input && (h->param.rc.i_rc_method == X264_RC_ABR || h->param.rc.b_stat_write
                                                  || h->param.rc.i_vbv_buffer_size);
@@ -1751,6 +1752,9 @@ static int x264_slice_write( x264_t *h )
     int overhead_guess = (NALU_OVERHEAD - (h->param.b_annexb && h->out.i_nal)) + 3;
     int slice_max_size = h->param.i_slice_max_size > 0 ? (h->param.i_slice_max_size-overhead_guess)*8 : INT_MAX;
     int starting_bits = bs_pos(&h->out.bs);
+    int b_deblock = h->sh.i_disable_deblocking_filter_idc != 1;
+    int b_hpel = h->fdec->b_kept_as_ref;
+    b_deblock &= b_hpel || h->param.psz_dump_yuv;
     bs_realign( &h->out.bs );
 
     /* Slice */
@@ -1890,11 +1894,11 @@ static int x264_slice_write( x264_t *h )
         x264_macroblock_cache_save( h );
 
         /* accumulate mb stats */
+        h->stat.frame.i_mb_count[h->mb.i_type]++;
 
         int b_intra = IS_INTRA( h->mb.i_type );
         if( h->param.i_log_level >= X264_LOG_INFO || h->param.rc.b_stat_write )
         {
-            h->stat.frame.i_mb_count[h->mb.i_type]++;
             if( !b_intra && !IS_SKIP( h->mb.i_type ) && !IS_DIRECT( h->mb.i_type ) )
             {
                 if( h->mb.i_partition != D_8x8 )
@@ -1940,6 +1944,19 @@ static int x264_slice_write( x264_t *h )
                         h->stat.frame.i_mb_pred_mode[2][h->mb.cache.intra4x4_pred_mode[x264_scan8[i]]]++;
                 h->stat.frame.i_mb_pred_mode[3][x264_mb_pred_mode8x8c_fix[h->mb.i_chroma_pred_mode]]++;
             }
+        }
+
+        /* calculate deblock strength values (actual deblocking is done per-row along with hpel) */
+        if( b_deblock )
+        {
+            int mvy_limit = 4 >> h->sh.b_mbaff;
+            uint8_t (*bs)[4][4] = h->deblock_strength[h->mb.i_mb_y&h->sh.b_mbaff][h->mb.i_mb_x];
+            x264_macroblock_cache_load_deblock( h );
+            if( IS_INTRA( h->mb.type[h->mb.i_mb_xy] ) )
+                memset( bs, 3, 2*4*4*sizeof(uint8_t) );
+            else
+                h->loopf.deblock_strength( h->mb.cache.non_zero_count, h->mb.cache.ref, h->mb.cache.mv,
+                                           bs, mvy_limit, h->sh.i_type == SLICE_TYPE_B );
         }
 
         x264_ratecontrol_mb( h, mb_size );
@@ -2274,8 +2291,8 @@ int     x264_encoder_encode( x264_t *h,
     /* ------------------- Get frame to be encoded ------------------------- */
     /* 4: get picture to encode */
     h->fenc = x264_frame_shift( h->frames.current );
-    if( h->i_frame == 0 )
-        h->first_pts = h->fenc->i_reordered_pts;
+    if( h->i_frame == h->i_thread_frames - 1 )
+        h->i_reordered_pts_delay = h->fenc->i_reordered_pts;
     if( h->fenc->param )
     {
         x264_encoder_reconfig( h, h->fenc->param );

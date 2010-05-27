@@ -35,7 +35,7 @@
 
 #include <stdarg.h>
 
-#define X264_BUILD 95
+#define X264_BUILD 96
 
 /* x264_t:
  *      opaque handler for encoder */
@@ -66,6 +66,8 @@ typedef struct x264_t x264_t;
 #define X264_CPU_ARMV6          0x020000
 #define X264_CPU_NEON           0x040000  /* ARM NEON */
 #define X264_CPU_FAST_NEON_MRC  0x080000  /* Transfer from NEON to ARM register is fast (Cortex-A9) */
+#define X264_CPU_SLOW_CTZ       0x100000  /* BSR/BSF x86 instructions are really slow on some CPUs */
+#define X264_CPU_SLOW_ATOM      0x200000  /* The Atom just sucks */
 
 /* Analyse flags
  */
@@ -348,6 +350,14 @@ typedef struct x264_param_t
      */
 
     int b_pic_struct;
+
+    /* Fake Interlaced.
+     *
+     * Used only when b_interlaced=0. Setting this flag makes it possible to flag the stream as PAFF interlaced yet
+     * encode all frames progessively. It is useful for encoding 25p and 30p Blu-Ray streams.
+     */
+
+    int b_fake_interlaced;
 
     /* Slicing parameters */
     int i_slice_max_size;    /* Max size per slice in bytes; includes estimated NAL overhead. */

@@ -393,6 +393,11 @@ static void Help( x264_param_t *defaults, int longhelp )
     H0( "      --tff                   Enable interlaced mode (top field first)\n" );
     H0( "      --bff                   Enable interlaced mode (bottom field first)\n" );
     H2( "      --constrained-intra     Enable constrained intra prediction.\n" );
+    H0( "      --pulldown <string>     Use soft pulldown to change frame rate\n"
+        "                                  - none, 22, 32, 64, double, triple, euro (requires cfr input)\n" );
+    H2( "      --fake-interlaced       Flag stream as interlaced but encode progressive.\n"
+        "                              Makes it possible to encode 25p and 30p Blu-Ray\n"
+        "                              streams. Ignored in interlaced mode.\n" );
     H0( "\n" );
     H0( "Ratecontrol:\n" );
     H0( "\n" );
@@ -577,8 +582,6 @@ static void Help( x264_param_t *defaults, int longhelp )
     H2( "      --timebase <int/int>    Specify timebase numerator and denominator\n"
         "                 <integer>    Specify timebase numerator for input timecode file\n"
         "                              or specify timebase denominator for other input\n" );
-    H0( "      --pulldown <string>     Use soft pulldown to change frame rate\n"
-        "                                  - none, 22, 32, 64, double, triple, euro (requires cfr input)\n" );
     H0( "\n" );
 }
 
@@ -747,6 +750,7 @@ static struct option long_options[] =
     { "pic-struct",        no_argument, NULL, 0 },
     { "nal-hrd",     required_argument, NULL, 0 },
     { "pulldown",    required_argument, NULL, OPT_PULLDOWN },
+    { "fake-interlaced",   no_argument, NULL, 0 },
     {0, 0, 0, 0}
 };
 
@@ -1556,6 +1560,8 @@ static int  Encode( x264_param_t *param, cli_opt_t *opt )
     /* duration algorithm fails when only 1 frame is output */
     if( i_frame_output == 1 )
         duration = (double)param->i_fps_den / param->i_fps_num;
+    else if( b_ctrl_c )
+        duration = (double)(2 * last_dts - prev_dts - first_dts) * param->i_timebase_num / param->i_timebase_den;
     else
         duration = (double)(2 * largest_pts - second_largest_pts) * param->i_timebase_num / param->i_timebase_den;
     if( !(opt->i_pulldown && !param->b_vfr_input) )
