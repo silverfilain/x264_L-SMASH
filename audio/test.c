@@ -1,12 +1,12 @@
 #include "audio/audio.h"
-#include "audio/muxers.h"
+#include "audio/encoders.h"
 #include "filters/audio/internal.h"
 #include <assert.h>
 #include <stdio.h>
 #include <inttypes.h>
 
 extern struct audio_filter_t audio_demux_lavf;
-extern struct audio_muxer_t audio_muxer_raw;
+extern struct audio_encoder_t aenc_raw;
 
 int main( int argc, char **argv )
 {
@@ -16,17 +16,16 @@ int main( int argc, char **argv )
     hnd_t h = audio_open_from_file( NULL, file, TRACK_ANY );
     if( !h )
         exit( 1 );
-    hnd_t m = audio_muxer_raw.init( &audio_muxer_raw, h, "dump" );
-    if( !m )
-    {
-        af_close( h );
-        exit( 2 );
-    }
+    hnd_t enc = aenc_raw.init( h, NULL );
+    
+	FILE *f = fopen( "dump", "wb" );
+	audio_samples_t *samples;
+	while( ( samples = aenc_raw.get_next_packet( enc ) ) ) {
+	    fwrite( samples->data, 1, samples->len, f );
+	    aenc_raw.free_packet( enc, samples );
+	}
+	fclose( f );
 
-    int64_t i;
-    while( audio_muxer_raw.write_audio( m, i++ ) >= 0 )
-        ;
-
-    audio_muxer_raw.close( m );
+    aenc_raw.close( enc );
     af_close( h );
 }
