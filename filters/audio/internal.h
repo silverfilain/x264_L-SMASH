@@ -12,18 +12,18 @@
     audio_info_t *info; \
     struct audio_hnd_t *next, *prev;
 
-#define INIT_FILTER_STRUCT(structname)                          \
+#define INIT_FILTER_STRUCT(filterstruct, structname)            \
     structname *h;                                              \
     do                                                          \
     {                                                           \
         h = *handle = calloc( 1, sizeof( structname ) );        \
         if( !h )                                                \
             goto fail;                                          \
-        h->self = self;                                         \
+        h->self = &filterstruct;                                 \
         if( previous )                                          \
         {                                                       \
             audio_hnd_t *p = previous;                          \
-            p->next = h;                                        \
+            p->next = (audio_hnd_t*) h;                         \
             assert( p->info );                                  \
             h->info = malloc( sizeof( audio_info_t ) );         \
             memcpy( h->info, p->info, sizeof( audio_info_t ) ); \

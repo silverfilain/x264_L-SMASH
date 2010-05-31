@@ -8,7 +8,7 @@
 
 typedef struct audio_filter_t
 {
-    enum AudioResult (*init)( const struct audio_filter_t *self, hnd_t previous, hnd_t *handle, const char *opts );
+    enum AudioResult (*init)( hnd_t *handle, hnd_t previous, const char *opts );
     struct AVPacket *(*get_samples)( hnd_t handle, int64_t first_sample, int64_t last_sample );
     int (*free_packet)( hnd_t handle, struct AVPacket *frame );
     enum AudioResult (*close)( hnd_t handle );

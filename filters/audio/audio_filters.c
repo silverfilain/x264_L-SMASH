@@ -19,10 +19,10 @@ enum AudioResult af_add( hnd_t base, audio_filter_t *filter, const char *options
 {
     assert( base );
     assert( filter );
-    
+
     audio_hnd_t *h = af_get_last_filter( base );
 
-    return filter->init( filter, h, (void**) &h->next, options );
+    return filter->init( (void**) &h->next, h, options );
 }
 
 enum AudioResult af_get_samples( audio_samples_t *out, hnd_t handle, int64_t first_sample, int64_t last_sample )
