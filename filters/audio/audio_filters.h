@@ -20,7 +20,6 @@ typedef struct audio_filter_t
 enum AudioFilter
 {
     AUDIO_SOURCE_LAVF = 0,
-    AUDIO_MUXER_RAW
 };
 
 #include "audio/audio.h"
