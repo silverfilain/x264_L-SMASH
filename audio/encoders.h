@@ -1,8 +1,8 @@
 #ifndef AUDIO_ENCODERS_H_
 #define AUDIO_ENCODERS_H_
 
-#include <audio/audio.h>
-#include <filters/audio/audio_filters.h>
+#include "audio/audio.h"
+#include "filters/audio/audio_filters.h"
 
 typedef struct audio_encoder_t
 {
