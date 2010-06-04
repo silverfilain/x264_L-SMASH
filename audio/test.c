@@ -6,7 +6,6 @@
 #include <inttypes.h>
 
 extern struct audio_filter_t audio_demux_lavf;
-extern struct audio_encoder_t aenc_raw;
 
 int main( int argc, char **argv )
 {
@@ -16,16 +15,16 @@ int main( int argc, char **argv )
     hnd_t h = audio_open_from_file( NULL, file, TRACK_ANY );
     if( !h )
         exit( 1 );
-    hnd_t enc = aenc_raw.init( h, NULL );
+    hnd_t enc = audio_encoder_open( &audio_encoder_raw, h, NULL );
     
 	FILE *f = fopen( "dump", "wb" );
 	audio_samples_t *samples;
-	while( ( samples = aenc_raw.get_next_packet( enc ) ) ) {
+	while( ( samples = audio_encode_frame( enc ) ) ) {
 	    fwrite( samples->data, 1, samples->len, f );
-	    aenc_raw.free_packet( enc, samples );
+	    audio_free_frame( enc, samples );
 	}
 	fclose( f );
 
-    aenc_raw.close( enc );
+    audio_encoder_close( enc );
     af_close( h );
 }

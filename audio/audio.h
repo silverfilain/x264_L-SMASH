@@ -38,4 +38,6 @@ typedef struct audio_samples_t
 hnd_t audio_open_from_file( audio_filter_t *preferred_filter, char *path, int trackno );
 int audio_close( hnd_t chain );
 
+#include <audio/encoders.h>
+
 #endif /* AUDIO_AUDIO_H_ */

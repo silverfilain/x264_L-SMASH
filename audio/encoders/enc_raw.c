@@ -49,7 +49,7 @@ static void close( hnd_t handle )
     free( h );
 }
 
-const audio_encoder_t aenc_raw = {
+const audio_encoder_t audio_encoder_raw = {
     .init = init,
     .get_next_packet = get_next_packet,
     .free_packet = free_packet,

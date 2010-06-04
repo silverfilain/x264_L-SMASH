@@ -2,6 +2,7 @@ CFLAGS  = -Wall -g -std=gnu99 -I.. `pkg-config --cflags libavformat`
 LDFLAGS = -g `pkg-config --libs libavformat`
 
 AUDIO_DEPS = audio.o \
+	encoders.o \
 	encoders/enc_raw.o \
 	../filters/common.o \
 	../filters/audio/audio_filters.o \
