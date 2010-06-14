@@ -39,8 +39,8 @@ int x264_macroblock_probe_skip( x264_t *h, int b_bidir );
     x264_macroblock_probe_skip( h, 1 )
 
 void x264_predict_lossless_8x8_chroma( x264_t *h, int i_mode );
-void x264_predict_lossless_4x4( x264_t *h, uint8_t *p_dst, int idx, int i_mode );
-void x264_predict_lossless_8x8( x264_t *h, uint8_t *p_dst, int idx, int i_mode, uint8_t edge[33] );
+void x264_predict_lossless_4x4( x264_t *h, pixel *p_dst, int idx, int i_mode );
+void x264_predict_lossless_8x8( x264_t *h, pixel *p_dst, int idx, int i_mode, pixel edge[33] );
 void x264_predict_lossless_16x16( x264_t *h, int i_mode );
 
 void x264_macroblock_encode      ( x264_t *h );
@@ -55,11 +55,11 @@ void x264_mb_encode_8x8_chroma( x264_t *h, int b_inter, int i_qp );
 
 void x264_cabac_mb_skip( x264_t *h, int b_skip );
 
-int x264_quant_dc_trellis( x264_t *h, int16_t *dct, int i_quant_cat,
+int x264_quant_dc_trellis( x264_t *h, dctcoef *dct, int i_quant_cat,
                              int i_qp, int i_ctxBlockCat, int b_intra, int b_chroma );
-int x264_quant_4x4_trellis( x264_t *h, int16_t *dct, int i_quant_cat,
+int x264_quant_4x4_trellis( x264_t *h, dctcoef *dct, int i_quant_cat,
                              int i_qp, int i_ctxBlockCat, int b_intra, int b_chroma, int idx );
-int x264_quant_8x8_trellis( x264_t *h, int16_t *dct, int i_quant_cat,
+int x264_quant_8x8_trellis( x264_t *h, dctcoef *dct, int i_quant_cat,
                              int i_qp, int b_intra, int idx );
 
 void x264_noise_reduction_update( x264_t *h );

@@ -310,7 +310,7 @@ void x264_mb_mc_8x8( x264_t *h, int i8 );
 
 static ALWAYS_INLINE uint32_t pack16to32( int a, int b )
 {
-#ifdef WORDS_BIGENDIAN
+#if WORDS_BIGENDIAN
    return b + (a<<16);
 #else
    return a + (b<<16);
@@ -318,7 +318,7 @@ static ALWAYS_INLINE uint32_t pack16to32( int a, int b )
 }
 static ALWAYS_INLINE uint32_t pack8to16( int a, int b )
 {
-#ifdef WORDS_BIGENDIAN
+#if WORDS_BIGENDIAN
    return b + (a<<8);
 #else
    return a + (b<<8);
@@ -326,7 +326,7 @@ static ALWAYS_INLINE uint32_t pack8to16( int a, int b )
 }
 static ALWAYS_INLINE uint32_t pack8to32( int a, int b, int c, int d )
 {
-#ifdef WORDS_BIGENDIAN
+#if WORDS_BIGENDIAN
    return d + (c<<8) + (b<<16) + (a<<24);
 #else
    return a + (b<<8) + (c<<16) + (d<<24);
@@ -334,16 +334,19 @@ static ALWAYS_INLINE uint32_t pack8to32( int a, int b, int c, int d )
 }
 static ALWAYS_INLINE uint32_t pack16to32_mask( int a, int b )
 {
-#ifdef WORDS_BIGENDIAN
+#if WORDS_BIGENDIAN
    return (b&0xFFFF) + (a<<16);
 #else
    return (a&0xFFFF) + (b<<16);
 #endif
 }
 
+#define pack_pixel_1to2 pack8to16
+#define pack_pixel_2to4 pack16to32
+
 #define array_non_zero(a) array_non_zero_int(a, sizeof(a))
 #define array_non_zero_int array_non_zero_int
-static ALWAYS_INLINE int array_non_zero_int( int16_t *v, int i_count )
+static ALWAYS_INLINE int array_non_zero_int( dctcoef *v, int i_count )
 {
     if(i_count == 8)
         return !!M64( &v[0] );

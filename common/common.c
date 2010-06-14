@@ -26,7 +26,7 @@
 #include <stdarg.h>
 #include <ctype.h>
 
-#ifdef HAVE_MALLOC_H
+#if HAVE_MALLOC_H
 #include <malloc.h>
 #endif
 
@@ -183,6 +183,7 @@ static int x264_param_apply_preset( x264_param_t *param, const char *preset )
         param->i_bframe_adaptive = X264_B_ADAPT_NONE;
         param->rc.b_mb_tree = 0;
         param->analyse.i_weighted_pred = X264_WEIGHTP_NONE;
+        param->analyse.b_weighted_bipred = 0;
     }
     else if( !strcasecmp( preset, "superfast" ) )
     {
@@ -779,7 +780,7 @@ int x264_param_parse( x264_param_t *p, const char *name, const char *value )
     }
     OPT("log")
         p->i_log_level = atoi(value);
-#ifdef HAVE_VISUALIZE
+#if HAVE_VISUALIZE
     OPT("visualize")
         p->b_visualize = atobool(value);
 #endif
@@ -993,12 +994,22 @@ static void x264_log_default( void *p_unused, int i_level, const char *psz_fmt, 
 }
 
 /****************************************************************************
+ * x264_picture_init:
+ ****************************************************************************/
+void x264_picture_init( x264_picture_t *pic )
+{
+    memset( pic, 0, sizeof( x264_picture_t ) );
+    pic->i_type = X264_TYPE_AUTO;
+    pic->i_qpplus1 = 0;
+    pic->i_pic_struct = PIC_STRUCT_AUTO;
+}
+
+/****************************************************************************
  * x264_picture_alloc:
  ****************************************************************************/
 int x264_picture_alloc( x264_picture_t *pic, int i_csp, int i_width, int i_height )
 {
-    pic->i_type = X264_TYPE_AUTO;
-    pic->i_qpplus1 = 0;
+    x264_picture_init( pic );
     pic->img.i_csp = i_csp;
     pic->img.i_plane = 3;
     pic->img.plane[0] = x264_malloc( 3 * i_width * i_height / 2 );
@@ -1009,8 +1020,6 @@ int x264_picture_alloc( x264_picture_t *pic, int i_csp, int i_width, int i_heigh
     pic->img.i_stride[0] = i_width;
     pic->img.i_stride[1] = i_width / 2;
     pic->img.i_stride[2] = i_width / 2;
-    pic->param = NULL;
-    pic->i_pic_struct = PIC_STRUCT_AUTO;
     return 0;
 }
 
@@ -1026,78 +1035,23 @@ void x264_picture_clean( x264_picture_t *pic )
 }
 
 /****************************************************************************
- * x264_nal_encode:
- ****************************************************************************/
-int x264_nal_encode( uint8_t *dst, x264_nal_t *nal, int b_annexb, int b_long_startcode )
-{
-    uint8_t *src = nal->p_payload;
-    uint8_t *end = nal->p_payload + nal->i_payload;
-    uint8_t *orig_dst = dst;
-    int i_count = 0, size;
-
-    if( b_annexb )
-    {
-        if( b_long_startcode )
-            *dst++ = 0x00;
-        *dst++ = 0x00;
-        *dst++ = 0x00;
-        *dst++ = 0x01;
-    }
-    else /* save room for size later */
-        dst += 4;
-
-    /* nal header */
-    *dst++ = ( 0x00 << 7 ) | ( nal->i_ref_idc << 5 ) | nal->i_type;
-
-    while( src < end )
-    {
-        if( i_count == 2 && *src <= 0x03 )
-        {
-            *dst++ = 0x03;
-            i_count = 0;
-        }
-        if( *src == 0 )
-            i_count++;
-        else
-            i_count = 0;
-        *dst++ = *src++;
-    }
-    size = (dst - orig_dst) - 4;
-
-    /* Write the size header for mp4/etc */
-    if( !b_annexb )
-    {
-        /* Size doesn't include the size of the header we're writing now. */
-        orig_dst[0] = size>>24;
-        orig_dst[1] = size>>16;
-        orig_dst[2] = size>> 8;
-        orig_dst[3] = size>> 0;
-    }
-
-    return size+4;
-}
-
-
-
-/****************************************************************************
  * x264_malloc:
  ****************************************************************************/
 void *x264_malloc( int i_size )
 {
     uint8_t *align_buf = NULL;
-#ifdef SYS_MACOSX
-    /* Mac OS X always returns 16 bytes aligned memory */
+#if SYS_MACOSX || (SYS_MINGW && ARCH_X86_64)
+    /* Mac OS X and Win x64 always returns 16 byte aligned memory */
     align_buf = malloc( i_size );
-#elif defined( HAVE_MALLOC_H )
+#elif HAVE_MALLOC_H
     align_buf = memalign( 16, i_size );
 #else
-    uint8_t *buf = malloc( i_size + 15 + sizeof(void **) + sizeof(int) );
+    uint8_t *buf = malloc( i_size + 15 + sizeof(void **) );
     if( buf )
     {
-        align_buf = buf + 15 + sizeof(void **) + sizeof(int);
+        align_buf = buf + 15 + sizeof(void **);
         align_buf -= (intptr_t) align_buf & 15;
         *( (void **) ( align_buf - sizeof(void **) ) ) = buf;
-        *( (int *) ( align_buf - sizeof(void **) - sizeof(int) ) ) = i_size;
     }
 #endif
     if( !align_buf )
@@ -1112,7 +1066,7 @@ void x264_free( void *p )
 {
     if( p )
     {
-#if defined( HAVE_MALLOC_H ) || defined( SYS_MACOSX )
+#if HAVE_MALLOC_H || SYS_MACOSX || (SYS_MINGW && ARCH_X86_64)
         free( p );
 #else
         free( *( ( ( void **) p ) - 1 ) );

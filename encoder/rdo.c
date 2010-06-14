@@ -65,41 +65,41 @@ static uint16_t cabac_size_5ones[128];
 #define COPY_CABAC_PART( pos, size )\
         memcpy( &cb->state[pos], &h->cabac.state[pos], size )
 
-static ALWAYS_INLINE uint64_t cached_hadamard( x264_t *h, int pixel, int x, int y )
+static ALWAYS_INLINE uint64_t cached_hadamard( x264_t *h, int size, int x, int y )
 {
     static const uint8_t hadamard_shift_x[4] = {4,   4,   3,   3};
     static const uint8_t hadamard_shift_y[4] = {4-0, 3-0, 4-1, 3-1};
     static const uint8_t  hadamard_offset[4] = {0,   1,   3,   5};
-    int cache_index = (x >> hadamard_shift_x[pixel]) + (y >> hadamard_shift_y[pixel])
-                    + hadamard_offset[pixel];
+    int cache_index = (x >> hadamard_shift_x[size]) + (y >> hadamard_shift_y[size])
+                    + hadamard_offset[size];
     uint64_t res = h->mb.pic.fenc_hadamard_cache[cache_index];
     if( res )
         return res - 1;
     else
     {
-        uint8_t *fenc = h->mb.pic.p_fenc[0] + x + y*FENC_STRIDE;
-        res = h->pixf.hadamard_ac[pixel]( fenc, FENC_STRIDE );
+        pixel *fenc = h->mb.pic.p_fenc[0] + x + y*FENC_STRIDE;
+        res = h->pixf.hadamard_ac[size]( fenc, FENC_STRIDE );
         h->mb.pic.fenc_hadamard_cache[cache_index] = res + 1;
         return res;
     }
 }
 
-static ALWAYS_INLINE int cached_satd( x264_t *h, int pixel, int x, int y )
+static ALWAYS_INLINE int cached_satd( x264_t *h, int size, int x, int y )
 {
     static const uint8_t satd_shift_x[3] = {3,   2,   2};
     static const uint8_t satd_shift_y[3] = {2-1, 3-2, 2-2};
     static const uint8_t  satd_offset[3] = {0,   8,   16};
-    ALIGNED_16( static uint8_t zero[16] );
-    int cache_index = (x >> satd_shift_x[pixel - PIXEL_8x4]) + (y >> satd_shift_y[pixel - PIXEL_8x4])
-                    + satd_offset[pixel - PIXEL_8x4];
+    ALIGNED_16( static pixel zero[16] );
+    int cache_index = (x >> satd_shift_x[size - PIXEL_8x4]) + (y >> satd_shift_y[size - PIXEL_8x4])
+                    + satd_offset[size - PIXEL_8x4];
     int res = h->mb.pic.fenc_satd_cache[cache_index];
     if( res )
         return res - 1;
     else
     {
-        uint8_t *fenc = h->mb.pic.p_fenc[0] + x + y*FENC_STRIDE;
-        int dc = h->pixf.sad[pixel]( fenc, FENC_STRIDE, zero, 0 ) >> 1;
-        res = h->pixf.satd[pixel]( fenc, FENC_STRIDE, zero, 0 ) - dc;
+        pixel *fenc = h->mb.pic.p_fenc[0] + x + y*FENC_STRIDE;
+        int dc = h->pixf.sad[size]( fenc, FENC_STRIDE, zero, 0 ) >> 1;
+        res = h->pixf.satd[size]( fenc, FENC_STRIDE, zero, 0 ) - dc;
         h->mb.pic.fenc_satd_cache[cache_index] = res + 1;
         return res;
     }
@@ -116,10 +116,10 @@ static ALWAYS_INLINE int cached_satd( x264_t *h, int pixel, int x, int y )
 
 static inline int ssd_plane( x264_t *h, int size, int p, int x, int y )
 {
-    ALIGNED_16(static uint8_t zero[16]);
+    ALIGNED_16(static pixel zero[16]);
     int satd = 0;
-    uint8_t *fdec = h->mb.pic.p_fdec[p] + x + y*FDEC_STRIDE;
-    uint8_t *fenc = h->mb.pic.p_fenc[p] + x + y*FENC_STRIDE;
+    pixel *fdec = h->mb.pic.p_fdec[p] + x + y*FDEC_STRIDE;
+    pixel *fenc = h->mb.pic.p_fenc[p] + x + y*FENC_STRIDE;
     if( p == 0 && h->mb.i_psy_rd )
     {
         /* If the plane is smaller than 8x8, we can't do an SA8D; this probably isn't a big problem. */
@@ -407,7 +407,7 @@ typedef struct {
 // comparable to the input. so unquant is the direct inverse of quant,
 // and uses the dct scaling factors, not the idct ones.
 
-static ALWAYS_INLINE int quant_trellis_cabac( x264_t *h, int16_t *dct,
+static ALWAYS_INLINE int quant_trellis_cabac( x264_t *h, dctcoef *dct,
                                  const uint16_t *quant_mf, const int *unquant_mf,
                                  const int *coef_weight, const uint8_t *zigzag,
                                  int i_ctxBlockCat, int i_lambda2, int b_ac, int dc, int i_coefs, int idx )
@@ -634,8 +634,8 @@ static ALWAYS_INLINE int quant_trellis_cabac( x264_t *h, int16_t *dct,
 
 const static uint8_t x264_zigzag_scan2[4] = {0,1,2,3};
 
-int x264_quant_dc_trellis( x264_t *h, int16_t *dct, int i_quant_cat,
-                            int i_qp, int i_ctxBlockCat, int b_intra, int b_chroma )
+int x264_quant_dc_trellis( x264_t *h, dctcoef *dct, int i_quant_cat,
+                           int i_qp, int i_ctxBlockCat, int b_intra, int b_chroma )
 {
     return quant_trellis_cabac( h, dct,
         h->quant4_mf[i_quant_cat][i_qp], h->unquant4_mf[i_quant_cat][i_qp],
@@ -643,8 +643,8 @@ int x264_quant_dc_trellis( x264_t *h, int16_t *dct, int i_quant_cat,
         i_ctxBlockCat, h->mb.i_trellis_lambda2[b_chroma][b_intra], 0, 1, i_ctxBlockCat==DCT_CHROMA_DC ? 4 : 16, 0 );
 }
 
-int x264_quant_4x4_trellis( x264_t *h, int16_t *dct, int i_quant_cat,
-                             int i_qp, int i_ctxBlockCat, int b_intra, int b_chroma, int idx )
+int x264_quant_4x4_trellis( x264_t *h, dctcoef *dct, int i_quant_cat,
+                            int i_qp, int i_ctxBlockCat, int b_intra, int b_chroma, int idx )
 {
     int b_ac = (i_ctxBlockCat == DCT_LUMA_AC || i_ctxBlockCat == DCT_CHROMA_AC);
     return quant_trellis_cabac( h, dct,
@@ -654,8 +654,8 @@ int x264_quant_4x4_trellis( x264_t *h, int16_t *dct, int i_quant_cat,
         i_ctxBlockCat, h->mb.i_trellis_lambda2[b_chroma][b_intra], b_ac, 0, 16, idx );
 }
 
-int x264_quant_8x8_trellis( x264_t *h, int16_t *dct, int i_quant_cat,
-                             int i_qp, int b_intra, int idx )
+int x264_quant_8x8_trellis( x264_t *h, dctcoef *dct, int i_quant_cat,
+                            int i_qp, int b_intra, int idx )
 {
     return quant_trellis_cabac( h, dct,
         h->quant8_mf[i_quant_cat][i_qp], h->unquant8_mf[i_quant_cat][i_qp],

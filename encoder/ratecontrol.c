@@ -215,12 +215,14 @@ static ALWAYS_INLINE uint32_t ac_energy_plane( x264_t *h, int mb_x, int mb_y, x2
     stride <<= h->mb.b_interlaced;
     uint64_t res = h->pixf.var[pix]( frame->plane[i] + offset, stride );
     uint32_t sum = (uint32_t)res;
-    uint32_t sqr = res >> 32;
-    return sqr - (sum * sum >> shift);
+    uint32_t ssd = res >> 32;
+    frame->i_pixel_sum[i] += sum;
+    frame->i_pixel_ssd[i] += ssd;
+    return ssd - (sum * sum >> shift);
 }
 
 // Find the total AC energy of the block in all planes.
-static NOINLINE uint32_t ac_energy_mb( x264_t *h, int mb_x, int mb_y, x264_frame_t *frame )
+static NOINLINE uint32_t x264_ac_energy_mb( x264_t *h, int mb_x, int mb_y, x264_frame_t *frame )
 {
     /* This function contains annoying hacks because GCC has a habit of reordering emms
      * and putting it after floating point ops.  As a result, we put the emms at the end of the
@@ -233,65 +235,111 @@ static NOINLINE uint32_t ac_energy_mb( x264_t *h, int mb_x, int mb_y, x264_frame
     return var;
 }
 
-void x264_adaptive_quant_frame( x264_t *h, x264_frame_t *frame )
+void x264_adaptive_quant_frame( x264_t *h, x264_frame_t *frame, float *quant_offsets )
 {
     /* constants chosen to result in approximately the same overall bitrate as without AQ.
      * FIXME: while they're written in 5 significant digits, they're only tuned to 2. */
     float strength;
     float avg_adj = 0.f;
-    /* Need to init it anyways for MB tree. */
-    if( h->param.rc.f_aq_strength == 0 )
+    /* Initialize frame stats */
+    for( int i = 0; i < 3; i++ )
     {
-        memset( frame->f_qp_offset, 0, h->mb.i_mb_count * sizeof(float) );
-        memset( frame->f_qp_offset_aq, 0, h->mb.i_mb_count * sizeof(float) );
-        if( h->frames.b_have_lowres )
-            for( int mb_xy = 0; mb_xy < h->mb.i_mb_count; mb_xy++ )
-                frame->i_inv_qscale_factor[mb_xy] = 256;
-        return;
+        frame->i_pixel_sum[i] = 0;
+        frame->i_pixel_ssd[i] = 0;
     }
 
-    if( h->param.rc.i_aq_mode == X264_AQ_AUTOVARIANCE )
+    /* Degenerate cases */
+    if( h->param.rc.i_aq_mode == X264_AQ_NONE || h->param.rc.f_aq_strength == 0 )
     {
-        float avg_adj_pow2 = 0.f;
-        for( int mb_y = 0; mb_y < h->sps->i_mb_height; mb_y++ )
-            for( int mb_x = 0; mb_x < h->sps->i_mb_width; mb_x++ )
-            {
-                uint32_t energy = ac_energy_mb( h, mb_x, mb_y, frame );
-                float qp_adj = powf( energy + 1, 0.125f );
-                frame->f_qp_offset[mb_x + mb_y*h->mb.i_mb_stride] = qp_adj;
-                avg_adj += qp_adj;
-                avg_adj_pow2 += qp_adj * qp_adj;
-            }
-        avg_adj /= h->mb.i_mb_count;
-        avg_adj_pow2 /= h->mb.i_mb_count;
-        strength = h->param.rc.f_aq_strength * avg_adj;
-        avg_adj = avg_adj - 0.5f * (avg_adj_pow2 - 14.f) / avg_adj;
-    }
-    else
-        strength = h->param.rc.f_aq_strength * 1.0397f;
-
-    for( int mb_y = 0; mb_y < h->sps->i_mb_height; mb_y++ )
-        for( int mb_x = 0; mb_x < h->sps->i_mb_width; mb_x++ )
+        /* Need to init it anyways for MB tree */
+        if( h->param.rc.i_aq_mode && h->param.rc.f_aq_strength == 0 )
         {
-            float qp_adj;
-            if( h->param.rc.i_aq_mode == X264_AQ_AUTOVARIANCE )
+            if( quant_offsets )
             {
-                qp_adj = frame->f_qp_offset[mb_x + mb_y*h->mb.i_mb_stride];
-                qp_adj = strength * (qp_adj - avg_adj);
+                for( int mb_xy = 0; mb_xy < h->mb.i_mb_count; mb_xy++ )
+                    frame->f_qp_offset[mb_xy] = frame->f_qp_offset_aq[mb_xy] = quant_offsets[mb_xy];
+                if( h->frames.b_have_lowres )
+                    for( int mb_xy = 0; mb_xy < h->mb.i_mb_count; mb_xy++ )
+                        frame->i_inv_qscale_factor[mb_xy] = x264_exp2fix8( frame->f_qp_offset[mb_xy] );
             }
             else
             {
-                uint32_t energy = ac_energy_mb( h, mb_x, mb_y, frame );
-                qp_adj = strength * (x264_log2( X264_MAX(energy, 1) ) - 14.427f);
+                memset( frame->f_qp_offset, 0, h->mb.i_mb_count * sizeof(float) );
+                memset( frame->f_qp_offset_aq, 0, h->mb.i_mb_count * sizeof(float) );
+                if( h->frames.b_have_lowres )
+                    for( int mb_xy = 0; mb_xy < h->mb.i_mb_count; mb_xy++ )
+                        frame->i_inv_qscale_factor[mb_xy] = 256;
             }
-            frame->f_qp_offset[mb_x + mb_y*h->mb.i_mb_stride] =
-            frame->f_qp_offset_aq[mb_x + mb_y*h->mb.i_mb_stride] = qp_adj;
-            if( h->frames.b_have_lowres )
-                frame->i_inv_qscale_factor[mb_x + mb_y*h->mb.i_mb_stride] = x264_exp2fix8(qp_adj);
         }
+        /* Need variance data for weighted prediction */
+        if( h->param.analyse.i_weighted_pred == X264_WEIGHTP_FAKE || h->param.analyse.i_weighted_pred == X264_WEIGHTP_SMART )
+        {
+            for( int mb_y = 0; mb_y < h->mb.i_mb_height; mb_y++ )
+                for( int mb_x = 0; mb_x < h->mb.i_mb_width; mb_x++ )
+                    x264_ac_energy_mb( h, mb_x, mb_y, frame );
+        }
+        else
+            return;
+    }
+    /* Actual adaptive quantization */
+    else
+    {
+        if( h->param.rc.i_aq_mode == X264_AQ_AUTOVARIANCE )
+        {
+            float avg_adj_pow2 = 0.f;
+            for( int mb_y = 0; mb_y < h->mb.i_mb_height; mb_y++ )
+                for( int mb_x = 0; mb_x < h->mb.i_mb_width; mb_x++ )
+                {
+                    uint32_t energy = x264_ac_energy_mb( h, mb_x, mb_y, frame );
+                    float qp_adj = powf( energy + 1, 0.125f );
+                    frame->f_qp_offset[mb_x + mb_y*h->mb.i_mb_stride] = qp_adj;
+                    avg_adj += qp_adj;
+                    avg_adj_pow2 += qp_adj * qp_adj;
+                }
+            avg_adj /= h->mb.i_mb_count;
+            avg_adj_pow2 /= h->mb.i_mb_count;
+            strength = h->param.rc.f_aq_strength * avg_adj;
+            avg_adj = avg_adj - 0.5f * (avg_adj_pow2 - 14.f) / avg_adj;
+        }
+        else
+            strength = h->param.rc.f_aq_strength * 1.0397f;
+
+        for( int mb_y = 0; mb_y < h->mb.i_mb_height; mb_y++ )
+            for( int mb_x = 0; mb_x < h->mb.i_mb_width; mb_x++ )
+            {
+                float qp_adj;
+                int mb_xy = mb_x + mb_y*h->mb.i_mb_stride;
+                if( h->param.rc.i_aq_mode == X264_AQ_AUTOVARIANCE )
+                {
+                    qp_adj = frame->f_qp_offset[mb_xy];
+                    qp_adj = strength * (qp_adj - avg_adj);
+                }
+                else
+                {
+                    uint32_t energy = x264_ac_energy_mb( h, mb_x, mb_y, frame );
+                    qp_adj = strength * (x264_log2( X264_MAX(energy, 1) ) - 14.427f);
+                }
+                if( quant_offsets )
+                    qp_adj += quant_offsets[mb_xy];
+                frame->f_qp_offset[mb_xy] =
+                frame->f_qp_offset_aq[mb_xy] = qp_adj;
+                if( h->frames.b_have_lowres )
+                    frame->i_inv_qscale_factor[mb_xy] = x264_exp2fix8(qp_adj);
+            }
+    }
+
+    /* Remove mean from SSD calculation */
+    for( int i = 0; i < 3; i++ )
+    {
+        uint64_t ssd = frame->i_pixel_ssd[i];
+        uint64_t sum = frame->i_pixel_sum[i];
+        int width = h->mb.i_mb_width*16>>!!i;
+        int height = h->mb.i_mb_height*16>>!!i;
+        frame->i_pixel_ssd[i] = ssd - (sum * sum + width * height / 2) / (width * height);
+    }
 }
 
-int x264_macroblock_tree_read( x264_t *h, x264_frame_t *frame )
+int x264_macroblock_tree_read( x264_t *h, x264_frame_t *frame, float *quant_offsets )
 {
     x264_ratecontrol_t *rc = h->rc;
     uint8_t i_type_actual = rc->entry[frame->i_frame].pict_type;
@@ -327,7 +375,7 @@ int x264_macroblock_tree_read( x264_t *h, x264_frame_t *frame )
         rc->qpbuf_pos--;
     }
     else
-        x264_adaptive_quant_frame( h, frame );
+        x264_adaptive_quant_frame( h, frame, quant_offsets );
     return 0;
 fail:
     x264_log(h, X264_LOG_ERROR, "Incomplete MB-tree stats file.\n");
@@ -1096,7 +1144,7 @@ void x264_ratecontrol_start( x264_t *h, int i_force_qp, int overhead )
 
     if( rc->b_vbv )
     {
-        memset( h->fdec->i_row_bits, 0, h->sps->i_mb_height * sizeof(int) );
+        memset( h->fdec->i_row_bits, 0, h->mb.i_mb_height * sizeof(int) );
         rc->row_pred = &rc->row_preds[h->sh.i_type];
         rc->buffer_rate = h->fenc->i_cpb_duration * rc->vbv_max_rate * h->sps->vui.i_num_units_in_tick / h->sps->vui.i_time_scale;
         update_vbv_plan( h, overhead );
@@ -1116,7 +1164,7 @@ void x264_ratecontrol_start( x264_t *h, int i_force_qp, int overhead )
         {
             //384 * ( Max( PicSizeInMbs, fR * MaxMBPS ) + MaxMBPS * ( tr( 0 ) - tr,n( 0 ) ) ) / MinCR
             double fr = 1. / 172;
-            int pic_size_in_mbs = h->sps->i_mb_width * h->sps->i_mb_height;
+            int pic_size_in_mbs = h->mb.i_mb_width * h->mb.i_mb_height;
             rc->frame_size_maximum = 384 * 8 * X264_MAX( pic_size_in_mbs, fr*l->mbps ) / mincr;
         }
         else
@@ -1233,7 +1281,7 @@ void x264_ratecontrol_mb( x264_t *h, int bits )
     rc->qpa_rc += rc->qpm;
     rc->qpa_aq += h->mb.i_qp;
 
-    if( h->mb.i_mb_x != h->sps->i_mb_width - 1 || !rc->b_vbv )
+    if( h->mb.i_mb_x != h->mb.i_mb_width - 1 || !rc->b_vbv )
         return;
 
     h->fdec->f_row_qp[y] = rc->qpm;
@@ -1270,7 +1318,7 @@ void x264_ratecontrol_mb( x264_t *h, int bits )
                     size_of_other_slices += h->thread[i]->rc->frame_size_estimated;
         }
         else
-            rc->max_frame_error = X264_MAX( 0.05, 1.0 / (h->sps->i_mb_width) );
+            rc->max_frame_error = X264_MAX( 0.05, 1.0 / (h->mb.i_mb_width) );
 
         /* More threads means we have to be more cautious in letting ratecontrol use up extra bits. */
         float rc_tol = buffer_left_planned / h->param.i_threads * rc->rate_tolerance;
@@ -2208,7 +2256,7 @@ void x264_threads_merge_ratecontrol( x264_t *h )
             for( int row = t->i_threadslice_start; row < t->i_threadslice_end; row++ )
                 size += h->fdec->i_row_satd[row];
             int bits = t->stat.frame.i_mv_bits + t->stat.frame.i_tex_bits + t->stat.frame.i_misc_bits;
-            int mb_count = (t->i_threadslice_end - t->i_threadslice_start) * h->sps->i_mb_width;
+            int mb_count = (t->i_threadslice_end - t->i_threadslice_start) * h->mb.i_mb_width;
             update_predictor( &rc->pred[h->sh.i_type+5*i], qp2qscale( rct->qpa_rc/mb_count ), size, bits );
         }
         if( !i )
@@ -2518,14 +2566,14 @@ static int init_pass2( x264_t *h )
 
                 for( int j = 0; j < filter_size; j++ )
                 {
-                    int index = i+j-filter_size/2;
-                    double d = index-i;
+                    int idx = i+j-filter_size/2;
+                    double d = idx-i;
                     double coeff = qblur==0 ? 1.0 : exp( -d*d/(qblur*qblur) );
-                    if( index < 0 || index >= rcc->num_entries )
+                    if( idx < 0 || idx >= rcc->num_entries )
                         continue;
-                    if( rce->pict_type != rcc->entry[index].pict_type )
+                    if( rce->pict_type != rcc->entry[idx].pict_type )
                         continue;
-                    q += qscale[index] * coeff;
+                    q += qscale[idx] * coeff;
                     sum += coeff;
                 }
                 blurred_qscale[i] = q/sum;

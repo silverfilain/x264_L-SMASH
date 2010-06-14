@@ -8,7 +8,7 @@ SRCS = common/mc.c common/predict.c common/pixel.c common/macroblock.c \
        common/frame.c common/dct.c common/cpu.c common/cabac.c \
        common/common.c common/mdate.c common/rectangle.c \
        common/set.c common/quant.c common/deblock.c common/vlc.c \
-       common/mvpred.c \
+       common/mvpred.c common/bitstream.c \
        encoder/analyse.c encoder/me.c encoder/ratecontrol.c \
        encoder/set.c encoder/macroblock.c encoder/cabac.c \
        encoder/cavlc.c encoder/encoder.c encoder/lookahead.c
@@ -29,7 +29,7 @@ SRCSO =
 CONFIG := $(shell cat config.h)
 
 # Optional muxer module sources
-ifneq ($(findstring AVS_INPUT, $(CONFIG)),)
+ifneq ($(findstring HAVE_AVS, $(CONFIG)),)
 SRCCLI += input/avs.c
 endif
 
@@ -37,15 +37,15 @@ ifneq ($(findstring HAVE_PTHREAD, $(CONFIG)),)
 SRCCLI += input/thread.c
 endif
 
-ifneq ($(findstring LAVF_INPUT, $(CONFIG)),)
+ifneq ($(findstring HAVE_LAVF, $(CONFIG)),)
 SRCCLI += input/lavf.c
 endif
 
-ifneq ($(findstring FFMS_INPUT, $(CONFIG)),)
+ifneq ($(findstring HAVE_FFMS, $(CONFIG)),)
 SRCCLI += input/ffms.c
 endif
 
-ifneq ($(findstring MP4_OUTPUT, $(CONFIG)),)
+ifneq ($(findstring HAVE_GPAC, $(CONFIG)),)
 SRCCLI += output/mp4.c
 endif
 
@@ -58,7 +58,7 @@ endif
 ifneq ($(AS),)
 X86SRC0 = const-a.asm cabac-a.asm dct-a.asm deblock-a.asm mc-a.asm \
           mc-a2.asm pixel-a.asm predict-a.asm quant-a.asm sad-a.asm \
-          cpu-a.asm dct-32.asm
+          cpu-a.asm dct-32.asm bitstream-a.asm
 X86SRC = $(X86SRC0:%=common/x86/%)
 
 ifeq ($(ARCH),X86)

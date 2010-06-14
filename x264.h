@@ -35,7 +35,7 @@
 
 #include <stdarg.h>
 
-#define X264_BUILD 96
+#define X264_BUILD 98
 
 /* x264_t:
  *      opaque handler for encoder */
@@ -446,7 +446,7 @@ static const char * const x264_tune_names[] = { "film", "animation", "grain", "s
 
 /*      Multiple tunings can be used if separated by a delimiter in ",./-+",
  *      however multiple psy tunings cannot be used.
- *      film, animation, grain, psnr, and ssim are psy tunings.
+ *      film, animation, grain, stillimage, psnr, and ssim are psy tunings.
  *
  *      returns 0 on success, negative on failure (e.g. invalid preset/tune name). */
 int     x264_param_default_preset( x264_param_t *, const char *preset, const char *tune );
@@ -508,6 +508,22 @@ typedef struct
 
 typedef struct
 {
+    /* In: an array of quantizer offsets to be applied to this image during encoding.
+     *     These are added on top of the decisions made by x264.
+     *     Offsets can be fractional; they are added before QPs are rounded to integer.
+     *     Adaptive quantization must be enabled to use this feature.  Behavior if quant
+     *     offsets differ between encoding passes is undefined.
+     *
+     *     Array contains one offset per macroblock, in raster scan order.  In interlaced
+     *     mode, top-field MBs and bottom-field MBs are interleaved at the row level. */
+    float *quant_offsets;
+    /* In: optional callback to free quant_offsets when used.
+     *     Useful if one wants to use a different quant_offset array for each frame. */
+    void (*quant_offsets_free)( void* );
+} x264_image_properties_t;
+
+typedef struct
+{
     /* In: force picture type (if not auto)
      *     If x264 encoding parameters are violated in the forcing of picture types,
      *     x264 will correct the input picture type and log a warning.
@@ -537,12 +553,19 @@ typedef struct
     x264_param_t *param;
     /* In: raw data */
     x264_image_t img;
+    /* In: optional information to modify encoder decisions for this frame */
+    x264_image_properties_t prop;
     /* Out: HRD timing information. Output only when i_nal_hrd is set. */
     x264_hrd_t hrd_timing;
     /* private user data. libx264 doesn't touch this,
        not even copy it from input to output frames. */
     void *opaque;
 } x264_picture_t;
+
+/* x264_picture_init:
+ *  initialize an x264_picture_t.  Needs to be done if the calling application
+ *  allocates its own x264_picture_t as opposed to using x264_picture_alloc. */
+void x264_picture_init( x264_picture_t *pic );
 
 /* x264_picture_alloc:
  *  alloc data for a picture. You must call x264_picture_clean on it.

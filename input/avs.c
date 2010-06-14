@@ -30,7 +30,7 @@
 #define __declspec(i)
 #undef EXTERN_C
 
-#ifdef HAVE_AVISYNTH_C_H
+#if HAVE_AVISYNTH_C_H
 #include <avisynth_c.h>
 #else
 #include "extras/avisynth_c.h"
@@ -280,10 +280,9 @@ static int get_frame_total( hnd_t handle )
 
 static int picture_alloc( x264_picture_t *pic, int i_csp, int i_width, int i_height )
 {
+    x264_picture_init( pic );
     pic->img.i_csp = i_csp;
     pic->img.i_plane = 3;
-    pic->param = NULL;
-    pic->i_pic_struct = PIC_STRUCT_AUTO;
     return 0;
 }
 
