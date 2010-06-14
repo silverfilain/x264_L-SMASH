@@ -97,6 +97,12 @@ static const char * const muxer_names[] =
     0
 };
 
+static const char * const audio_encoder_names[] =
+{
+    "raw",
+    0
+};
+
 static const char * const pulldown_names[] = { "none", "22", "32", "64", "double", "triple", "euro", 0 };
 
 typedef struct{
@@ -548,6 +554,14 @@ static void Help( x264_param_t *defaults, int longhelp )
     H2( "      --pic-struct            Force pic_struct in Picture Timing SEI\n" );
 
     H0( "\n" );
+    H0( "Audio:\n" );
+    H0( "Audio is automatically opened from the input file if the ffms demuxer is used\n" );
+    H0( "      --noaudio               Disables audio copy / transcoding\n" );
+    H0( "      --audiofile <filename>  Uses audio from the specified file\n" );
+    H0( "      --acodec <string>       Specify the audio codec. Supported codecs:\n" );
+    H0( "                                  - raw\n" );
+    H0( "      --abitrate <integer>    Specify audio bitrate [160]\n" );
+    H0( "\n" );
     H0( "Input/Output:\n" );
     H0( "\n" );
     H0( "  -o, --output                Specify output file\n" );
@@ -610,6 +624,10 @@ enum {
     OPT_TCFILE_OUT,
     OPT_TIMEBASE,
     OPT_PULLDOWN,
+    OPT_NOAUDIO,
+    OPT_AUDIOFILE,
+    OPT_AUDIOCODEC,
+    OPT_AUDIOBITRATE
 } OptionsOPT;
 
 static char short_options[] = "8A:B:b:f:hI:i:m:o:p:q:r:t:Vvw";
@@ -755,6 +773,10 @@ static struct option long_options[] =
     { "nal-hrd",     required_argument, NULL, 0 },
     { "pulldown",    required_argument, NULL, OPT_PULLDOWN },
     { "fake-interlaced",   no_argument, NULL, 0 },
+    { "noaudio",           no_argument, NULL, OPT_NOAUDIO },
+    { "audiofile",   required_argument, NULL, OPT_AUDIOFILE },
+    { "acodec",      required_argument, NULL, OPT_AUDIOCODEC },
+    { "abitrate",    required_argument, NULL, OPT_AUDIOBITRATE },
     {0, 0, 0, 0}
 };
 
@@ -880,6 +902,19 @@ static int select_input( const char *demuxer, char *used_demuxer, char *filename
     return 0;
 }
 
+static int select_audio( const char *encoder, cli_opt_t *opt, const char *args )
+{
+    const audio_encoder_t *aenc;
+    if( !strcmp( encoder, "raw" ) )
+        aenc = &audio_encoder_raw;
+    else
+    {
+        fprintf( stderr, "x264 [error]: could not find audio encoder `%s'.\n", encoder );
+        return -1;
+    }
+    return ( opt->haenc = audio_encoder_open( aenc, opt->haud, args ) ) ? 0 : -1;
+}
+
 static int parse_enum_name( const char *arg, const char * const *names, const char **dst )
 {
     for( int i = 0; names[i]; i++ )
@@ -911,6 +946,7 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
     const char *demuxer = demuxer_names[0];
     char *output_filename = NULL;
     const char *muxer = muxer_names[0];
+    const char *audio_enc = audio_encoder_names[0];
     char *tcfile_name = NULL;
     x264_param_t defaults;
     char *profile = NULL;
@@ -922,6 +958,10 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
     cli_input_opt_t input_opt;
     char *preset = NULL;
     char *tune = NULL;
+
+    char *audio_filename = NULL;
+    int audio_bitrate = 160;
+    int audio_enable = 1;
 
     x264_param_default( &defaults );
 
@@ -1077,6 +1117,19 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
                 if( parse_enum_value( optarg, pulldown_names, &opt->i_pulldown ) < 0 )
                     return -1;
                 break;
+            case OPT_NOAUDIO:
+                audio_enable = 0;
+                break;
+            case OPT_AUDIOFILE:
+                audio_filename = optarg;
+                break;
+            case OPT_AUDIOCODEC:
+                if( parse_enum_name( optarg, audio_encoder_names, &audio_enc ) < 0 )
+                    return -1;
+                break;
+            case OPT_AUDIOBITRATE:
+                audio_bitrate = atoi( optarg );
+                break;
             default:
 generic_option:
             {
@@ -1131,12 +1184,11 @@ generic_option:
         return -1;
     }
 
-    opt->haud = audio_open_from_file( NULL, "test.avi", TRACK_ANY );
-    assert( opt->haud );
-    opt->haenc = audio_encoder_open( &audio_encoder_raw, opt->haud, NULL );
-    assert( opt->haenc );
-
-    assert( output.open_audio( opt->hout, opt->haenc ) );
+    if( ! output.open_audio )
+    {
+        fprintf( stderr, "x264 [warn]: the used muxer does not support audio.\n" );
+        audio_enable = 0;
+    }
 
     input_filename = argv[optind++];
     input_opt.resolution = optind < argc ? argv[optind++] : NULL;
@@ -1160,6 +1212,18 @@ generic_option:
     {
         fprintf( stderr, "x264 [error]: could not open input file `%s'\n", input_filename );
         return -1;
+    }
+
+    if( !strcmp( demuxername, "ffms" ) && !audio_filename )
+        audio_filename = input_filename;
+
+    if( !audio_filename )
+        audio_enable = 0;
+
+    if( audio_enable )
+    {
+        opt->haud = audio_open_from_file( NULL, audio_filename, TRACK_ANY );
+        assert( opt->haud );
     }
 
     x264_reduce_fraction( &info.sar_width, &info.sar_height );
@@ -1263,6 +1327,26 @@ generic_option:
             input = thread_input;
     }
 #endif
+
+    if( audio_enable )
+    {
+        char br[20];
+        br[0] = 0;
+        snprintf( br, 20, "bitrate=%d", audio_bitrate );
+        if( !select_audio( audio_enc, opt, br ) )
+        {
+            if( !output.open_audio( opt->hout, opt->haenc ) )
+            {
+                fprintf( stderr, "x264 [error]: error opening audio muxer.\n" );
+                return -1;
+            }
+        }
+        else
+        {
+            fprintf( stderr, "x264 [error]: error opening audio encoder.\n" );
+            return -1;
+        }
+    }
 
 
     /* Automatically reduce reference frame count to match the user's target level
@@ -1595,6 +1679,10 @@ static int  Encode( x264_param_t *param, cli_opt_t *opt )
         opt->tcfile_out = NULL;
     }
 
+    if( opt->haenc )
+        audio_encoder_close( opt->haenc );
+    if( opt->haud )
+        af_close( opt->haud );
     input.close_file( opt->hin );
     output.close_file( opt->hout, largest_pts, second_largest_pts );
 
