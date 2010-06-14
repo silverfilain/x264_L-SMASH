@@ -56,6 +56,8 @@ typedef struct {
     int i_seek;
     hnd_t hin;
     hnd_t hout;
+    hnd_t haud;
+    hnd_t haenc;
     FILE *qpfile;
     FILE *tcfile_out;
     double timebase_convert_multiplier;
@@ -1126,6 +1128,13 @@ generic_option:
         fprintf( stderr, "x264 [error]: could not open output file `%s'\n", output_filename );
         return -1;
     }
+
+    opt->haud = audio_open_from_file( NULL, "test.avi", TRACK_ANY );
+    assert( opt->haud );
+    opt->haenc = audio_encoder_open( &audio_encoder_raw, opt->haud, NULL );
+    assert( opt->haenc );
+
+    assert( output.open_audio( opt->hout, opt->haenc ) );
 
     input_filename = argv[optind++];
     input_opt.resolution = optind < argc ? argv[optind++] : NULL;
