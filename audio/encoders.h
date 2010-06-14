@@ -14,6 +14,7 @@ typedef struct audio_encoder_t
 } audio_encoder_t;
 
 extern const audio_encoder_t audio_encoder_raw;
+extern const audio_encoder_t audio_encoder_lame;
 
 hnd_t audio_encoder_open( const audio_encoder_t *encoder, hnd_t filter_chain, const char *opts );
 

@@ -99,6 +99,8 @@ static const char * const muxer_names[] =
 
 static const char * const audio_encoder_names[] =
 {
+    "lame",
+    "mp3",
     "raw",
     0
 };
@@ -905,7 +907,9 @@ static int select_input( const char *demuxer, char *used_demuxer, char *filename
 static int select_audio( const char *encoder, cli_opt_t *opt, const char *args )
 {
     const audio_encoder_t *aenc;
-    if( !strcmp( encoder, "raw" ) )
+    if( !strcmp( encoder, "lame" ) || !strcmp( encoder, "mp3" ) )
+        aenc = &audio_encoder_lame;
+    else if( !strcmp( encoder, "raw" ) )
         aenc = &audio_encoder_raw;
     else
     {

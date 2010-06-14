@@ -17,7 +17,7 @@ SRCS = common/mc.c common/predict.c common/pixel.c common/macroblock.c \
 SRCAUD = audio/audio.c audio/encoders.c \
        filters/common.c filters/audio/audio_filters.c \
        filters/audio/internal.c filters/audio/source_lavf.c \
-       audio/encoders/enc_raw.c
+       audio/encoders/enc_raw.c audio/encoders/enc_lame.c
 
 SRCCLI = x264.c input/timecode.c \
          input/yuv.c input/y4m.c output/raw.c \

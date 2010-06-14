@@ -55,7 +55,12 @@ void af_free_samples( audio_samples_t *samples )
 {
     audio_hnd_t *owner = samples->owner;
     AVPacket *pkt      = samples->ownerdata;
-    owner->self->free_packet( owner, pkt );
+    if( owner )
+        owner->self->free_packet( owner, pkt );
+    else
+    {
+        free( samples->data );
+    }
 
     samples->owner = samples->ownerdata = samples->data = NULL;
     samples->len = 0;
