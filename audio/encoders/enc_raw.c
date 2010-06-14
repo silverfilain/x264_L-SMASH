@@ -35,7 +35,7 @@ static audio_info_t *get_info( hnd_t handle )
 static audio_samples_t *get_next_packet( hnd_t handle )
 {
     enc_raw_t *h = handle;
-    
+
     audio_samples_t *smp = malloc( sizeof( audio_samples_t ) );
     int res = af_get_samples( smp, h->filter_chain, h->last_sample, h->last_sample + h->info->framelen );
     if( res == AUDIO_ERROR ) {
@@ -43,7 +43,7 @@ static audio_samples_t *get_next_packet( hnd_t handle )
         return NULL;
     }
     h->last_sample += h->info->framelen;
-    
+
     return smp;
 }
 
@@ -56,7 +56,7 @@ static void free_packet( hnd_t handle, audio_samples_t *packet )
 static void close( hnd_t handle )
 {
     enc_raw_t *h = handle;
-    
+
     free( h->info );
     free( h );
 }

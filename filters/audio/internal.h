@@ -18,7 +18,7 @@
         h = *handle = calloc( 1, sizeof( structname ) );        \
         if( !h )                                                \
             goto fail;                                          \
-        h->self = &filterstruct;                                 \
+        h->self = &filterstruct;                                \
         if( previous )                                          \
         {                                                       \
             audio_hnd_t *p = previous;                          \

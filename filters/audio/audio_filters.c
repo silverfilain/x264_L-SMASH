@@ -43,11 +43,11 @@ enum AudioResult af_get_samples( audio_samples_t *out, hnd_t handle, int64_t fir
     out->owner       = last;
     out->ownerdata   = pkt;
     out->flags       = AUDIO_FLAG_NONE;
-    
+
     intptr_t expected_len = ( last_sample - first_sample ) * last->info->samplesize;
     if( out->len < expected_len )
         out->flags |= AUDIO_FLAG_EOF;
-    
+
     return AUDIO_OK;
 }
 
