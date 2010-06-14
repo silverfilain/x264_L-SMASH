@@ -19,6 +19,14 @@ hnd_t audio_encoder_open( const audio_encoder_t *encoder, hnd_t filter_chain, co
     return enc;
 }
 
+audio_info_t *audio_encoder_info( hnd_t encoder )
+{
+    assert( encoder );
+    struct aenc_t *enc = encoder;
+
+    return enc->enc->get_info( enc->handle );
+}
+
 audio_samples_t *audio_encode_frame( hnd_t encoder )
 {
     assert( encoder );

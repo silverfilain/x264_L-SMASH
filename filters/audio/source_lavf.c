@@ -111,7 +111,8 @@ static enum AudioResult init( hnd_t *handle, hnd_t previous, const char *opt_str
 
     h->info->samplerate = h->ctx->sample_rate;
     h->info->samplefmt = h->ctx->sample_fmt;
-    h->info->samplesize = ( av_get_bits_per_sample_format( h->ctx->sample_fmt ) * h->ctx->channels ) / 8;
+    h->info->chansize = ( av_get_bits_per_sample_format( h->ctx->sample_fmt ) ) / 8;
+    h->info->samplesize = h->info->chansize * h->ctx->channels;
     h->info->channels = h->ctx->channels;
     h->info->chanlayout = h->ctx->channel_layout;
     h->info->framelen = h->ctx->frame_size;

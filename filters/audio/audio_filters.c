@@ -4,6 +4,12 @@
 
 static int registered = 0;
 
+audio_info_t *af_get_info( hnd_t handle )
+{
+    audio_hnd_t *h = af_get_last_filter( handle );
+    return h->info;
+}
+
 audio_filter_t *af_get_filter( enum AudioFilter filterid )
 {
     if( !registered )
