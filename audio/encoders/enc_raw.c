@@ -9,7 +9,7 @@ typedef struct enc_raw_t {
     int64_t last_sample;
 } enc_raw_t;
 
-static hnd_t init( hnd_t filter_chain, const char *opts[] )
+static hnd_t init( hnd_t filter_chain, const char *opts )
 {
     assert( filter_chain );
     enc_raw_t *h = calloc( 1, sizeof( enc_raw_t ) );

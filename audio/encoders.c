@@ -9,7 +9,7 @@ struct aenc_t
     hnd_t handle;
 };
 
-hnd_t audio_encoder_open( const audio_encoder_t *encoder, hnd_t filter_chain, const char *opts[] )
+hnd_t audio_encoder_open( const audio_encoder_t *encoder, hnd_t filter_chain, const char *opts )
 {
     assert( encoder && filter_chain );
     struct aenc_t *enc = calloc( 1, sizeof( struct aenc_t ) );
