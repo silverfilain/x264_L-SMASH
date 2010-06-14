@@ -13,10 +13,16 @@ SRCS = common/mc.c common/predict.c common/pixel.c common/macroblock.c \
        encoder/set.c encoder/macroblock.c encoder/cabac.c \
        encoder/cavlc.c encoder/encoder.c encoder/lookahead.c
 
+
+SRCAUD = audio/audio.c audio/encoders.c \
+       filters/common.c filters/audio/audio_filters.c \
+       filters/audio/internal.c filters/audio/source_lavf.c \
+       audio/encoders/enc_raw.c
+
 SRCCLI = x264.c input/timecode.c \
          input/yuv.c input/y4m.c output/raw.c \
          output/matroska.c output/matroska_ebml.c \
-         output/flv.c output/flv_bytestream.c
+         output/flv.c output/flv_bytestream.c $(SRCAUD)
 
 SRCSO =
 

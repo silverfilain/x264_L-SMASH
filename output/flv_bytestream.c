@@ -78,6 +78,12 @@ void x264_put_amf_double( flv_buffer *c, double d )
     x264_put_be64( c, dbl2int( d ) );
 }
 
+void x264_put_amf_bool( flv_buffer *c, int i )
+{
+    x264_put_byte( c, AMF_DATA_TYPE_BOOL );
+    x264_put_byte( c, !!i );
+}
+
 /* flv writing functions */
 
 flv_buffer *flv_create_writer( const char *filename )
