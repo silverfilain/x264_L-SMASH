@@ -295,16 +295,16 @@ static void Help( x264_param_t *defaults, int longhelp )
         "                                    --no-8x8dct --aq-mode 0 --b-adapt 0\n"
         "                                    --bframes 0 --no-cabac --no-deblock\n"
         "                                    --no-mbtree --me dia --no-mixed-refs\n"
-        "                                    --partitions none --ref 1 --scenecut 0\n"
-        "                                    --subme 0 --trellis 0 --no-weightb\n"
-        "                                    --weightp 0\n"
+        "                                    --partitions none --rc-lookahead 0 --ref 1\n"
+        "                                    --scenecut 0 --subme 0 --trellis 0\n"
+        "                                    --no-weightb --weightp 0\n"
         "                                  - superfast:\n"
         "                                    --no-mbtree --me dia --no-mixed-refs\n"
-        "                                    --partitions i8x8,i4x4 --ref 1\n"
-        "                                    --subme 1 --trellis 0 --weightp 0\n"
+        "                                    --partitions i8x8,i4x4 --rc-lookahead 0\n"
+        "                                    --ref 1 --subme 1 --trellis 0 --weightp 0\n"
         "                                  - veryfast:\n"
-        "                                    --no-mbtree --no-mixed-refs --ref 1\n"
-        "                                    --subme 2 --trellis 0 --weightp 0\n"
+        "                                    --no-mixed-refs --rc-lookahead 10\n"
+        "                                    --ref 1 --subme 2 --trellis 0 --weightp 0\n"
         "                                  - faster:\n"
         "                                    --no-mixed-refs --rc-lookahead 20\n"
         "                                    --ref 2 --subme 4 --weightp 1\n"
@@ -360,8 +360,9 @@ static void Help( x264_param_t *defaults, int longhelp )
         "                                    --no-cabac --no-deblock --no-weightb\n"
         "                                    --weightp 0\n"
         "                                  - zerolatency:\n"
-        "                                    --bframes 0 --force-cfr --rc-lookahead 0\n"
-        "                                    --sync-lookahead 0 --sliced-threads\n" );
+        "                                    --bframes 0 --force-cfr --no-mbtree\n"
+        "                                    --sync-lookahead 0 --sliced-threads\n"
+        "                                    --rc-lookahead 0\n" );
     else H0( "                                  - psy tunings: film,animation,grain,\n"
              "                                                 stillimage,psnr,ssim\n"
              "                                  - other tunings: fastdecode,zerolatency\n" );
@@ -390,6 +391,12 @@ static void Help( x264_param_t *defaults, int longhelp )
         "                                  - strict: Strictly hierarchical pyramid\n"
         "                                  - normal: Non-strict (not Blu-ray compatible)\n",
         strtable_lookup( x264_b_pyramid_names, defaults->i_bframe_pyramid ) );
+    H1( "      --open-gop <string>     Use recovery points to close GOPs [none]\n"
+        "                                  - none: Use standard closed GOPs\n"
+        "                                  - display: Base GOP length on display order\n"
+        "                                             (not Blu-ray compatible)\n"
+        "                                  - coded: Base GOP length on coded order\n"
+        "                              Only available with b-frames\n" );
     H1( "      --no-cabac              Disable CABAC\n" );
     H1( "  -r, --ref <integer>         Number of reference frames [%d]\n", defaults->i_frame_reference );
     H1( "      --no-deblock            Disable loop filter\n" );
@@ -451,7 +458,8 @@ static void Help( x264_param_t *defaults, int longhelp )
         "                                  or  b=<float> (bitrate multiplier)\n" );
     H2( "      --qpfile <string>       Force frametypes and QPs for some or all frames\n"
         "                              Format of each line: framenumber frametype QP\n"
-        "                              QP of -1 lets x264 choose. Frametypes: I,i,P,B,b.\n"
+        "                              QP of -1 lets x264 choose. Frametypes: I,i,K,P,B,b.\n"
+        "                                  K=<I or i> depending on open-gop setting\n"
         "                              QPs are restricted by qpmin/qpmax.\n" );
     H1( "\n" );
     H1( "Analysis:\n" );
@@ -649,6 +657,7 @@ static struct option long_options[] =
     { "no-b-adapt",        no_argument, NULL, 0 },
     { "b-bias",      required_argument, NULL, 0 },
     { "b-pyramid",   required_argument, NULL, 0 },
+    { "open-gop",    required_argument, NULL, 0 },
     { "min-keyint",  required_argument, NULL, 'i' },
     { "keyint",      required_argument, NULL, 'I' },
     { "intra-refresh",     no_argument, NULL, 0 },
@@ -832,6 +841,7 @@ static int select_input( const char *demuxer, char *used_demuxer, char *filename
     int b_auto = !strcasecmp( demuxer, "auto" );
     if( !b_regular && b_auto )
         ext = "yuv";
+    b_regular = b_regular && x264_is_regular_file_path( filename );
     if( b_regular )
     {
         FILE *f = fopen( filename, "r" );
@@ -1401,6 +1411,7 @@ static void parse_qpfile( cli_opt_t *opt, x264_picture_t *pic, int i_frame )
         pic->i_qpplus1 = qp+1;
         if     ( type == 'I' ) pic->i_type = X264_TYPE_IDR;
         else if( type == 'i' ) pic->i_type = X264_TYPE_I;
+        else if( type == 'K' ) pic->i_type = X264_TYPE_KEYFRAME;
         else if( type == 'P' ) pic->i_type = X264_TYPE_P;
         else if( type == 'B' ) pic->i_type = X264_TYPE_BREF;
         else if( type == 'b' ) pic->i_type = X264_TYPE_B;

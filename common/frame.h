@@ -35,6 +35,7 @@ typedef struct x264_frame
     int     i_type;
     int     i_qpplus1;
     int64_t i_pts;
+    int64_t i_dts;
     int64_t i_reordered_pts;
     int     i_duration;  /* in SPS time_scale units (i.e 2 * timebase units) used for vfr */
     int     i_cpb_duration;
@@ -143,6 +144,9 @@ typedef struct x264_frame
     int     i_pir_start_col;
     int     i_pir_end_col;
     int     i_frames_since_pir;
+
+    /* interactive encoder control */
+    int     b_corrupt;
 } x264_frame_t;
 
 /* synchronized frame list */
@@ -154,7 +158,7 @@ typedef struct
    x264_pthread_mutex_t     mutex;
    x264_pthread_cond_t      cv_fill;  /* event signaling that the list became fuller */
    x264_pthread_cond_t      cv_empty; /* event signaling that the list became emptier */
-} x264_synch_frame_list_t;
+} x264_sync_frame_list_t;
 
 typedef void (*x264_deblock_inter_t)( pixel *pix, int stride, int alpha, int beta, int8_t *tc0 );
 typedef void (*x264_deblock_intra_t)( pixel *pix, int stride, int alpha, int beta );
@@ -202,9 +206,10 @@ x264_frame_t *x264_frame_pop_unused( x264_t *h, int b_fdec );
 void          x264_frame_sort( x264_frame_t **list, int b_dts );
 void          x264_frame_delete_list( x264_frame_t **list );
 
-int           x264_synch_frame_list_init( x264_synch_frame_list_t *slist, int nelem );
-void          x264_synch_frame_list_delete( x264_synch_frame_list_t *slist );
-void          x264_synch_frame_list_push( x264_synch_frame_list_t *slist, x264_frame_t *frame );
+int           x264_sync_frame_list_init( x264_sync_frame_list_t *slist, int nelem );
+void          x264_sync_frame_list_delete( x264_sync_frame_list_t *slist );
+void          x264_sync_frame_list_push( x264_sync_frame_list_t *slist, x264_frame_t *frame );
+x264_frame_t *x264_sync_frame_list_pop( x264_sync_frame_list_t *slist );
 
 #define x264_frame_sort_dts(list) x264_frame_sort(list, 1)
 #define x264_frame_sort_pts(list) x264_frame_sort(list, 0)

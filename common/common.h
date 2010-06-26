@@ -160,6 +160,7 @@ static const int x264_scan8[16+2*4+3] =
 #include "cabac.h"
 #include "quant.h"
 #include "cpu.h"
+#include "threadpool.h"
 
 /****************************************************************************
  * General functions
@@ -183,6 +184,7 @@ char *x264_param2string( x264_param_t *p, int b_res );
 void x264_log( x264_t *h, int i_level, const char *psz_fmt, ... );
 
 void x264_reduce_fraction( uint32_t *n, uint32_t *d );
+void x264_reduce_fraction64( uint64_t *n, uint64_t *d );
 void x264_init_vlc_tables();
 
 static ALWAYS_INLINE pixel x264_clip_pixel( int x )
@@ -364,9 +366,10 @@ typedef struct x264_lookahead_t
     int                           i_last_keyframe;
     int                           i_slicetype_length;
     x264_frame_t                  *last_nonb;
-    x264_synch_frame_list_t       ifbuf;
-    x264_synch_frame_list_t       next;
-    x264_synch_frame_list_t       ofbuf;
+    x264_pthread_t                thread_handle;
+    x264_sync_frame_list_t        ifbuf;
+    x264_sync_frame_list_t        next;
+    x264_sync_frame_list_t        ofbuf;
 } x264_lookahead_t;
 
 typedef struct x264_ratecontrol_t   x264_ratecontrol_t;
@@ -377,11 +380,11 @@ struct x264_t
     x264_param_t    param;
 
     x264_t          *thread[X264_THREAD_MAX+1];
-    x264_pthread_t  thread_handle;
     int             b_thread_active;
     int             i_thread_phase; /* which thread to use for the next frame */
     int             i_threadslice_start; /* first row in this thread slice */
     int             i_threadslice_end; /* row after the end of this thread slice */
+    x264_threadpool_t *threadpool;
 
     /* bitstream output */
     struct
@@ -418,6 +421,8 @@ struct x264_t
     int             i_cpb_delay_lookahead;
 
     int             b_queued_intra_refresh;
+    int64_t         i_reference_invalidate_pts;
+    int64_t         i_last_idr_pts;
 
     /* We use only one SPS and one PPS */
     x264_sps_t      sps_array[1];
@@ -468,7 +473,11 @@ struct x264_t
         /* frames used for reference + sentinels */
         x264_frame_t *reference[16+2];
 
-        int i_last_keyframe; /* Frame number of the last keyframe */
+        int i_last_keyframe;       /* Frame number of the last keyframe */
+        int i_last_idr;            /* Frame number of the last IDR (not RP)*/
+        int i_poc_last_open_gop;   /* Poc of the I frame of the last open-gop. The value
+                                    * is only assigned during the period between that
+                                    * I frame and the next P or I frame, else -1 */
 
         int i_input;    /* Number of input frames already accepted */
 

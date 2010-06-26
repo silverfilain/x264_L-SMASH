@@ -184,6 +184,7 @@ static int x264_param_apply_preset( x264_param_t *param, const char *preset )
         param->rc.b_mb_tree = 0;
         param->analyse.i_weighted_pred = X264_WEIGHTP_NONE;
         param->analyse.b_weighted_bipred = 0;
+        param->rc.i_lookahead = 0;
     }
     else if( !strcasecmp( preset, "superfast" ) )
     {
@@ -195,6 +196,7 @@ static int x264_param_apply_preset( x264_param_t *param, const char *preset )
         param->analyse.i_trellis = 0;
         param->rc.b_mb_tree = 0;
         param->analyse.i_weighted_pred = X264_WEIGHTP_NONE;
+        param->rc.i_lookahead = 0;
     }
     else if( !strcasecmp( preset, "veryfast" ) )
     {
@@ -203,8 +205,8 @@ static int x264_param_apply_preset( x264_param_t *param, const char *preset )
         param->i_frame_reference = 1;
         param->analyse.b_mixed_references = 0;
         param->analyse.i_trellis = 0;
-        param->rc.b_mb_tree = 0;
         param->analyse.i_weighted_pred = X264_WEIGHTP_NONE;
+        param->rc.i_lookahead = 10;
     }
     else if( !strcasecmp( preset, "faster" ) )
     {
@@ -281,7 +283,7 @@ static int x264_param_apply_preset( x264_param_t *param, const char *preset )
 
 static int x264_param_apply_tune( x264_param_t *param, const char *tune )
 {
-    char *tmp = x264_malloc( strlen( tune ) );
+    char *tmp = x264_malloc( strlen( tune ) + 1 );
     if( !tmp )
         return -1;
     tmp = strcpy( tmp, tune );
@@ -355,6 +357,7 @@ static int x264_param_apply_tune( x264_param_t *param, const char *tune )
             param->i_bframe = 0;
             param->b_sliced_threads = 1;
             param->b_vfr_input = 0;
+            param->rc.b_mb_tree = 0;
         }
         else if( !strncasecmp( s, "touhou", 6 ) )
         {
@@ -428,7 +431,10 @@ int x264_param_apply_profile( x264_param_t *param, const char *profile )
             return -1;
         }
         if( param->b_fake_interlaced )
-            x264_log( NULL, X264_LOG_WARNING, "baseline profile doesn't support fake interlacing\n" );
+        {
+            x264_log( NULL, X264_LOG_ERROR, "baseline profile doesn't support fake interlacing\n" );
+            return -1;
+        }
     }
     else if( !strcasecmp( profile, "main" ) )
     {
@@ -628,6 +634,8 @@ int x264_param_parse( x264_param_t *p, const char *name, const char *value )
     }
     OPT2("ref", "frameref")
         p->i_frame_reference = atoi(value);
+    OPT("dpb-size")
+        p->i_dpb_size = atoi(value);
     OPT("keyint")
     {
         p->i_keyint_max = atoi(value);
@@ -671,6 +679,15 @@ int x264_param_parse( x264_param_t *p, const char *name, const char *value )
         {
             b_error = 0;
             p->i_bframe_pyramid = atoi(value);
+        }
+    }
+    OPT("open-gop")
+    {
+        b_error |= parse_enum( value, x264_open_gop_names, &p->i_open_gop );
+        if( b_error )
+        {
+            b_error = 0;
+            p->i_open_gop = atoi(value);
         }
     }
     OPT("nf")
@@ -1077,23 +1094,27 @@ void x264_free( void *p )
 /****************************************************************************
  * x264_reduce_fraction:
  ****************************************************************************/
-void x264_reduce_fraction( uint32_t *n, uint32_t *d )
-{
-    uint32_t a = *n;
-    uint32_t b = *d;
-    uint32_t c;
-    if( !a || !b )
-        return;
-    c = a % b;
-    while(c)
-    {
-        a = b;
-        b = c;
-        c = a % b;
-    }
-    *n /= b;
-    *d /= b;
+#define REDUCE_FRACTION( name, type )\
+void name( type *n, type *d )\
+{                   \
+    type a = *n;    \
+    type b = *d;    \
+    type c;         \
+    if( !a || !b )  \
+        return;     \
+    c = a % b;      \
+    while( c )      \
+    {               \
+        a = b;      \
+        b = c;      \
+        c = a % b;  \
+    }               \
+    *n /= b;        \
+    *d /= b;        \
 }
+
+REDUCE_FRACTION( x264_reduce_fraction  , uint32_t )
+REDUCE_FRACTION( x264_reduce_fraction64, uint64_t )
 
 /****************************************************************************
  * x264_slurp_file:
@@ -1176,16 +1197,16 @@ char *x264_param2string( x264_param_t *p, int b_res )
         s += sprintf( s, " slice_max_mbs=%d", p->i_slice_max_mbs );
     s += sprintf( s, " nr=%d", p->analyse.i_noise_reduction );
     s += sprintf( s, " decimate=%d", p->analyse.b_dct_decimate );
-    s += sprintf( s, " interlaced=%s", p->b_interlaced ? p->b_tff ? "tff" : "bff" : "0" );
+    s += sprintf( s, " interlaced=%s", p->b_interlaced ? p->b_tff ? "tff" : "bff" : p->b_fake_interlaced ? "fake" : "0" );
 
     s += sprintf( s, " constrained_intra=%d", p->b_constrained_intra );
 
     s += sprintf( s, " bframes=%d", p->i_bframe );
     if( p->i_bframe )
     {
-        s += sprintf( s, " b_pyramid=%d b_adapt=%d b_bias=%d direct=%d weightb=%d",
+        s += sprintf( s, " b_pyramid=%d b_adapt=%d b_bias=%d direct=%d weightb=%d open_gop=%d",
                       p->i_bframe_pyramid, p->i_bframe_adaptive, p->i_bframe_bias,
-                      p->analyse.i_direct_mv_pred, p->analyse.b_weighted_bipred );
+                      p->analyse.i_direct_mv_pred, p->analyse.b_weighted_bipred, p->i_open_gop );
     }
     s += sprintf( s, " weightp=%d", p->analyse.i_weighted_pred > 0 ? p->analyse.i_weighted_pred : 0 );
 

@@ -105,7 +105,7 @@ void x264_sps_init( x264_sps_t *sps, int i_id, x264_param_t *param )
         sps->i_profile_idc  = PROFILE_HIGH444_PREDICTIVE;
     else if( param->analyse.b_transform_8x8 || param->i_cqm_preset != X264_CQM_FLAT )
         sps->i_profile_idc  = PROFILE_HIGH;
-    else if( param->b_cabac || param->i_bframe > 0 || param->b_interlaced || param->analyse.i_weighted_pred > 0 )
+    else if( param->b_cabac || param->i_bframe > 0 || param->b_interlaced || param->b_fake_interlaced || param->analyse.i_weighted_pred > 0 )
         sps->i_profile_idc  = PROFILE_MAIN;
     else
         sps->i_profile_idc  = PROFILE_BASELINE;
@@ -149,7 +149,7 @@ void x264_sps_init( x264_sps_t *sps, int i_id, x264_param_t *param )
     sps->b_gaps_in_frame_num_value_allowed = 0;
     sps->i_mb_width = ( param->i_width + 15 ) / 16;
     sps->i_mb_height= ( param->i_height + 15 ) / 16;
-    sps->b_frame_mbs_only = param->b_interlaced ? 0 : !param->b_fake_interlaced;
+    sps->b_frame_mbs_only = !(param->b_interlaced || param->b_fake_interlaced);
     if( !sps->b_frame_mbs_only )
         sps->i_mb_height = ( sps->i_mb_height + 1 ) & ~1;
     sps->b_mb_adaptive_frame_field = param->b_interlaced;
@@ -223,8 +223,8 @@ void x264_sps_init( x264_sps_t *sps, int i_id, x264_param_t *param )
     /* extra slot with pyramid so that we don't have to override the
      * order of forgetting old pictures */
     sps->vui.i_max_dec_frame_buffering =
-    sps->i_num_ref_frames = X264_MIN(16, X264_MAX3(param->i_frame_reference, 1 + sps->vui.i_num_reorder_frames,
-                                                   param->i_bframe_pyramid ? 4 : 1 ));
+    sps->i_num_ref_frames = X264_MIN(16, X264_MAX4(param->i_frame_reference, 1 + sps->vui.i_num_reorder_frames,
+                            param->i_bframe_pyramid ? 4 : 1, param->i_dpb_size));
     sps->i_num_ref_frames -= param->i_bframe_pyramid == X264_B_PYRAMID_STRICT;
 
     sps->vui.b_bitstream_restriction = 1;
