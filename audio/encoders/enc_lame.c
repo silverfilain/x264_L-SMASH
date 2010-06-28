@@ -51,6 +51,7 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     h->lame = lame_init();
     lame_set_in_samplerate( h->lame, h->info->samplerate );
     lame_set_num_channels( h->lame, h->info->channels );
+    lame_set_quality( h->lame, 0 );
 
     if( cbr )
     {
