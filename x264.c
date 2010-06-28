@@ -637,7 +637,8 @@ enum {
     OPT_NOAUDIO,
     OPT_AUDIOFILE,
     OPT_AUDIOCODEC,
-    OPT_AUDIOBITRATE
+    OPT_AUDIOBITRATE,
+    OPT_AUDIOQUALITY
 } OptionsOPT;
 
 static char short_options[] = "8A:B:b:f:hI:i:m:o:p:q:r:t:Vvw";
@@ -788,6 +789,7 @@ static struct option long_options[] =
     { "audiofile",   required_argument, NULL, OPT_AUDIOFILE },
     { "acodec",      required_argument, NULL, OPT_AUDIOCODEC },
     { "abitrate",    required_argument, NULL, OPT_AUDIOBITRATE },
+    { "aquality",    required_argument, NULL, OPT_AUDIOQUALITY },
     {0, 0, 0, 0}
 };
 
@@ -974,7 +976,8 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
     char *tune = NULL;
 
     char *audio_filename = NULL;
-    int audio_bitrate = 160;
+    int audio_bitrate = -1;
+    float audio_quality = 6;
     int audio_enable = 1;
 
     x264_param_default( &defaults );
@@ -1149,6 +1152,14 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
                 break;
             case OPT_AUDIOBITRATE:
                 audio_bitrate = atoi( optarg );
+                if ( audio_bitrate <= 0 )
+                {
+                    fprintf( stderr, "x264 [error]: bitrate must be > 0.\n" );
+                    return 1;
+                }
+                break;
+            case OPT_AUDIOQUALITY:
+                audio_quality = (float) atof( optarg );
                 break;
             default:
 generic_option:
@@ -1350,10 +1361,13 @@ generic_option:
 
     if( audio_enable )
     {
-        char br[20];
-        br[0] = 0;
-        snprintf( br, 20, "bitrate=%d", audio_bitrate );
-        if( !select_audio( audio_enc, opt, br ) )
+        char arg[30] = { 0 };
+        if ( audio_bitrate > 0 )
+            snprintf( arg, 30, "bitrate=%d", audio_bitrate );
+        else
+            snprintf( arg, 30, "vbr=%f", audio_quality );
+        
+        if( !select_audio( audio_enc, opt, arg ) )
         {
             if( !output.open_audio( opt->hout, opt->haenc ) )
             {
