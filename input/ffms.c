@@ -33,8 +33,11 @@
 #define SetConsoleTitle(t)
 #endif
 
+#include "audio/audio.h"
+
 typedef struct
 {
+    char *filename;
     FFMS_VideoSource *video_source;
     FFMS_Track *track;
     int total_frames;
@@ -102,6 +105,7 @@ static int open_file( char *psz_filename, hnd_t *p_handle, video_info_t *info, c
         return -1;
     }
 
+    h->filename = strdup( psz_filename );
     h->video_source = FFMS_CreateVideoSource( psz_filename, trackno, idx, 1, seekmode, &e );
     if( !h->video_source )
     {
@@ -237,8 +241,15 @@ static int close_file( hnd_t handle )
     ffms_hnd_t *h = handle;
     sws_freeContext( h->scaler );
     FFMS_DestroyVideoSource( h->video_source );
+    free( h->filename );
     free( h );
     return 0;
 }
 
-const cli_input_t ffms_input = { open_file, get_frame_total, x264_picture_alloc, read_frame, NULL, x264_picture_clean, close_file };
+static hnd_t open_audio( hnd_t handle, int track )
+{
+    ffms_hnd_t *h = handle;
+    return audio_open_from_file( NULL, h->filename, track );
+}
+
+const cli_input_t ffms_input = { open_file, get_frame_total, x264_picture_alloc, read_frame, NULL, x264_picture_clean, close_file, open_audio };

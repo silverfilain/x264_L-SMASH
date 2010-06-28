@@ -1245,16 +1245,17 @@ generic_option:
         return -1;
     }
 
-    if( !strcmp( demuxername, "ffms" ) && !audio_filename )
-        audio_filename = input_filename;
-
-    if( !audio_filename )
-        audio_enable = 0;
-
     if( audio_enable )
     {
-        opt->haud = audio_open_from_file( NULL, audio_filename, TRACK_ANY );
-        assert( opt->haud );
+        if ( audio_filename )
+            opt->haud = audio_open_from_file( NULL, audio_filename, TRACK_ANY );
+        else if ( input.open_audio )
+            opt->haud = input.open_audio( opt->hin, TRACK_ANY );
+        else
+            fprintf( stderr, "x264 [warn]: the used input does not support audio and --audiofile was not given, disabling audio.\n" );
+        
+        if (! opt->haud )
+            audio_enable = 0;
     }
 
     x264_reduce_fraction( &info.sar_width, &info.sar_height );

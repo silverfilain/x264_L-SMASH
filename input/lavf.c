@@ -26,8 +26,11 @@
 #include <libavformat/avformat.h>
 #include <libswscale/swscale.h>
 
+#include "audio/audio.h"
+
 typedef struct
 {
+    char *filename;
     AVFormatContext *lavf;
     int stream_id;
     int next_frame;
@@ -166,6 +169,7 @@ static int open_file( char *psz_filename, hnd_t *p_handle, video_info_t *info, c
     if( !strcmp( psz_filename, "-" ) )
         psz_filename = "pipe:";
 
+    h->filename = strdup( psz_filename );
     if( av_open_input_file( &h->lavf, psz_filename, NULL, 0, NULL ) )
     {
         fprintf( stderr, "lavf [error]: could not open input file\n" );
@@ -268,8 +272,23 @@ static int close_file( hnd_t handle )
     sws_freeContext( h->scaler );
     avcodec_close( h->lavf->streams[h->stream_id]->codec );
     av_close_input_file( h->lavf );
+    free( h->filename );
     free( h );
     return 0;
 }
 
-const cli_input_t lavf_input = { open_file, get_frame_total, picture_alloc, read_frame, NULL, picture_clean, close_file };
+static hnd_t open_audio( hnd_t handle, int track )
+{
+    lavf_hnd_t *h = handle;
+    if( x264_is_regular_file_path( h->filename ) )
+    {
+        return audio_open_from_file( NULL, h->filename, track );
+    }
+    else
+    {
+        fprintf( stderr, "lavf [error]: reading audio from non-regular files is not implemented yet.\n" );
+    }
+    return 0;
+}
+
+const cli_input_t lavf_input = { open_file, get_frame_total, picture_alloc, read_frame, NULL, picture_clean, close_file, open_audio };

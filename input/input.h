@@ -25,6 +25,8 @@
 #ifndef X264_INPUT_H
 #define X264_INPUT_H
 
+#include "audio/audio.h"
+
 /* options that are used by only some demuxers */
 typedef struct
 {
@@ -60,6 +62,7 @@ typedef struct
     int (*release_frame)( x264_picture_t *pic, hnd_t handle );
     void (*picture_clean)( x264_picture_t *pic );
     int (*close_file)( hnd_t handle );
+    hnd_t (*open_audio)( hnd_t handle, int track );
 } cli_input_t;
 
 extern const cli_input_t yuv_input;
