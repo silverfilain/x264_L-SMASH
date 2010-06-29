@@ -570,7 +570,9 @@ static void Help( x264_param_t *defaults, int longhelp )
     H0( "      --audiofile <filename>  Uses audio from the specified file\n" );
     H0( "      --acodec <string>       Specify the audio codec. Supported codecs:\n" );
     H0( "                                  - raw\n" );
-    H0( "      --abitrate <integer>    Specify audio bitrate [160]\n" );
+    H0( "                                  - mp3 (lame)\n" );
+    H0( "      --abitrate <integer>    Enable bitrate mode and specifies bitrate\n" );
+    H0( "      --aquality <float>      Specifies audio quality [6]\n" );
     H0( "\n" );
     H0( "Input/Output:\n" );
     H0( "\n" );
