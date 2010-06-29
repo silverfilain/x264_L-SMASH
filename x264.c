@@ -1224,8 +1224,8 @@ generic_option:
 
     if( ! output.open_audio )
     {
-        fprintf( stderr, "x264 [warn]: the used muxer does not support audio.\n" );
-        audio_enable = 0;
+        fprintf( stderr, "x264 [error]: the used muxer does not support audio.\n" );
+        return -1;
     }
 
     input_filename = argv[optind++];
@@ -1259,10 +1259,10 @@ generic_option:
         else if ( input.open_audio )
             opt->haud = input.open_audio( opt->hin, TRACK_ANY );
         else
-            fprintf( stderr, "x264 [warn]: the used input does not support audio and --audiofile was not given, disabling audio.\n" );
-        
+            fprintf( stderr, "x264 [error]: the used input does not support audio and --audiofile was not given.\n" );
+
         if (! opt->haud )
-            audio_enable = 0;
+            return -1;
     }
 
     x264_reduce_fraction( &info.sar_width, &info.sar_height );
@@ -1374,7 +1374,7 @@ generic_option:
             snprintf( arg, 30, "bitrate=%d", audio_bitrate );
         else
             snprintf( arg, 30, "vbr=%f", audio_quality );
-        
+
         if( !select_audio( audio_enc, opt, arg ) )
         {
             if( !output.open_audio( opt->hout, opt->haenc ) )
