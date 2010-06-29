@@ -23,8 +23,14 @@
 
 #include "muxers.h"
 
-static int open_file( char *psz_filename, hnd_t *p_handle )
+static int open_file( char *psz_filename, hnd_t *p_handle, hnd_t audio_encoder )
 {
+    if( audio_encoder )
+    {
+        fprintf( stderr, "raw [error]: audio is not supported on this muxer\n" );
+        return -1;
+    }
+
     if( !strcmp( psz_filename, "-" ) )
         *p_handle = stdout;
     else if( !(*p_handle = fopen( psz_filename, "w+b" )) )

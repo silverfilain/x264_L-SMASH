@@ -28,12 +28,11 @@
 
 typedef struct
 {
-    int (*open_file)( char *psz_filename, hnd_t *p_handle );
+    int (*open_file)( char *psz_filename, hnd_t *p_handle, hnd_t audio_encoder );
     int (*set_param)( hnd_t handle, x264_param_t *p_param );
     int (*write_headers)( hnd_t handle, x264_nal_t *p_nal );
     int (*write_frame)( hnd_t handle, uint8_t *p_nal, int i_size, x264_picture_t *p_picture );
     int (*close_file)( hnd_t handle, int64_t largest_pts, int64_t second_largest_pts );
-    int (*open_audio)( hnd_t handle, hnd_t encoder );
 } cli_output_t;
 
 extern const cli_output_t raw_output;

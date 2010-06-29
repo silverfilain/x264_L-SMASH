@@ -1216,17 +1216,6 @@ generic_option:
 
     if( select_output( muxer, output_filename, param ) )
         return -1;
-    if( output.open_file( output_filename, &opt->hout ) )
-    {
-        fprintf( stderr, "x264 [error]: could not open output file `%s'\n", output_filename );
-        return -1;
-    }
-
-    if( ! output.open_audio )
-    {
-        fprintf( stderr, "x264 [error]: the used muxer does not support audio.\n" );
-        return -1;
-    }
 
     input_filename = argv[optind++];
     input_opt.resolution = optind < argc ? argv[optind++] : NULL;
@@ -1271,6 +1260,27 @@ generic_option:
         fprintf( stderr, "%s [info]: %dx%d%c %d:%d @ %d/%d fps (%cfr)\n", demuxername, info.width,
                  info.height, info.interlaced ? 'i' : 'p', info.sar_width, info.sar_height,
                  info.fps_num, info.fps_den, info.vfr ? 'v' : 'c' );
+
+    if( audio_enable )
+    {
+        char arg[30] = { 0 };
+        if ( audio_bitrate > 0 )
+            snprintf( arg, 30, "bitrate=%d", audio_bitrate );
+        else
+            snprintf( arg, 30, "vbr=%f", audio_quality );
+
+        if( select_audio( audio_enc, opt, arg ) )
+        {
+            fprintf( stderr, "x264 [error]: error opening audio encoder.\n" );
+            return -1;
+        }
+    }
+
+    if( output.open_file( output_filename, &opt->hout, opt->haenc ) )
+    {
+        fprintf( stderr, "x264 [error]: could not open output file `%s'\n", output_filename );
+        return -1;
+    }
 
     if( tcfile_name )
     {
@@ -1366,30 +1376,6 @@ generic_option:
             input = thread_input;
     }
 #endif
-
-    if( audio_enable )
-    {
-        char arg[30] = { 0 };
-        if ( audio_bitrate > 0 )
-            snprintf( arg, 30, "bitrate=%d", audio_bitrate );
-        else
-            snprintf( arg, 30, "vbr=%f", audio_quality );
-
-        if( !select_audio( audio_enc, opt, arg ) )
-        {
-            if( !output.open_audio( opt->hout, opt->haenc ) )
-            {
-                fprintf( stderr, "x264 [error]: error opening audio muxer.\n" );
-                return -1;
-            }
-        }
-        else
-        {
-            fprintf( stderr, "x264 [error]: error opening audio encoder.\n" );
-            return -1;
-        }
-    }
-
 
     /* Automatically reduce reference frame count to match the user's target level
      * if the user didn't explicitly set a reference frame count. */

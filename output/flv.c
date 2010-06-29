@@ -68,18 +68,106 @@ typedef struct
     flv_audio_hnd_t *a_flv;
 } flv_hnd_t;
 
-static int write_header( flv_buffer *c )
+static int audio_init( hnd_t handle, hnd_t encoder )
 {
-    x264_put_tag( c, "FLV" );  // Signature
-    x264_put_byte( c, 1 );     // Version
-    x264_put_byte( c, 1 | 4 ); // Video + Audio
-    x264_put_be32( c, 9 );     // DataOffset
-    x264_put_be32( c, 0 );     // PreviousTagSize 0
+    if( !encoder )
+        return 0;
+    
+    flv_hnd_t *p_flv = handle;
+    flv_audio_hnd_t *a_flv = p_flv->a_flv = calloc( 1, sizeof( flv_audio_hnd_t ) );
+    audio_info_t *info = a_flv->info = audio_encoder_info( encoder );
+
+    int header = 0;
+    if ( !strcmp( info->codec_name, "raw" ) )
+        a_flv->codecid = FLV_CODECID_RAW;
+    else if( !strcmp( info->codec_name, "adpcm_swf" ) )
+        a_flv->codecid = FLV_CODECID_ADPCM;
+    else if( !strcmp( info->codec_name, "mp3" ) )
+        a_flv->codecid = FLV_CODECID_MP3;
+    else if( !strcmp( info->codec_name, "aac" ) )
+        a_flv->codecid = FLV_CODECID_AAC;
+    else
+    {
+        fprintf( stderr, "flv [error]: unsupported audio codec %s\n", info->codec_name );
+        goto error;
+    }
+
+    header |= a_flv->codecid;
+    a_flv->stereo = info->channels == 2;
+
+    switch( info->samplerate )
+    {
+        case 5512:
+        case 8000:
+            header |= FLV_SAMPLERATE_SPECIAL;
+            break;
+        case 11025:
+            header |= FLV_SAMPLERATE_11025HZ;
+            break;
+        case 22050:
+            header |= FLV_SAMPLERATE_22050HZ;
+            break;
+        case 44100:
+            header |= FLV_SAMPLERATE_44100HZ;
+            break;
+        default:
+            fprintf( stderr, "flv [error]: unsupported %dhz sample rate\n", info->samplerate );
+            goto error;
+    }
+
+    switch( info->chansize )
+    {
+        case 1:
+            header |= FLV_SAMPLESSIZE_8BIT;
+            break;
+        case 2:
+            header |= FLV_SAMPLESSIZE_16BIT;
+            break;
+        default:
+            fprintf( stderr, "flv [error]: %d-bit audio not supported\n", (int) info->chansize * 8 );
+            goto error;
+    }
+
+    switch( info->channels )
+    {
+        case 1:
+            header |= FLV_MONO;
+            break;
+        case 2:
+            header |= FLV_STEREO;
+            break;
+        default:
+            fprintf( stderr, "flv [error]: %d-channel audio not supported\n", info->channels );
+            goto error;
+    }
+
+    a_flv->header   = header;
+    a_flv->step_num = a_flv->info->framelen * 1000;
+    a_flv->step_den = a_flv->info->samplerate;
+
+    a_flv->encoder = encoder;
+
+    return 0;
+
+    error:
+    free( p_flv->a_flv );
+    p_flv->a_flv = NULL;
+
+    return -1;
+}
+
+static int write_header( flv_buffer *c, int audio )
+{
+    x264_put_tag( c, "FLV" );                // Signature
+    x264_put_byte( c, 1 );                   // Version
+    x264_put_byte( c, 1 | (audio ? 4 : 0) ); // Video + Audio (if requested)
+    x264_put_be32( c, 9 );                   // DataOffset
+    x264_put_be32( c, 0 );                   // PreviousTagSize 0
 
     return flv_flush_data( c );
 }
 
-static int open_file( char *psz_filename, hnd_t *p_handle )
+static int open_file( char *psz_filename, hnd_t *p_handle, hnd_t audio_encoder )
 {
     flv_hnd_t *p_flv = malloc( sizeof(*p_flv) );
     *p_handle = NULL;
@@ -91,7 +179,8 @@ static int open_file( char *psz_filename, hnd_t *p_handle )
     if( !p_flv->c )
         return -1;
 
-    CHECK( write_header( p_flv->c ) );
+    CHECK( audio_init( p_flv, audio_encoder ) );
+    CHECK( write_header( p_flv->c, !!audio_encoder ) );
     *p_handle = p_flv;
 
     return 0;
@@ -401,89 +490,4 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
     return 0;
 }
 
-static int open_audio( hnd_t handle, hnd_t encoder )
-{
-    flv_hnd_t *p_flv = handle;
-    flv_audio_hnd_t *a_flv = p_flv->a_flv = calloc( 1, sizeof( flv_audio_hnd_t ) );
-    audio_info_t *info = a_flv->info = audio_encoder_info( encoder );
-
-    int header = 0;
-    if ( !strcmp( info->codec_name, "raw" ) )
-        a_flv->codecid = FLV_CODECID_RAW;
-    else if( !strcmp( info->codec_name, "adpcm_swf" ) )
-        a_flv->codecid = FLV_CODECID_ADPCM;
-    else if( !strcmp( info->codec_name, "mp3" ) )
-        a_flv->codecid = FLV_CODECID_MP3;
-    else if( !strcmp( info->codec_name, "aac" ) )
-        a_flv->codecid = FLV_CODECID_AAC;
-    else
-    {
-        fprintf( stderr, "flv [error]: unsupported audio codec %s\n", info->codec_name );
-        goto error;
-    }
-
-    header |= a_flv->codecid;
-    a_flv->stereo     = info->channels == 2;
-
-    switch( info->samplerate )
-    {
-        case 5512:
-        case 8000:
-            header |= FLV_SAMPLERATE_SPECIAL;
-            break;
-        case 11025:
-            header |= FLV_SAMPLERATE_11025HZ;
-            break;
-        case 22050:
-            header |= FLV_SAMPLERATE_22050HZ;
-            break;
-        case 44100:
-            header |= FLV_SAMPLERATE_44100HZ;
-            break;
-        default:
-            fprintf( stderr, "flv [error]: unsupported %dhz sample rate\n", info->samplerate );
-            goto error;
-    }
-
-    switch( info->chansize )
-    {
-        case 1:
-            header |= FLV_SAMPLESSIZE_8BIT;
-            break;
-        case 2:
-            header |= FLV_SAMPLESSIZE_16BIT;
-            break;
-        default:
-            fprintf( stderr, "flv [error]: %d-bit audio not supported\n", (int) info->chansize * 8 );
-            goto error;
-    }
-
-    switch( info->channels )
-    {
-        case 1:
-            header |= FLV_MONO;
-            break;
-        case 2:
-            header |= FLV_STEREO;
-            break;
-        default:
-            fprintf( stderr, "flv [error]: %d-channel audio not supported\n", info->channels );
-            goto error;
-    }
-
-    a_flv->header   = header;
-    a_flv->step_num = a_flv->info->framelen * 1000;
-    a_flv->step_den = a_flv->info->samplerate;
-
-    a_flv->encoder = encoder;
-
-    return 1;
-
-    error:
-    free( p_flv->a_flv );
-    p_flv->a_flv = NULL;
-
-    return 0;
-}
-
-const cli_output_t flv_output = { open_file, set_param, write_headers, write_frame, close_file, open_audio };
+const cli_output_t flv_output = { open_file, set_param, write_headers, write_frame, close_file };
