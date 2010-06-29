@@ -99,10 +99,10 @@ static const char * const muxer_names[] =
 
 static const char * const audio_encoder_names[] =
 {
-    "none",
     "lame",
     "mp3",
     "raw",
+    "none"
     0
 };
 
@@ -569,7 +569,7 @@ static void Help( x264_param_t *defaults, int longhelp )
     H0( "Audio is automatically opened from the input file if the ffms demuxer is used\n" );
     H0( "      --noaudio               Disables audio copy / transcoding\n" );
     H0( "      --audiofile <filename>  Uses audio from the specified file\n" );
-    H0( "      --acodec <string>       Specifies the audio codec [none]. Supported codecs:\n" );
+    H0( "      --acodec <string>       Specify the audio codec. Supported codecs:\n" );
     H0( "                                  - raw\n" );
     H0( "                                  - mp3 (lame)\n" );
     H0( "      --abitrate <integer>    Enable bitrate mode and specifies bitrate\n" );
@@ -981,7 +981,7 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
     char *audio_filename = NULL;
     int audio_bitrate = -1;
     float audio_quality = 6;
-    int audio_enable = 0;
+    int audio_enable = 1;
 
     x264_param_default( &defaults );
 
@@ -1154,8 +1154,6 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
                     return -1;
                 if( !strcmp( audio_enc, "none" ) )
                     audio_enable = 0;
-                else
-                    audio_enable = 1;
                 break;
             case OPT_AUDIOBITRATE:
                 audio_bitrate = atoi( optarg );
