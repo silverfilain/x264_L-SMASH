@@ -21,14 +21,14 @@ typedef struct audio_filter_t
 typedef struct audio_info_t
 {
     char *codec_name;
-    int samplerate; //< Sample Rate in Hz
-    enum SampleFormat samplefmt; //< Sample Format in SampleFormat
-    size_t samplesize; //< How many bytes per sample
-    int channels; //< How many channels
-    int64_t chanlayout; //< Channel layout (CH_* on avcodec.h)
-    size_t chansize; //< How many bytes per channel
-    int framelen; //< Frame length in samples
-    size_t framesize; //< Frame size in bytes
+    int samplerate;              // Sample Rate in Hz
+    enum SampleFormat samplefmt; // Sample Format in SampleFormat
+    size_t samplesize;           // How many bytes per sample
+    int channels;                // How many channels
+    int64_t chanlayout;          // Channel layout (CH_* on avcodec.h)
+    size_t chansize;             // How many bytes per channel
+    int framelen;                // Frame length in samples
+    size_t framesize;            // Frame size in bytes
     AVRational time_base;
     uint8_t *extradata;
     int extradata_size;
