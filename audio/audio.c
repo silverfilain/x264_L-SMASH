@@ -6,7 +6,7 @@ hnd_t audio_open_from_file( audio_filter_t *preferred_filter, char *path, int tr
 {
     audio_filter_t *source = preferred_filter ? preferred_filter : af_get_filter( AUDIO_SOURCE_LAVF );
     hnd_t h;
-    size_t init_arg_size = sizeof( path ) + 10;
+    size_t init_arg_size = strlen( path ) + 10;
     char *init_arg = malloc( init_arg_size );
     assert( snprintf( init_arg, init_arg_size, "%s:%d", path, trackno ) < init_arg_size );
     if( source->init( &h, NULL, init_arg ) != AUDIO_OK || !h )
