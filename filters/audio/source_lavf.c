@@ -282,7 +282,7 @@ static int64_t fill_buffer_until( lavf_source_t *h, int64_t lastsample )
     {
         fprintf( stderr,
                 "lavfsource [error]: backwards seeking not supported "
-                "(requested sample %"PRIu64", first available is %ld)\n",
+                "(requested sample %"PRIu64", first available is %"PRIu64")\n",
                 lastsample, h->bytepos / h->info->samplesize );
         return -1;
     }

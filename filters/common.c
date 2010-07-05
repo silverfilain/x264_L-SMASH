@@ -150,13 +150,13 @@ fail:
     return NULL;
 }
 
-char *get_option( const char *name, char **split_options )
+char *get_option( const char *name, char **split_opts )
 {
     int last_i = -1;
-    for( int i = 0; split_options[i] != NULL; i += 2 )
-        if( !strcmp( split_options[i], name ) )
+    for( int i = 0; split_opts[i] != NULL; i += 2 )
+        if( !strcmp( split_opts[i], name ) )
             last_i = i;
     if( last_i >= 0 )
-        return split_options[last_i+1][0] ? split_options[last_i+1] : NULL;
+        return split_opts[last_i+1][0] ? split_opts[last_i+1] : NULL;
     return NULL;
 }
