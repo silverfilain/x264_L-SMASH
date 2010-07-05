@@ -25,6 +25,7 @@
 #ifndef X264_INPUT_H
 #define X264_INPUT_H
 
+#include "x264cli.h"
 #ifdef WITH_AUDIO
 #include "audio/audio.h"
 #endif

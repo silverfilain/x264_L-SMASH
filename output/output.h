@@ -24,6 +24,7 @@
 #ifndef X264_OUTPUT_H
 #define X264_OUTPUT_H
 
+#include "x264cli.h"
 #ifdef WITH_AUDIO
 #include "audio/encoders.h"
 #endif
