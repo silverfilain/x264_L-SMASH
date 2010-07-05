@@ -21,7 +21,7 @@ static hnd_t init( hnd_t filter_chain, const char *opts )
     h->info->extradata      = NULL;
     h->info->extradata_size = 0;
 
-    fprintf( stderr, "audio [info]: opened 'raw' encoder (%dbits, %dch, %dhz)\n",
+    x264_cli_log( "audio", X264_LOG_INFO, "opened raw encoder (%dbits, %dch, %dhz)\n",
              h->info->chansize * 8, h->info->channels, h->info->samplerate );
     return h;
 }

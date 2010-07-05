@@ -260,15 +260,12 @@ static int close_file( hnd_t handle )
 static hnd_t open_audio( hnd_t handle, int track )
 {
     lavf_hnd_t *h = handle;
-    if( x264_is_regular_file_path( h->filename ) )
+    if ( !x264_is_regular_file_path( h->filename ) )
     {
-        return audio_open_from_file( NULL, h->filename, track );
+        x264_cli_log( "lavf", X264_LOG_WARNING, "reading audio from non-regular files is not implemented yet.\n" );
+        return 0;
     }
-    else
-    {
-        fprintf( stderr, "lavf [error]: reading audio from non-regular files is not implemented yet.\n" );
-    }
-    return 0;
+    return audio_open_from_file( NULL, h->filename, track );
 }
 #endif
 

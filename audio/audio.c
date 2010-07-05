@@ -11,7 +11,7 @@ hnd_t audio_open_from_file( audio_filter_t *preferred_filter, char *path, int tr
     assert( snprintf( init_arg, init_arg_size, "%s:%d", path, trackno ) < init_arg_size );
     if( source->init( &h, NULL, init_arg ) != AUDIO_OK || !h )
     {
-        fprintf( stderr, "audio [error]: error initializing source filter!\n" );
+        x264_cli_log( "audio", X264_LOG_ERROR, "error initializing source filter!\n" );
         return NULL;
     }
     free( init_arg );

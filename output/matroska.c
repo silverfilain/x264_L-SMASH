@@ -38,12 +38,9 @@ typedef struct
 static int open_file( char *psz_filename, hnd_t *p_handle, hnd_t audio_filters, char *audio_enc, char *audio_params )
 {
     mkv_hnd_t *p_mkv;
-
-    if( audio_enc && ( strcmp( audio_enc, "none" ) && strcmp( audio_enc, "default" ) ) )
-    {
-        fprintf( stderr, "matroska [error]: audio muxing is not yet supported.\n" );
-        return -1;
-    }
+    
+    FAIL_IF_ERR( audio_enc && ( strcmp( audio_enc, "none" ) && strcmp( audio_enc, "default" ) ), "matroska",
+                 "audio is not yet supported on this muxer\n" );
 
     *p_handle = NULL;
 

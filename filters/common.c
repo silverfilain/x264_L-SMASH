@@ -89,7 +89,7 @@ char **split_options( const char *opt_str, char *options[] )
                 invalid = 1;
             else if( i > options_count || options[i] == NULL )
             {
-                fprintf( stderr, "options [error]: Too many options given\n" );
+                x264_cli_log( "options", X264_LOG_ERROR, "Too many options given\n" );
                 goto fail;
             }
             else
@@ -104,7 +104,7 @@ char **split_options( const char *opt_str, char *options[] )
                 invalid = 1;
             else if( i > options_count || options[i] == NULL )
             {
-                fprintf( stderr, "options [error]: Too many options given\n" );
+                x264_cli_log( "options", X264_LOG_ERROR, "Too many options given\n" );
                 goto fail;
             }
             else
@@ -124,7 +124,7 @@ char **split_options( const char *opt_str, char *options[] )
                 ++j;
             if( options[j] == NULL )
             {
-                fprintf( stderr, "options [warning]: Invalid option '%s'\n", arg[0] );
+                x264_cli_log( "options", X264_LOG_ERROR, "Invalid option '%s'\n", arg[0] );
                 goto fail;
             }
             else
@@ -135,7 +135,7 @@ char **split_options( const char *opt_str, char *options[] )
         }
         if( invalid )
         {
-            fprintf( stderr, "options [error]: Ordered option given after named\n" );
+            x264_cli_log( "options", X264_LOG_ERROR, "Ordered option given after named\n" );
             goto fail;
         }
         free_string_array( arg );

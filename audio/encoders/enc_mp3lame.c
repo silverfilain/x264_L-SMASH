@@ -27,8 +27,8 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
 
     if( h->info->chansize != 2 )
     {
-        fprintf( stderr, "lame [error]: lame only supports 16 bits per channel.\n" );
-        fprintf( stderr, "lame [error]: FIXME: auto-insert converter when it is implemented.\n");
+        // FIXME: auto-insert converter when it is implemented
+        x264_cli_log("lame", X264_LOG_ERROR, "lame only sanely supports 16 bits per channel.\n" );
         goto error;
     }
 
@@ -72,7 +72,7 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
 
     h->bufsize = 125 * h->info->framelen / 100 + 7200;
 
-    fprintf( stderr, "audio [info]: opened lame mp3 encoder (%s: %g%s)\n",
+    x264_cli_log( "audio", X264_LOG_INFO, "opened lame mp3 encoder (%s: %g%s)\n",
              ( cbr ? "bitrate" : "VBR" ), brval,
              ( cbr ? "kbps" : "" ) );
 

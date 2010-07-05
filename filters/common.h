@@ -1,6 +1,8 @@
 #ifndef _FILTERS_COMMON_H
 #define _FILTERS_COMMON_H
 
+#include "x264cli.h"
+
 char **split_string( char *string, char *sep, unsigned limit );
 void free_string_array( char **array );
 

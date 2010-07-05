@@ -2,8 +2,7 @@
 #define AUDIO_AUDIO_H_
 
 #include <stdint.h>
-
-#define hnd_t void*
+#include "x264cli.h"
 
 enum AudioResult
 {

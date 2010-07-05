@@ -1195,20 +1195,14 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
             case OPT_AUDIOBITRATE:
 #ifdef WITH_AUDIO
                 audio_bitrate = atoi( optarg );
-                if ( audio_bitrate <= 0 )
-                {
-                    fprintf( stderr, "x264 [error]: bitrate must be > 0.\n" );
-                    return -1;
-                }
+                FAIL_IF_ERROR( audio_bitrate <= 0, "bitrate must be > 0.\n" );
                 break;
 #endif
             case OPT_AUDIOQUALITY:
+                FAIL_IF_ERROR( !WITH_AUDIO, "audio support was not compiled in.\n" );
 #ifdef WITH_AUDIO
                 audio_quality = (float) atof( optarg );
                 break;
-#else
-                fprintf( stderr, "x264 [error]: audio support was not compiled in.\n" );
-                return -1;
 #endif
             default:
 generic_option:
@@ -1285,7 +1279,7 @@ generic_option:
             opt->haud = input.open_audio( opt->hin, TRACK_ANY );
         else
         {
-            fprintf( stderr, "x264 [warn]: the used input does not support audio and --audiofile was not given, disabling audio.\n" );
+            x264_cli_log( "x264", X264_LOG_WARNING, "the used input does not support audio and --audiofile was not given, disabling audio.\n" );
             audio_enable = 0;
         }
         

@@ -55,13 +55,13 @@ static enum AudioResult init( hnd_t *handle, hnd_t previous, const char *opt_str
 
     if( av_open_input_file( &h->lavf, filename, NULL, 0, NULL ) )
     {
-        fprintf( stderr, "lavfsource [error]: could not open audio file\n" );
+        x264_cli_log( "lavfsource", X264_LOG_ERROR, "could not open audio file\n" );
         goto fail;
     }
 
     if( av_find_stream_info( h->lavf ) < 0 )
     {
-        fprintf( stderr, "lavfsource [error]: could not find stream info\n" );
+        x264_cli_log( "lavfsource", X264_LOG_ERROR, "could not find stream info\n" );
         goto fail;
     }
 
@@ -72,9 +72,8 @@ static enum AudioResult init( hnd_t *handle, hnd_t previous, const char *opt_str
                 h->lavf->streams[track]->codec->codec_type == CODEC_TYPE_AUDIO )
             tid = track;
         else
-            fprintf( stderr,
-                     "lavfsource [error]: requested track %d is unavailable "
-                     "or is not an audio track\n", track );
+            x264_cli_log( "lavfsource", X264_LOG_ERROR, "requested track %d is unavailable "
+                          "or is not an audio track\n", track );
     }
     else // TRACK_ANY (pick first)
     {
@@ -85,7 +84,7 @@ static enum AudioResult init( hnd_t *handle, hnd_t previous, const char *opt_str
         if( track < h->lavf->nb_streams )
             tid = track;
         else
-            fprintf( stderr, "lavfsource [error]: could not find any audio track\n" );
+            x264_cli_log( "lavfsource", X264_LOG_ERROR, "could not find any audio track\n" );
     }
 
     if( tid == TRACK_NONE )
@@ -124,7 +123,7 @@ static enum AudioResult init( hnd_t *handle, hnd_t previous, const char *opt_str
     return AUDIO_OK;
 
 codecfail:
-    fprintf( stderr, "lavfsource [error]: error opening the %s decoder for track %d\n", h->codec->name, h->track );
+    x264_cli_log( "lavfsource", X264_LOG_ERROR, "error opening the %s decoder for track %d\n", h->codec->name, h->track );
 fail:
     free_string_array( opts );
     if( h->lavf )
@@ -154,13 +153,17 @@ static struct AVPacket *next_packet( lavf_source_t *h )
 {
     AVPacket *pkt = calloc( 1, sizeof( AVPacket ) );
 
+    int ret;
     do
     {
         if( pkt->data )
             av_free_packet( pkt );
-        if( av_read_frame( h->lavf, pkt ) )
+        if( (ret = av_read_frame( h->lavf, pkt )) )
         {
-            fprintf( stderr, "lavfsource [info]: end of file reached or read error\n" );
+            if( ret != AVERROR_EOF )
+                x264_cli_log( "lavfsource", X264_LOG_ERROR, "read error: %s\n", strerror( -ret ) );
+            else
+                x264_cli_log( "lavfsource", X264_LOG_INFO, "end of file reached\n" );
             free_avpacket( pkt );
             return NULL;
         }
@@ -186,8 +189,7 @@ static int low_decode_audio( lavf_source_t *h, uint8_t *buf, intptr_t buflen )
         if( len < 0 ) {
             // Broken frame, drop
             if( !desync_warn++ ) // repeat the warning every 256 errors
-                fprintf( stderr,
-                        "lavfsource [warning]: Decoding errors may cause audio desync\n" );
+                x264_cli_log( "lavfsource", X264_LOG_WARNING, "Decoding errors may cause audio desync\n" );
             pkt_temp.size = 0;
             break;
         }
@@ -271,10 +273,9 @@ static int64_t fill_buffer_until( lavf_source_t *h, int64_t lastsample )
         return -1;
     if( not_in_cache( h, lastsample ) < 0 )
     {
-        fprintf( stderr,
-                "lavfsource [error]: backwards seeking not supported "
-                "(requested sample %"PRIu64", first available is %"PRIu64")\n",
-                lastsample, h->bytepos / h->info->samplesize );
+        x264_cli_log( "lavfsource", X264_LOG_ERROR, "backwards seeking not supported yet "
+                      "(requested sample %"PRIu64", first available is %"PRIu64")\n",
+                      lastsample, h->bytepos / h->info->samplesize );
         return -1;
     }
     int ret;

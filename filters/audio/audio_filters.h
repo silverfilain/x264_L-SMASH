@@ -2,9 +2,8 @@
 #define FILTERS_AUDIO_AUDIO_FILTERS_H_
 
 #include <stdint.h>
+#include "x264cli.h"
 #include "filters/common.h"
-
-#define hnd_t void*
 
 typedef struct audio_filter_t
 {

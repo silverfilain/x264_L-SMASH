@@ -20,7 +20,7 @@ audio_filter_t *af_get_filter_by_id( enum AudioFilter id )
         f = f->next;
         if( !f )
         {
-            fprintf( stderr, "audio [error]: Invalid filter ID requested: %d\n", id );
+            x264_cli_log( "audio", X264_LOG_ERROR, "Invalid filter ID requested: %d\n", id );
             return NULL;
         }
     }

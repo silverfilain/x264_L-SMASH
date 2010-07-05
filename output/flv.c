@@ -93,7 +93,7 @@ static int open_audio_encoder( hnd_t *h, hnd_t filters, char *enc_name, char *pa
 #endif
     else
     {
-        fprintf( stderr, "flv [error]: '%s' audio codec is unsupported\n", enc_name );
+        x264_cli_log( "flv", X264_LOG_ERROR, "audio codec '%s' is unsupported\n", enc_name );
         return -1;
     }
 #undef IFSET
@@ -142,7 +142,7 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
             header |= FLV_SAMPLERATE_44100HZ;
             break;
         default:
-            fprintf( stderr, "flv [error]: unsupported %dhz sample rate\n", info->samplerate );
+            x264_cli_log( "flv", X264_LOG_ERROR, "unsupported %dhz sample rate\n", info->samplerate );
             goto error;
     }
 
@@ -155,7 +155,7 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
             header |= FLV_SAMPLESSIZE_16BIT;
             break;
         default:
-            fprintf( stderr, "flv [error]: %d-bit audio not supported\n", (int) info->chansize * 8 );
+            x264_cli_log( "flv", X264_LOG_ERROR, "%d-bit audio not supported\n", (int) info->chansize * 8 );
             goto error;
     }
 
@@ -168,7 +168,7 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
             header |= FLV_STEREO;
             break;
         default:
-            fprintf( stderr, "flv [error]: %d-channel audio not supported\n", info->channels );
+            x264_cli_log( "flv", X264_LOG_ERROR, "%d-channel audio not supported\n", info->channels );
             goto error;
     }
 
@@ -368,11 +368,7 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
 #ifdef WITH_AUDIO
     if( a_flv && a_flv->codecid == FLV_CODECID_AAC )
     {
-        if( !a_flv->info->extradata )
-        {
-            fprintf( stderr, "flv [error]: audio codec is AAC but extradata is NULL\n" );
-            return -1;
-        }
+        FAIL_IF_ERR( !a_flv->info->extradata, "flv", "audio codec is AAC but extradata is NULL\n" );
         x264_put_byte( c, FLV_TAG_TYPE_AUDIO );
         x264_put_be24( c, 2 + a_flv->info->extradata_size );
         x264_put_be24( c, 0 );
@@ -462,11 +458,7 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
     p_flv->i_prev_pts = p_picture->i_pts;
 
 #ifdef WITH_AUDIO
-    if( p_flv->a_flv && write_audio( p_flv, dts ) < 0 )
-    {
-        fprintf( stderr, "flv [error]: error writing audio\n" );
-        return -1;
-    }
+    FAIL_IF_ERR( p_flv->a_flv && write_audio( p_flv, dts ) < 0, "flv", "error writing audio\n" );
 #endif
 
     // A new frame - write packet header
