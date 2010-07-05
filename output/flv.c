@@ -27,6 +27,7 @@ do {\
         return -1;\
 } while( 0 )
 
+#ifdef WITH_AUDIO
 typedef struct
 {
     audio_info_t *info;
@@ -38,6 +39,7 @@ typedef struct
     int64_t step_num;
     int64_t step_den;
 } flv_audio_hnd_t;
+#endif
 
 typedef struct
 {
@@ -65,32 +67,61 @@ typedef struct
 
     unsigned start;
 
+#ifdef WITH_AUDIO
     flv_audio_hnd_t *a_flv;
+#endif
 } flv_hnd_t;
 
-static int audio_init( hnd_t handle, hnd_t encoder )
+#ifdef WITH_AUDIO
+static int open_audio_encoder( hnd_t *h, hnd_t filters, char *enc_name, char *params )
 {
-    if( !encoder )
+    const audio_encoder_t *enc;
+
+#define IFSET(x) if( !strcmp( #x, enc_name ) ) enc = &audio_encoder_ ## x;
+    // TODO: support raw, pcm, adpcm_swf and aac
+    if( !strcmp( enc_name, "default" ) )
+    {
+        enc =
+#ifdef HAVE_LIBMP3LAME
+            &audio_encoder_mp3;
+#else
+            &audio_encoder_raw;
+#endif
+    }
+#ifdef HAVE_LIBMP3LAME
+    else IFSET( mp3 )
+#endif
+    else
+    {
+        fprintf( stderr, "flv [error]: '%s' audio codec is unsupported\n", enc_name );
+        return -1;
+    }
+#undef IFSET
+
+    *h = audio_encoder_open( enc, filters, params );
+    return 0;
+}
+
+static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio_parameters )
+{
+    if( !strcmp( audio_enc, "none" ) )
         return 0;
-    
+
+    // TODO: support adpcm_swf, pcm and aac
+    const audio_encoder_t *encoder = select_audio_encoder( audio_enc, (char*[]){ "mp3", "raw", NULL } );
+    CHECK( encoder );
+
+    hnd_t enc;
+    CHECK( open_audio_encoder( &enc, filters, audio_enc, audio_parameters ) );
     flv_hnd_t *p_flv = handle;
     flv_audio_hnd_t *a_flv = p_flv->a_flv = calloc( 1, sizeof( flv_audio_hnd_t ) );
-    audio_info_t *info = a_flv->info = audio_encoder_info( encoder );
+    audio_info_t *info = a_flv->info = audio_encoder_info( enc );
 
     int header = 0;
     if ( !strcmp( info->codec_name, "raw" ) )
         a_flv->codecid = FLV_CODECID_RAW;
-    else if( !strcmp( info->codec_name, "adpcm_swf" ) )
-        a_flv->codecid = FLV_CODECID_ADPCM;
     else if( !strcmp( info->codec_name, "mp3" ) )
         a_flv->codecid = FLV_CODECID_MP3;
-    else if( !strcmp( info->codec_name, "aac" ) )
-        a_flv->codecid = FLV_CODECID_AAC;
-    else
-    {
-        fprintf( stderr, "flv [error]: unsupported audio codec %s\n", info->codec_name );
-        goto error;
-    }
 
     header |= a_flv->codecid;
     a_flv->stereo = info->channels == 2;
@@ -145,16 +176,18 @@ static int audio_init( hnd_t handle, hnd_t encoder )
     a_flv->step_num = a_flv->info->framelen * 1000;
     a_flv->step_den = a_flv->info->samplerate;
 
-    a_flv->encoder = encoder;
+    a_flv->encoder = enc;
 
-    return 0;
+    return 1;
 
     error:
+    audio_encoder_close( enc );
     free( p_flv->a_flv );
     p_flv->a_flv = NULL;
 
     return -1;
 }
+#endif
 
 static int write_header( flv_buffer *c, int audio )
 {
@@ -167,9 +200,10 @@ static int write_header( flv_buffer *c, int audio )
     return flv_flush_data( c );
 }
 
-static int open_file( char *psz_filename, hnd_t *p_handle, hnd_t audio_encoder )
+static int open_file( char *psz_filename, hnd_t *p_handle, hnd_t audio_filters, char *audio_enc, char *audio_params )
 {
     flv_hnd_t *p_flv = malloc( sizeof(*p_flv) );
+    
     *p_handle = NULL;
     if( !p_flv )
         return -1;
@@ -179,11 +213,18 @@ static int open_file( char *psz_filename, hnd_t *p_handle, hnd_t audio_encoder )
     if( !p_flv->c )
         return -1;
 
-    CHECK( audio_init( p_flv, audio_encoder ) );
-    CHECK( write_header( p_flv->c, !!audio_encoder ) );
+#ifdef WITH_AUDIO
+    int ret = audio_init( p_flv, audio_filters, audio_enc, audio_params );
+    CHECK( ret );
+#endif
+    CHECK( write_header( p_flv->c, ret ) );
     *p_handle = p_flv;
 
+#ifdef WITH_AUDIO
+    return ret;
+#else
     return 0;
+#endif
 }
 
 static int set_param( hnd_t handle, x264_param_t *p_param )
@@ -235,6 +276,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     p_flv->i_bitrate_pos = c->d_cur + c->d_total + 1;
     x264_put_amf_double( c, 0 ); // written at end of encoding
 
+#ifdef WITH_AUDIO
     if( p_flv->a_flv )
     {
         flv_audio_hnd_t *a_flv = p_flv->a_flv;
@@ -247,6 +289,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
         x264_put_amf_string( c, "stereo" );
         x264_put_amf_bool  ( c, a_flv->stereo );
     }
+#endif
 
     x264_put_amf_string( c, "" );
     x264_put_byte( c, AMF_END_OF_OBJECT );
@@ -268,7 +311,9 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
 static int write_headers( hnd_t handle, x264_nal_t *p_nal )
 {
     flv_hnd_t *p_flv = handle;
+#ifdef WITH_AUDIO
     flv_audio_hnd_t *a_flv = p_flv->a_flv;
+#endif
     flv_buffer *c = p_flv->c;
 
     int sps_size = p_nal[0].i_payload;
@@ -320,6 +365,7 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
     rewrite_amf_be24( c, length, p_flv->start - 10 );
     x264_put_be32( c, length + 11 ); // Last tag size
 
+#ifdef WITH_AUDIO
     if( a_flv && a_flv->codecid == FLV_CODECID_AAC )
     {
         if( !a_flv->info->extradata )
@@ -338,12 +384,14 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
         flv_append_data( c, a_flv->info->extradata, a_flv->info->extradata_size );
         x264_put_be32( c, 11 + 2 + a_flv->info->extradata_size );
     }
+#endif
 
     CHECK( flv_flush_data( c ) );
 
     return sei_size + sps_size + pps_size;
 }
 
+#ifdef WITH_AUDIO
 static int write_audio( flv_hnd_t *p_flv, int64_t video_dts )
 {
     flv_audio_hnd_t *a_flv = p_flv->a_flv;
@@ -382,6 +430,7 @@ static int write_audio( flv_hnd_t *p_flv, int64_t video_dts )
     }
     return a_flv->framenum - start;
 }
+#endif
 
 static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_t *p_picture )
 {
@@ -412,11 +461,13 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
     p_flv->i_prev_dts = p_picture->i_dts;
     p_flv->i_prev_pts = p_picture->i_pts;
 
+#ifdef WITH_AUDIO
     if( p_flv->a_flv && write_audio( p_flv, dts ) < 0 )
     {
         fprintf( stderr, "flv [error]: error writing audio\n" );
         return -1;
     }
+#endif
 
     // A new frame - write packet header
     x264_put_byte( c, FLV_TAG_TYPE_VIDEO );
@@ -482,8 +533,10 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
 
     fclose( c->fp );
 
+#ifdef WITH_AUDIO
     if( p_flv->a_flv )
         free( p_flv->a_flv );
+#endif
     free( p_flv );
     free( c );
 

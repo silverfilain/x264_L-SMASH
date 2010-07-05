@@ -56,8 +56,10 @@ typedef struct {
     int i_seek;
     hnd_t hin;
     hnd_t hout;
+#ifdef WITH_AUDIO
     hnd_t haud;
     hnd_t haenc;
+#endif
     FILE *qpfile;
     FILE *tcfile_out;
     double timebase_convert_multiplier;
@@ -94,15 +96,6 @@ static const char * const muxer_names[] =
 #if HAVE_GPAC
     "mp4",
 #endif
-    0
-};
-
-static const char * const audio_encoder_names[] =
-{
-    "lame",
-    "mp3",
-    "raw",
-    "none"
     0
 };
 
@@ -566,14 +559,24 @@ static void Help( x264_param_t *defaults, int longhelp )
 
     H0( "\n" );
     H0( "Audio:\n" );
-    H0( "Audio is automatically opened from the input file if the ffms demuxer is used\n" );
+#ifdef WITH_AUDIO
+    H0( "Audio is automatically opened from the input file if supported by the demuxer.\n" );
     H0( "      --noaudio               Disables audio copy / transcoding\n" );
     H0( "      --audiofile <filename>  Uses audio from the specified file\n" );
-    H0( "      --acodec <string>       Specify the audio codec. Supported codecs:\n" );
-    H0( "                                  - raw\n" );
-    H0( "                                  - mp3 (lame)\n" );
+    H0( "      --acodec <string>       Specifies the audio codec.");
+    H1( " Supported codecs:" );
+    H0( "\n" );
+    H1( "                                  - raw\n" );
+    H1( "                                  - mp3" );
+#ifndef HAVE_LIBMP3LAME
+    H1( "(not compiled in)" );
+#endif
+    H1( "\n" );
     H0( "      --abitrate <integer>    Enable bitrate mode and specifies bitrate\n" );
     H0( "      --aquality <float>      Specifies audio quality [6]\n" );
+#else /* WITH_AUDIO */
+    H0( "Audio support was not compiled in.\n" );
+#endif
     H0( "\n" );
     H0( "Input/Output:\n" );
     H0( "\n" );
@@ -919,21 +922,6 @@ static int select_input( const char *demuxer, char *used_demuxer, char *filename
     return 0;
 }
 
-static int select_audio( const char *encoder, cli_opt_t *opt, const char *args )
-{
-    const audio_encoder_t *aenc;
-    if( !strcmp( encoder, "lame" ) || !strcmp( encoder, "mp3" ) )
-        aenc = &audio_encoder_lame;
-    else if( !strcmp( encoder, "raw" ) )
-        aenc = &audio_encoder_raw;
-    else
-    {
-        fprintf( stderr, "x264 [error]: could not find audio encoder `%s'.\n", encoder );
-        return -1;
-    }
-    return ( opt->haenc = audio_encoder_open( aenc, opt->haud, args ) ) ? 0 : -1;
-}
-
 static int parse_enum_name( const char *arg, const char * const *names, const char **dst )
 {
     for( int i = 0; names[i]; i++ )
@@ -965,7 +953,6 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
     const char *demuxer = demuxer_names[0];
     char *output_filename = NULL;
     const char *muxer = muxer_names[0];
-    const char *audio_enc = audio_encoder_names[0];
     char *tcfile_name = NULL;
     x264_param_t defaults;
     char *profile = NULL;
@@ -978,10 +965,13 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
     char *preset = NULL;
     char *tune = NULL;
 
+#ifdef WITH_AUDIO
+    char *audio_enc = "default";
     char *audio_filename = NULL;
     int audio_bitrate = -1;
     float audio_quality = 6;
     int audio_enable = 1;
+#endif
 
     x264_param_default( &defaults );
 
@@ -1144,28 +1134,40 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
                     return -1;
                 break;
             case OPT_NOAUDIO:
+#ifdef WITH_AUDIO
                 audio_enable = 0;
                 break;
+#endif
             case OPT_AUDIOFILE:
+#ifdef WITH_AUDIO
                 audio_filename = optarg;
                 break;
+#endif
             case OPT_AUDIOCODEC:
-                if( parse_enum_name( optarg, audio_encoder_names, &audio_enc ) < 0 )
-                    return -1;
+#ifdef WITH_AUDIO
+                audio_enc = strdup( optarg );
                 if( !strcmp( audio_enc, "none" ) )
                     audio_enable = 0;
                 break;
+#endif
             case OPT_AUDIOBITRATE:
+#ifdef WITH_AUDIO
                 audio_bitrate = atoi( optarg );
                 if ( audio_bitrate <= 0 )
                 {
                     fprintf( stderr, "x264 [error]: bitrate must be > 0.\n" );
-                    return 1;
+                    return -1;
                 }
                 break;
+#endif
             case OPT_AUDIOQUALITY:
+#ifdef WITH_AUDIO
                 audio_quality = (float) atof( optarg );
                 break;
+#else
+                fprintf( stderr, "x264 [error]: audio support was not compiled in.\n" );
+                return -1;
+#endif
             default:
 generic_option:
             {
@@ -1239,6 +1241,7 @@ generic_option:
         return -1;
     }
 
+#if WITH_AUDIO
     if( audio_enable )
     {
         if ( audio_filename )
@@ -1246,11 +1249,15 @@ generic_option:
         else if ( input.open_audio )
             opt->haud = input.open_audio( opt->hin, TRACK_ANY );
         else
-            fprintf( stderr, "x264 [error]: the used input does not support audio and --audiofile was not given.\n" );
-
-        if (! opt->haud )
+        {
+            fprintf( stderr, "x264 [warn]: the used input does not support audio and --audiofile was not given, disabling audio.\n" );
+            audio_enable = 0;
+        }
+        
+        if ( audio_filename && !opt->haud )
             return -1;
     }
+#endif
 
     x264_reduce_fraction( &info.sar_width, &info.sar_height );
     x264_reduce_fraction( &info.fps_num, &info.fps_den );
@@ -1259,22 +1266,24 @@ generic_option:
                  info.height, info.interlaced ? 'i' : 'p', info.sar_width, info.sar_height,
                  info.fps_num, info.fps_den, info.vfr ? 'v' : 'c' );
 
+#if WITH_AUDIO
+    char arg[30] = { 0 };
     if( audio_enable )
     {
-        char arg[30] = { 0 };
         if ( audio_bitrate > 0 )
             snprintf( arg, 30, "bitrate=%d", audio_bitrate );
         else
             snprintf( arg, 30, "vbr=%f", audio_quality );
-
-        if( select_audio( audio_enc, opt, arg ) )
-        {
-            fprintf( stderr, "x264 [error]: error opening audio encoder.\n" );
-            return -1;
-        }
     }
+#endif
 
-    if( output.open_file( output_filename, &opt->hout, opt->haenc ) )
+    if( output.open_file( output_filename, &opt->hout,
+#if WITH_AUDIO
+                          opt->haud, audio_enc, arg
+#else
+                          NULL, NULL, NULL
+#endif
+                          ) < 0 )
     {
         fprintf( stderr, "x264 [error]: could not open output file `%s'\n", output_filename );
         return -1;
@@ -1706,10 +1715,12 @@ static int  Encode( x264_param_t *param, cli_opt_t *opt )
         opt->tcfile_out = NULL;
     }
 
+#ifdef WITH_AUDIO
     if( opt->haenc )
         audio_encoder_close( opt->haenc );
     if( opt->haud )
         af_close( opt->haud );
+#endif
     input.close_file( opt->hin );
     output.close_file( opt->hout, largest_pts, second_largest_pts );
 

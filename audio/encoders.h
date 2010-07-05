@@ -14,7 +14,9 @@ typedef struct audio_encoder_t
 } audio_encoder_t;
 
 extern const audio_encoder_t audio_encoder_raw;
+#ifdef HAVE_LIBMP3LAME
 extern const audio_encoder_t audio_encoder_mp3;
+#endif
 
 /* allowed_list[0] is the prefered encoder if encoder is "default"
  * allowed_list = NULL means any valid encoder is allowed

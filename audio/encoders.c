@@ -56,7 +56,9 @@ void audio_encoder_close( hnd_t encoder )
 static const audio_encoder_t *encoder_by_name( char *name )
 {
 #define IFRET( enc ) if( !strcmp( #enc, name ) ) return &audio_encoder_ ## enc;
+#ifdef HAVE_LIBMP3LAME
     IFRET( mp3 );
+#endif
     IFRET( raw );
 #undef IFRET
     return NULL;

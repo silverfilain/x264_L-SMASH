@@ -155,11 +155,11 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
     return 0;
 }
 
-static int open_file( char *psz_filename, hnd_t *p_handle, hnd_t audio_encoder )
+static int open_file( char *psz_filename, hnd_t *p_handle, hnd_t audio_filters, char *audio_enc, char *audio_params )
 {
     mp4_hnd_t *p_mp4;
 
-    if( audio_encoder )
+    if( audio_enc && ( strcmp( audio_enc, "none" ) && strcmp( audio_enc, "default" ) ) )
     {
         fprintf( stderr, "mp4 [error]: audio muxing is not yet supported\n" );
         return -1;

@@ -26,7 +26,9 @@
 #include <libavformat/avformat.h>
 #include <libswscale/swscale.h>
 
+#ifdef WITH_AUDIO
 #include "audio/audio.h"
+#endif
 
 typedef struct
 {
@@ -277,6 +279,7 @@ static int close_file( hnd_t handle )
     return 0;
 }
 
+#ifdef WITH_AUDIO
 static hnd_t open_audio( hnd_t handle, int track )
 {
     lavf_hnd_t *h = handle;
@@ -290,5 +293,10 @@ static hnd_t open_audio( hnd_t handle, int track )
     }
     return 0;
 }
+#endif
 
-const cli_input_t lavf_input = { open_file, get_frame_total, picture_alloc, read_frame, NULL, picture_clean, close_file, open_audio };
+const cli_input_t lavf_input = { open_file, get_frame_total, picture_alloc, read_frame, NULL, picture_clean, close_file,
+#ifdef WITH_AUDIO
+                                 open_audio
+#endif
+};

@@ -11,6 +11,7 @@ echo "  --disable-avs            disables avisynth support (windows only)"
 echo "  --disable-lavf           disables libavformat support"
 echo "  --disable-ffms           disables ffmpegsource support"
 echo "  --disable-gpac           disables gpac support"
+echo "  --disable-audio          disables audio support (requires lavf support)"
 echo "  --disable-pthread        disables multithreaded encoding"
 echo "  --disable-asm            disables platform-specific assembly optimizations"
 echo "  --enable-debug           adds -g, doesn't strip"
@@ -117,6 +118,7 @@ avs="auto"
 lavf="auto"
 ffms="auto"
 gpac="auto"
+audio="auto"
 pthread="auto"
 asm="auto"
 debug="no"
@@ -124,6 +126,8 @@ gprof="no"
 pic="no"
 vis="no"
 shared="no"
+
+audio_mp3="auto"
 
 CFLAGS="$CFLAGS -Wall -I."
 LDFLAGS="$LDFLAGS"
@@ -168,6 +172,9 @@ for opt do
             ;;
         --disable-gpac)
             gpac="no"
+            ;;
+        --disable-audio)
+            audio="no"
             ;;
         --extra-asflags=*)
             ASFLAGS="$ASFLAGS ${opt#--extra-asflags=}"
@@ -572,6 +579,20 @@ elif [ "$lavf" = "yes" ]; then
     [ -n "$LAVF_CFLAGS" ] && CFLAGS="$CFLAGS $LAVF_CFLAGS"
 fi
 
+if [ "$audio" = "auto" -a "$lavf" = "yes" ]; then
+    define WITH_AUDIO 1
+    audio="yes"
+    if [ "$audio_mp3" = "auto" ]; then
+        if cc_check lame/lame.h "-lmp3lame" "get_lame_version();"; then
+            LDFLAGSCLI="-lmp3lame $LDFLAGSCLI"
+            define HAVE_LIBMP3LAME 1
+            audio_mp3="yes"
+        else
+            audio_mp3="no"
+        fi
+    fi
+fi
+
 GPAC_LIBS="-lgpac_static"
 if [ $SYS = MINGW ]; then
     GPAC_LIBS="$GPAC_LIBS -lwinmm"
@@ -717,6 +738,7 @@ asm:        $asm
 avs:        $avs
 lavf:       $lavf
 ffms:       $ffms
+audio:      $audio
 gpac:       $gpac
 pthread:    $pthread
 debug:      $debug
