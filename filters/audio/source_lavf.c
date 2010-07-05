@@ -47,15 +47,6 @@ static enum AudioResult init( hnd_t *handle, hnd_t previous, const char *opt_str
     else
         track = atoi( trackstr );
 
-    FILE *test = fopen( filename, "r" );
-    if( test )
-        fclose( test );
-    else
-    {
-        fprintf( stderr, "lavfsource [error]: Could not open '%s' for reading\n", filename );
-        return AUDIO_ERROR;
-    }
-
     INIT_FILTER_STRUCT( audio_source_lavf, lavf_source_t );
 
     av_register_all();
