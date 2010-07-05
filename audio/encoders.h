@@ -14,8 +14,15 @@ typedef struct audio_encoder_t
 } audio_encoder_t;
 
 extern const audio_encoder_t audio_encoder_raw;
-extern const audio_encoder_t audio_encoder_lame;
+extern const audio_encoder_t audio_encoder_mp3;
 
+/* allowed_list[0] is the prefered encoder if encoder is "default"
+ * allowed_list = NULL means any valid encoder is allowed
+ * The 'none' case isn't handled by this function (will return NULL like with any other invalid encoder)
+ * If the user wants 'none' to be a default, it must be tested outside of this function
+ * If the user wants to allow any encoder, the default case must be tested outside of this function
+ */
+const audio_encoder_t *select_audio_encoder( char *encoder, char* allowed_list[] );
 hnd_t audio_encoder_open( const audio_encoder_t *encoder, hnd_t filter_chain, const char *opts );
 
 audio_info_t *audio_encoder_info( hnd_t encoder );

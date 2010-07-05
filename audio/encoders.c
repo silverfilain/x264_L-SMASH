@@ -52,3 +52,33 @@ void audio_encoder_close( hnd_t encoder )
     enc->enc->close( enc->handle );
     free( enc );
 }
+
+static const audio_encoder_t *encoder_by_name( char *name )
+{
+#define IFRET( enc ) if( !strcmp( #enc, name ) ) return &audio_encoder_ ## enc;
+    IFRET( mp3 );
+    IFRET( raw );
+#undef IFRET
+    return NULL;
+}
+
+const audio_encoder_t *select_audio_encoder( char *encoder, char* allowed_list[] )
+{
+    if( !encoder )
+        return NULL;
+    if( allowed_list )
+    {
+        if( !strcmp( encoder, "default" ) )
+            return encoder_by_name( allowed_list[0] );
+        int valid = 0;
+        for( int i = 0; allowed_list[i] != NULL; i++ )
+            if( !strcmp( encoder, allowed_list[i] ) )
+            {
+                valid = 1;
+                break;
+            }
+        if( !valid )
+            return NULL;
+    }
+    return encoder_by_name( encoder );
+}

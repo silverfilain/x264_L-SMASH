@@ -39,6 +39,7 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     char *cbr = get_option( "bitrate", opts );
     char *vbr = get_option( "vbr"    , opts );
     char *qua = get_option( "quality", opts );
+    float brval = cbr ? (float) atoi( cbr ) : vbr ? atof( vbr ) : 6.0;
 
     free_string_array( opts );
 
@@ -52,17 +53,15 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     lame_set_in_samplerate( h->lame, h->info->samplerate );
     lame_set_num_channels( h->lame, h->info->channels );
     lame_set_quality( h->lame, 0 );
+    lame_set_VBR( h->lame, vbr_default );
 
     if( cbr )
     {
         lame_set_VBR( h->lame, vbr_off );
-        lame_set_brate( h->lame, atoi( cbr ) );
+        lame_set_brate( h->lame, (int) brval );
     }
-    if( vbr )
-    {
-        lame_set_VBR( h->lame, vbr_default );
-        lame_set_VBR_quality( h->lame, atof( vbr ) );
-    }
+    else
+        lame_set_VBR_quality( h->lame, brval );
     if( qua )
         lame_set_quality( h->lame, atoi( qua ) );
 
@@ -73,10 +72,12 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
 
     h->bufsize = 125 * h->info->framelen / 100 + 7200;
 
+    fprintf( stderr, "audio [info]: opened lame mp3 encoder (%s: %g%s)\n",
+             ( cbr ? "bitrate" : "VBR" ), brval,
+             ( cbr ? "kbps" : "" ) );
+
     return h;
 
-error2:
-    lame_close( h->lame );
 error:
     free( h->info );
     free( h );
@@ -141,7 +142,7 @@ static void close( hnd_t handle )
     free( h );
 }
 
-const audio_encoder_t audio_encoder_lame = {
+const audio_encoder_t audio_encoder_mp3 = {
     .init = init,
     .get_info = get_info,
     .get_next_packet = get_next_packet,
