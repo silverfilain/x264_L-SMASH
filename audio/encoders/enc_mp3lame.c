@@ -13,7 +13,7 @@ typedef struct enc_lame_t {
     int64_t last_sample;
     uint8_t *buffer;
     size_t bufsize;
-    audio_samples_t in;
+    audio_packet_t in;
 } enc_lame_t;
 
 static hnd_t init( hnd_t filter_chain, const char *opt_str )
@@ -92,45 +92,44 @@ static audio_info_t *get_info( hnd_t handle )
     return h->info;
 }
 
-static audio_samples_t *get_next_packet( hnd_t handle )
+static void free_packet( hnd_t handle, audio_packet_t *packet )
+{
+    af_free_packet( packet );
+    free( packet );
+}
+
+static audio_packet_t *get_next_packet( hnd_t handle )
 {
     enc_lame_t *h = handle;
 
-    audio_samples_t *out = calloc( 1, sizeof( audio_samples_t ) );
+    audio_packet_t *out = calloc( 1, sizeof( audio_packet_t ) );
     out->data = malloc( h->bufsize );
 
-    while( !out->len )
+    while( !out->size )
     {
         if( h->in.flags & AUDIO_FLAG_EOF )
         {
-            out->len = lame_encode_flush( h->lame, out->data, h->bufsize );
-            if( !out->len )
+            out->size = lame_encode_flush( h->lame, out->data, h->bufsize );
+            if( !out->size )
                 goto error;
             break;
         }
 
-        int res = af_get_samples( &h->in, h->filter_chain, h->last_sample, h->last_sample + h->info->framelen );
-        if( res == AUDIO_ERROR )
+        if( af_get_samples( &h->in, h->filter_chain, h->last_sample, h->last_sample + h->info->framelen ) < 0 )
             goto error;
-        h->last_sample += h->info->framelen;
+        h->last_sample += h->in.samplecount;
 
-        out->len = lame_encode_buffer_interleaved( h->lame, (short*) h->in.data,
-                                                   h->in.len / h->af_info->samplesize,
+        out->size = lame_encode_buffer_interleaved( h->lame, (short*) h->in.data,
+                                                   h->in.samplecount,
                                                    out->data, h->bufsize );
-        af_free_samples( &h->in );
+        af_free_packet( &h->in );
     }
 
     return out;
 
 error:
-    free( out );
+    free_packet( h, out );
     return NULL;
-}
-
-static void free_packet( hnd_t handle, audio_samples_t *packet )
-{
-    af_free_samples( packet );
-    free( packet );
 }
 
 static void close( hnd_t handle )

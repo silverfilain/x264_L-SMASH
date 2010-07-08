@@ -27,7 +27,7 @@ audio_info_t *audio_encoder_info( hnd_t encoder )
     return enc->enc->get_info( enc->handle );
 }
 
-audio_samples_t *audio_encode_frame( hnd_t encoder )
+audio_packet_t *audio_encode_frame( hnd_t encoder )
 {
     assert( encoder );
     struct aenc_t *enc = encoder;
@@ -35,7 +35,7 @@ audio_samples_t *audio_encode_frame( hnd_t encoder )
     return enc->enc->get_next_packet( enc->handle );
 }
 
-void audio_free_frame( hnd_t encoder, audio_samples_t *frame )
+void audio_free_frame( hnd_t encoder, audio_packet_t *frame )
 {
     assert( encoder );
     struct aenc_t *enc = encoder;

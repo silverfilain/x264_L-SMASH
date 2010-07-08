@@ -3,9 +3,6 @@
 
 #include "filters/audio/audio_filters.h"
 
-#include "libavformat/avformat.h"
-#include "libavutil/avutil.h"
-
 #define AUDIO_FILTER_COMMON \
     const audio_filter_t *self; \
     audio_info_t *info; \
@@ -36,6 +33,10 @@ typedef struct audio_hnd_t
     AUDIO_FILTER_COMMON
 } audio_hnd_t;
 
+#define AF_LOG( handle, level, ... ) do { x264_cli_log( ((audio_hnd_t*)handle)->self->name, (level), __VA_ARGS__ ); } while (0)
+#define AF_LOG_ERR( handle, ... ) AF_LOG( (handle), X264_LOG_ERROR, __VA_ARGS__ )
+#define AF_LOG_WARN( handle, ... ) AF_LOG( (handle), X264_LOG_WARNING, __VA_ARGS__ )
+
 static inline audio_hnd_t *af_get_last_filter( audio_hnd_t *chain )
 {
     if( !chain )
@@ -44,9 +45,5 @@ static inline audio_hnd_t *af_get_last_filter( audio_hnd_t *chain )
         chain = chain->next;
     return chain;
 }
-
-void af_register_all( void );
-void af_unregister_all( void );
-audio_filter_t *af_get_filter_by_id( enum AudioFilter id );
 
 #endif /* FILTERS_AUDIO_INTERNAL_H_ */

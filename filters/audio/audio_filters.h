@@ -5,12 +5,40 @@
 #include "x264cli.h"
 #include "filters/common.h"
 
+// Ripped from ffmpeg
+enum SampleFormats {
+    SAMPLEFMT_NONE = -1,
+    SAMPLEFMT_U8,
+    SAMPLEFMT_S16,
+    SAMPLEFMT_S32,
+    SAMPLEFMT_FLT,
+    SAMPLEFMT_DBL,
+    SAMPLEFMT_NB
+};
+
+enum AudioFlags
+{
+    AUDIO_FLAG_NONE = 0,
+    AUDIO_FLAG_EOF = 1
+};
+
+typedef struct audio_packet_t {
+    int64_t         dts;
+    uint8_t         *data;
+    int             size;
+    unsigned        samplecount;
+    int64_t         pos;
+    enum AudioFlags flags;
+    hnd_t           priv;
+    hnd_t           owner;
+} audio_packet_t;
+
 typedef struct audio_filter_t
 {
-    enum AudioResult (*init)( hnd_t *handle, hnd_t previous, const char *opts );
-    struct AVPacket *(*get_samples)( hnd_t handle, int64_t first_sample, int64_t last_sample );
-    int (*free_packet)( hnd_t handle, struct AVPacket *frame );
-    enum AudioResult (*close)( hnd_t handle );
+    int (*init)( hnd_t *handle, hnd_t previous, const char *opts );
+    struct audio_packet_t *(*get_samples)( hnd_t handle, int64_t first_sample, int64_t last_sample );
+    void (*free_packet)( hnd_t self, struct audio_packet_t *frame );
+    void (*close)( hnd_t handle );
     char *name, *longname, *description, *help;
     void (*help_callback)( int longhelp );
 } audio_filter_t;
@@ -28,24 +56,18 @@ typedef struct audio_info_t
     size_t chansize;             // How many bytes per channel
     int framelen;                // Frame length in samples
     size_t framesize;            // Frame size in bytes
-    AVRational time_base;
+    int64_t time_base_num, time_base_den;
     uint8_t *extradata;
     int extradata_size;
 } audio_info_t;
 
-/* NOTE: this enum must be synchronized with audio_internal.c:register_all */
-enum AudioFilter
-{
-    AUDIO_SOURCE_LAVF = 0,
-};
-
 #include "audio/audio.h"
 
 audio_info_t *af_get_info( hnd_t handle );
-audio_filter_t *af_get_filter( enum AudioFilter filterid );
-enum AudioResult af_add( hnd_t base, audio_filter_t *filter, const char *options );
-enum AudioResult af_get_samples( audio_samples_t *samples, hnd_t handle, int64_t first_sample, int64_t last_sample );
-void af_free_samples( audio_samples_t *samples );
-int af_close( hnd_t chain );
+audio_filter_t *af_get_filter( char *name );
+int af_add( hnd_t base, audio_filter_t *filter, const char *options );
+int af_get_samples( audio_packet_t *out, hnd_t handle, int64_t first_sample, int64_t last_sample );
+void af_free_packet( audio_packet_t *pkt );
+void af_close( hnd_t chain );
 
 #endif /* AUDIO_H_ */

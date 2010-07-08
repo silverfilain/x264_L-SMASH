@@ -399,7 +399,7 @@ static int write_audio( flv_hnd_t *p_flv, int64_t video_dts )
     int aac = a_flv->codecid == FLV_CODECID_AAC;
     int64_t maxframe = video_dts * a_flv->step_den / a_flv->step_num;
     int64_t dts;
-    audio_samples_t *frame;
+    audio_packet_t *frame;
     while( a_flv->framenum <= maxframe )
     {
         frame = audio_encode_frame( a_flv->encoder );
@@ -408,7 +408,7 @@ static int write_audio( flv_hnd_t *p_flv, int64_t video_dts )
         dts = a_flv->framenum++ * a_flv->step_num / a_flv->step_den;
 
         x264_put_byte( c, FLV_TAG_TYPE_AUDIO );
-        x264_put_be24( c, 1 + aac + frame->len );
+        x264_put_be24( c, 1 + aac + frame->size );
         x264_put_be24( c, (int32_t) dts );
         x264_put_byte( c, (int32_t) dts >> 24 );
         x264_put_be24( c, 0 );
@@ -416,9 +416,9 @@ static int write_audio( flv_hnd_t *p_flv, int64_t video_dts )
         x264_put_byte( c, a_flv->header );
         if( aac )
             x264_put_byte( c, 1 );
-        flv_append_data( c, frame->data, frame->len );
+        flv_append_data( c, frame->data, frame->size );
 
-        x264_put_be32( c, 11 + 1 + aac + frame->len );
+        x264_put_be32( c, 11 + 1 + aac + frame->size );
 
         audio_free_frame( a_flv->encoder, frame );
 

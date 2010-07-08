@@ -1,4 +1,7 @@
 #include "filters/audio/internal.h"
+#include "avutils.h"
+#include "libavformat/avformat.h"
+#include "libavcodec/avcodec.h"
 #include <assert.h>
 #include <stdio.h>
 #include <inttypes.h>
@@ -24,16 +27,15 @@ static int buffer_next_frame( lavf_source_t *h );
 
 const audio_filter_t audio_source_lavf;
 
-static enum AudioResult init( hnd_t *handle, hnd_t previous, const char *opt_str )
+static int init( hnd_t *handle, hnd_t previous, const char *opt_str )
 {
     assert( opt_str );
     assert( !previous ); // This must be the first filter
     assert( handle );
-    char *optlist[] = { "filename", "track", NULL };
-    char **opts     = split_options( opt_str, optlist );
+    char **opts = split_options( opt_str, (char*[]){ "filename", "track", NULL } );
 
     if( !opts )
-        return AUDIO_ERROR;
+        return -1;
 
     char *filename = get_option( "filename", opts );
     char *trackstr = get_option( "track", opts );
@@ -55,13 +57,13 @@ static enum AudioResult init( hnd_t *handle, hnd_t previous, const char *opt_str
 
     if( av_open_input_file( &h->lavf, filename, NULL, 0, NULL ) )
     {
-        x264_cli_log( "lavfsource", X264_LOG_ERROR, "could not open audio file\n" );
+        AF_LOG_ERR( h, "could not open audio file\n" );
         goto fail;
     }
 
     if( av_find_stream_info( h->lavf ) < 0 )
     {
-        x264_cli_log( "lavfsource", X264_LOG_ERROR, "could not find stream info\n" );
+        AF_LOG_ERR( h, "could not find stream info\n" );
         goto fail;
     }
 
@@ -72,8 +74,8 @@ static enum AudioResult init( hnd_t *handle, hnd_t previous, const char *opt_str
                 h->lavf->streams[track]->codec->codec_type == CODEC_TYPE_AUDIO )
             tid = track;
         else
-            x264_cli_log( "lavfsource", X264_LOG_ERROR, "requested track %d is unavailable "
-                          "or is not an audio track\n", track );
+            AF_LOG_ERR( h, "requested track %d is unavailable "
+                           "or is not an audio track\n", track );
     }
     else // TRACK_ANY (pick first)
     {
@@ -84,7 +86,7 @@ static enum AudioResult init( hnd_t *handle, hnd_t previous, const char *opt_str
         if( track < h->lavf->nb_streams )
             tid = track;
         else
-            x264_cli_log( "lavfsource", X264_LOG_ERROR, "could not find any audio track\n" );
+            AF_LOG_ERR( h, "could not find any audio track\n" );
     }
 
     if( tid == TRACK_NONE )
@@ -107,7 +109,8 @@ static enum AudioResult init( hnd_t *handle, hnd_t previous, const char *opt_str
     h->info->chanlayout = h->ctx->channel_layout;
     h->info->framelen = h->ctx->frame_size;
     h->info->framesize = h->ctx->frame_size * h->info->samplesize;
-    h->info->time_base = h->ctx->time_base;
+    h->info->time_base_num = h->ctx->time_base.num;
+    h->info->time_base_den = h->ctx->time_base.den;
     h->info->extradata = h->ctx->extradata;
     h->info->extradata_size = h->ctx->extradata_size;
 
@@ -120,33 +123,29 @@ static enum AudioResult init( hnd_t *handle, hnd_t previous, const char *opt_str
         goto codecfail;
 
     free_string_array( opts );
-    return AUDIO_OK;
+    return 0;
 
 codecfail:
-    x264_cli_log( "lavfsource", X264_LOG_ERROR, "error opening the %s decoder for track %d\n", h->codec->name, h->track );
+    AF_LOG_ERR( h, "error opening the %s decoder for track %d\n", h->codec->name, h->track );
 fail:
     free_string_array( opts );
     if( h->lavf )
         av_close_input_file( h->lavf );
     free( *handle );
     *handle = NULL;
-    return AUDIO_ERROR;
+    return -1;
 }
 
-static inline void free_avpacket( struct AVPacket *pkt )
+static inline void free_avpacket( AVPacket *pkt )
 {
-    if( pkt )
-    {
-        if( pkt->data )
-            av_free_packet( pkt );
-        free( pkt );
-    }
+    av_free_packet( pkt );
+    free( pkt );
 }
 
-static int free_packet( hnd_t handle, struct AVPacket *frame )
+static void free_packet( hnd_t handle, audio_packet_t *pkt )
 {
-    free_avpacket( frame );
-    return 0;
+    pkt->owner = NULL;
+    af_free_packet( pkt );
 }
 
 static struct AVPacket *next_packet( lavf_source_t *h )
@@ -161,9 +160,9 @@ static struct AVPacket *next_packet( lavf_source_t *h )
         if( (ret = av_read_frame( h->lavf, pkt )) )
         {
             if( ret != AVERROR_EOF )
-                x264_cli_log( "lavfsource", X264_LOG_ERROR, "read error: %s\n", strerror( -ret ) );
+                AF_LOG_ERR( h, "read error: %s\n", strerror( -ret ) );
             else
-                x264_cli_log( "lavfsource", X264_LOG_INFO, "end of file reached\n" );
+                AF_LOG( h, X264_LOG_INFO, "end of file reached\n" );
             free_avpacket( pkt );
             return NULL;
         }
@@ -189,7 +188,7 @@ static int low_decode_audio( lavf_source_t *h, uint8_t *buf, intptr_t buflen )
         if( len < 0 ) {
             // Broken frame, drop
             if( !desync_warn++ ) // repeat the warning every 256 errors
-                x264_cli_log( "lavfsource", X264_LOG_WARNING, "Decoding errors may cause audio desync\n" );
+                AF_LOG_WARN( h, "Decoding errors may cause audio desync\n" );
             pkt_temp.size = 0;
             break;
         }
@@ -273,9 +272,9 @@ static int64_t fill_buffer_until( lavf_source_t *h, int64_t lastsample )
         return -1;
     if( not_in_cache( h, lastsample ) < 0 )
     {
-        x264_cli_log( "lavfsource", X264_LOG_ERROR, "backwards seeking not supported yet "
-                      "(requested sample %"PRIu64", first available is %"PRIu64")\n",
-                      lastsample, h->bytepos / h->info->samplesize );
+        AF_LOG_ERR( h, "backwards seeking not supported yet "
+                       "(requested sample %"PRIu64", first available is %"PRIu64")\n",
+                       lastsample, h->bytepos / h->info->samplesize );
         return -1;
     }
     int ret;
@@ -293,7 +292,7 @@ static int64_t fill_buffer_until( lavf_source_t *h, int64_t lastsample )
 }
 
 
-static struct AVPacket *get_samples( hnd_t handle, int64_t first_sample, int64_t last_sample )
+static struct audio_packet_t *get_samples( hnd_t handle, int64_t first_sample, int64_t last_sample )
 {
     lavf_source_t *h = handle;
     assert( first_sample >= 0 && last_sample > first_sample );
@@ -301,29 +300,30 @@ static struct AVPacket *get_samples( hnd_t handle, int64_t first_sample, int64_t
     if( fill_buffer_until( h, first_sample ) < 0 )
         return NULL;
 
-    AVPacket *pkt = calloc( 1, sizeof( AVPacket ) );
-    assert( !av_new_packet( pkt, ( last_sample - first_sample ) * h->info->samplesize ) );
+    audio_packet_t *pkt = calloc( 1, sizeof( audio_packet_t ) );
+    pkt->data = malloc( (pkt->size = ( last_sample - first_sample ) * h->info->samplesize ) );
 
     if( pkt->size + h->surplus > h->bufsize )
     {
         int64_t pivot = first_sample + ( h->bufsize - h->surplus * 2 ) / h->info->samplesize;
         int64_t expected_size = ( pivot - first_sample ) * h->info->samplesize;
 
-        AVPacket *prev = get_samples( h, first_sample, pivot );
+        audio_packet_t *prev = get_samples( h, first_sample, pivot );
         if( !prev )
             goto fail;
 
         if( prev->size < expected_size ) // EOF
         {
-            free_avpacket( pkt );
+            af_free_packet( pkt );
+            prev->flags |= AUDIO_FLAG_EOF;
             return prev;
         }
         assert( prev->size == expected_size );
 
-        AVPacket *next = get_samples( h, pivot, last_sample );
+        audio_packet_t *next = get_samples( h, pivot, last_sample );
         if( !next )
         {
-            free_avpacket( prev );
+            af_free_packet( prev );
             goto fail;
         }
 
@@ -331,8 +331,8 @@ static struct AVPacket *get_samples( hnd_t handle, int64_t first_sample, int64_t
         memcpy( pkt->data + prev->size, next->data, next->size );
         pkt->size = prev->size + next->size;
 
-        free_avpacket( prev );
-        free_avpacket( next );
+        af_free_packet( prev );
+        af_free_packet( next );
     }
     else
     {
@@ -345,7 +345,8 @@ static struct AVPacket *get_samples( hnd_t handle, int64_t first_sample, int64_t
 
         if( lastavail < lastreq )
         {
-            pkt->size = lastavail - h->bytepos - start;
+            pkt->size  = lastavail - h->bytepos - start;
+            pkt->flags = AUDIO_FLAG_EOF;
         }
         assert( start + pkt->size <= h->bufsize );
         memcpy( pkt->data, h->buffer + start, pkt->size );
@@ -354,11 +355,11 @@ static struct AVPacket *get_samples( hnd_t handle, int64_t first_sample, int64_t
     return pkt;
 
 fail:
-    free_avpacket( pkt );
+    af_free_packet( pkt );
     return NULL;
 }
 
-static enum AudioResult close( hnd_t handle )
+static void close( hnd_t handle )
 {
     assert( handle );
     lavf_source_t *h = handle;
@@ -367,13 +368,11 @@ static enum AudioResult close( hnd_t handle )
     av_close_input_file( h->lavf );
     free( h->info );
     free( h );
-
-    return AUDIO_OK;
 }
 
 const audio_filter_t audio_source_lavf =
 {
-        .name        = "libavformat audio source",
+        .name        = "lavfsource",
         .description = "Demuxes and decodes audio files using libavformat + libavcodec",
         .help        = "Arguments: filename[:track]",
         .init        = init,

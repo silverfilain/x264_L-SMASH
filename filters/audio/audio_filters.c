@@ -2,26 +2,26 @@
 
 #include <assert.h>
 
-static int registered = 0;
-
 audio_info_t *af_get_info( hnd_t handle )
 {
     audio_hnd_t *h = af_get_last_filter( handle );
     return h->info;
 }
 
-audio_filter_t *af_get_filter( enum AudioFilter filterid )
+audio_filter_t *af_get_filter( char *name )
 {
-    if( !registered )
-    {
-        af_register_all();
-        registered = 1;
+#define CHECK( filter, type )                          \
+    if ( !strcmp( name, #filter ) )                    \
+    {                                                  \
+        extern audio_filter_t audio_##type##_##filter; \
+        return &audio_##type##_##filter;               \
     }
-
-    return af_get_filter_by_id( filterid );
+#define CHECKFLT( filter ) CHECK( filter, filter )
+    CHECK( lavf, source )
+    return NULL;
 }
 
-enum AudioResult af_add( hnd_t base, audio_filter_t *filter, const char *options )
+int af_add( hnd_t base, audio_filter_t *filter, const char *options )
 {
     assert( base );
     assert( filter );
@@ -31,42 +31,36 @@ enum AudioResult af_add( hnd_t base, audio_filter_t *filter, const char *options
     return filter->init( (void**) &h->next, h, options );
 }
 
-enum AudioResult af_get_samples( audio_samples_t *out, hnd_t handle, int64_t first_sample, int64_t last_sample )
+int af_get_samples( audio_packet_t *out, hnd_t handle, int64_t first_sample, int64_t last_sample )
 {
     audio_hnd_t *last = af_get_last_filter( handle );
-    AVPacket *pkt = last->self->get_samples( last, first_sample, last_sample );
-    if( !pkt )
-        return AUDIO_ERROR;
-    out->len         = pkt->size;
-    out->samplecount = pkt->size / last->info->samplesize;
-    out->data        = pkt->data;
-    out->owner       = last;
-    out->ownerdata   = pkt;
-    out->flags       = AUDIO_FLAG_NONE;
-
-    intptr_t expected_len = ( last_sample - first_sample ) * last->info->samplesize;
-    if( out->len < expected_len )
-        out->flags |= AUDIO_FLAG_EOF;
-
-    return AUDIO_OK;
+    out        = last->self->get_samples( last, first_sample, last_sample );
+    if( out )
+    {
+        out->owner       = last;
+        out->samplecount = out->size / last->info->samplesize;
+        return 0;
+    }
+    return -1;
 }
 
-void af_free_samples( audio_samples_t *samples )
+void af_free_packet( audio_packet_t *pkt )
 {
-    audio_hnd_t *owner = samples->owner;
-    AVPacket *pkt      = samples->ownerdata;
+    audio_hnd_t *owner = pkt->owner;
     if( owner )
         owner->self->free_packet( owner, pkt );
     else
     {
-        free( samples->data );
+        if( pkt->priv )
+            free( pkt->priv );
+        free( pkt->data );
     }
 
-    samples->owner = samples->ownerdata = samples->data = NULL;
-    samples->len = 0;
+    pkt->owner = pkt->priv = pkt->data = NULL;
+    pkt->size = 0;
 }
 
-int af_close( hnd_t chain )
+void af_close( hnd_t chain )
 {
     audio_hnd_t *last = af_get_last_filter( chain );
     while( last->prev )
@@ -75,9 +69,4 @@ int af_close( hnd_t chain )
         last->next->self->close( last->next );
     }
     last->self->close( last );
-
-    af_unregister_all();
-    registered = 0;
-
-    return AUDIO_OK;
 }
