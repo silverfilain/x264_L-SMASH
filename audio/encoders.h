@@ -14,7 +14,7 @@ typedef struct audio_encoder_t
 } audio_encoder_t;
 
 extern const audio_encoder_t audio_encoder_raw;
-#ifdef HAVE_LIBMP3LAME
+#if HAVE_LAME
 extern const audio_encoder_t audio_encoder_mp3;
 #endif
 

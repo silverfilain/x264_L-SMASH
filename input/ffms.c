@@ -35,7 +35,7 @@
 #define SetConsoleTitle(t)
 #endif
 
-#ifdef WITH_AUDIO
+#if HAVE_AUDIO
 #include "audio/audio.h"
 #endif
 
@@ -222,7 +222,7 @@ static int close_file( hnd_t handle )
     return 0;
 }
 
-#ifdef WITH_AUDIO
+#if HAVE_AUDIO
 static hnd_t open_audio( hnd_t handle, int track )
 {
     ffms_hnd_t *h = handle;
@@ -231,7 +231,7 @@ static hnd_t open_audio( hnd_t handle, int track )
 #endif
 
 const cli_input_t ffms_input = { open_file, get_frame_total, x264_picture_alloc, read_frame, NULL, x264_picture_clean, close_file,
-#ifdef WITH_AUDIO
+#if HAVE_AUDIO
                                  open_audio
 #endif
 };

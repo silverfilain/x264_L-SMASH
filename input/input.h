@@ -26,7 +26,7 @@
 #define X264_INPUT_H
 
 #include "x264cli.h"
-#ifdef WITH_AUDIO
+#if HAVE_AUDIO
 #include "audio/audio.h"
 #endif
 
@@ -65,7 +65,7 @@ typedef struct
     int (*release_frame)( x264_picture_t *pic, hnd_t handle );
     void (*picture_clean)( x264_picture_t *pic );
     int (*close_file)( hnd_t handle );
-#ifdef WITH_AUDIO
+#if HAVE_AUDIO
     hnd_t (*open_audio)( hnd_t handle, int track );
 #endif
 } cli_input_t;

@@ -590,12 +590,12 @@ elif [ "$lavf" = "yes" ]; then
 fi
 
 if [ "$audio" = "auto" -a "$lavf" = "yes" ]; then
-    define WITH_AUDIO 1
+    define HAVE_AUDIO
     audio="yes"
     if [ "$audio_mp3" = "auto" ]; then
         if cc_check lame/lame.h "-lmp3lame" "get_lame_version();"; then
             LDFLAGSCLI="-lmp3lame $LDFLAGSCLI"
-            define HAVE_LIBMP3LAME 1
+            define HAVE_LAME
             audio_mp3="yes"
         else
             audio_mp3="no"

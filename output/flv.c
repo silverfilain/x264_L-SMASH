@@ -27,7 +27,7 @@ do {\
         return -1;\
 } while( 0 )
 
-#ifdef WITH_AUDIO
+#if HAVE_AUDIO
 typedef struct
 {
     audio_info_t *info;
@@ -67,12 +67,12 @@ typedef struct
 
     unsigned start;
 
-#ifdef WITH_AUDIO
+#if HAVE_AUDIO
     flv_audio_hnd_t *a_flv;
 #endif
 } flv_hnd_t;
 
-#ifdef WITH_AUDIO
+#if HAVE_AUDIO
 static int open_audio_encoder( hnd_t *h, hnd_t filters, char *enc_name, char *params )
 {
     const audio_encoder_t *enc;
@@ -82,13 +82,13 @@ static int open_audio_encoder( hnd_t *h, hnd_t filters, char *enc_name, char *pa
     if( !strcmp( enc_name, "default" ) )
     {
         enc =
-#ifdef HAVE_LIBMP3LAME
+#if HAVE_LAME
             &audio_encoder_mp3;
 #else
             &audio_encoder_raw;
 #endif
     }
-#ifdef HAVE_LIBMP3LAME
+#if HAVE_LAME
     else IFSET( mp3 )
 #endif
     else
@@ -213,14 +213,14 @@ static int open_file( char *psz_filename, hnd_t *p_handle, hnd_t audio_filters, 
     if( !p_flv->c )
         return -1;
 
-#ifdef WITH_AUDIO
+#if HAVE_AUDIO
     int ret = audio_init( p_flv, audio_filters, audio_enc, audio_params );
     CHECK( ret );
 #endif
     CHECK( write_header( p_flv->c, ret ) );
     *p_handle = p_flv;
 
-#ifdef WITH_AUDIO
+#if HAVE_AUDIO
     return ret;
 #else
     return 0;
@@ -276,7 +276,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     p_flv->i_bitrate_pos = c->d_cur + c->d_total + 1;
     x264_put_amf_double( c, 0 ); // written at end of encoding
 
-#ifdef WITH_AUDIO
+#if HAVE_AUDIO
     if( p_flv->a_flv )
     {
         flv_audio_hnd_t *a_flv = p_flv->a_flv;
@@ -311,7 +311,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
 static int write_headers( hnd_t handle, x264_nal_t *p_nal )
 {
     flv_hnd_t *p_flv = handle;
-#ifdef WITH_AUDIO
+#if HAVE_AUDIO
     flv_audio_hnd_t *a_flv = p_flv->a_flv;
 #endif
     flv_buffer *c = p_flv->c;
@@ -365,7 +365,7 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
     rewrite_amf_be24( c, length, p_flv->start - 10 );
     x264_put_be32( c, length + 11 ); // Last tag size
 
-#ifdef WITH_AUDIO
+#if HAVE_AUDIO
     if( a_flv && a_flv->codecid == FLV_CODECID_AAC )
     {
         FAIL_IF_ERR( !a_flv->info->extradata, "flv", "audio codec is AAC but extradata is NULL\n" );
@@ -387,7 +387,7 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
     return sei_size + sps_size + pps_size;
 }
 
-#ifdef WITH_AUDIO
+#if HAVE_AUDIO
 static int write_audio( flv_hnd_t *p_flv, int64_t video_dts )
 {
     flv_audio_hnd_t *a_flv = p_flv->a_flv;
@@ -457,7 +457,7 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
     p_flv->i_prev_dts = p_picture->i_dts;
     p_flv->i_prev_pts = p_picture->i_pts;
 
-#ifdef WITH_AUDIO
+#if HAVE_AUDIO
     FAIL_IF_ERR( p_flv->a_flv && write_audio( p_flv, dts ) < 0, "flv", "error writing audio\n" );
 #endif
 
@@ -525,7 +525,7 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
 
     fclose( c->fp );
 
-#ifdef WITH_AUDIO
+#if HAVE_AUDIO
     if( p_flv->a_flv )
         free( p_flv->a_flv );
 #endif
