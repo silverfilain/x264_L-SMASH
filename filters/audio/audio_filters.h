@@ -66,7 +66,7 @@ typedef struct audio_info_t
 audio_info_t *af_get_info( hnd_t handle );
 audio_filter_t *af_get_filter( char *name );
 int af_add( hnd_t base, audio_filter_t *filter, const char *options );
-int af_get_samples( audio_packet_t *out, hnd_t handle, int64_t first_sample, int64_t last_sample );
+audio_packet_t *af_get_samples( hnd_t handle, int64_t first_sample, int64_t last_sample );
 void af_free_packet( audio_packet_t *pkt );
 void af_close( hnd_t chain );
 

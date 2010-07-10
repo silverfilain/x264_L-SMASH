@@ -38,12 +38,9 @@ static audio_packet_t *get_next_packet( hnd_t handle )
 {
     enc_raw_t *h = handle;
 
-    audio_packet_t *smp = malloc( sizeof( audio_packet_t ) );
-    int res = af_get_samples( smp, h->filter_chain, h->last_sample, h->last_sample + h->info->framelen );
-    if( res < 0 ) {
-        free( smp );
+    audio_packet_t *smp = af_get_samples( h->filter_chain, h->last_sample, h->last_sample + h->info->framelen );
+    if( !smp )
         return NULL;
-    }
     h->last_sample += h->info->framelen;
 
     return smp;

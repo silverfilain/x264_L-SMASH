@@ -13,7 +13,7 @@ typedef struct enc_lame_t {
     int64_t last_sample;
     uint8_t *buffer;
     size_t bufsize;
-    audio_packet_t in;
+    audio_packet_t *in;
 } enc_lame_t;
 
 static hnd_t init( hnd_t filter_chain, const char *opt_str )
@@ -94,8 +94,8 @@ static audio_info_t *get_info( hnd_t handle )
 
 static void free_packet( hnd_t handle, audio_packet_t *packet )
 {
+    packet->owner = NULL;
     af_free_packet( packet );
-    free( packet );
 }
 
 static audio_packet_t *get_next_packet( hnd_t handle )
@@ -107,7 +107,7 @@ static audio_packet_t *get_next_packet( hnd_t handle )
 
     while( !out->size )
     {
-        if( h->in.flags & AUDIO_FLAG_EOF )
+        if( h->in && h->in->flags & AUDIO_FLAG_EOF )
         {
             out->size = lame_encode_flush( h->lame, out->data, h->bufsize );
             if( !out->size )
@@ -115,14 +115,14 @@ static audio_packet_t *get_next_packet( hnd_t handle )
             break;
         }
 
-        if( af_get_samples( &h->in, h->filter_chain, h->last_sample, h->last_sample + h->info->framelen ) < 0 )
+        if( !( h->in = af_get_samples( h->filter_chain, h->last_sample, h->last_sample + h->info->framelen ) ) )
             goto error;
-        h->last_sample += h->in.samplecount;
+        h->last_sample += h->in->samplecount;
 
-        out->size = lame_encode_buffer_interleaved( h->lame, (short*) h->in.data,
-                                                   h->in.samplecount,
+        out->size = lame_encode_buffer_interleaved( h->lame, (short*) h->in->data,
+                                                   h->in->samplecount,
                                                    out->data, h->bufsize );
-        af_free_packet( &h->in );
+        af_free_packet( h->in );
     }
 
     return out;
