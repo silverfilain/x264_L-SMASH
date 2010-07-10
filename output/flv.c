@@ -73,46 +73,18 @@ typedef struct
 } flv_hnd_t;
 
 #if HAVE_AUDIO
-static int open_audio_encoder( hnd_t *h, hnd_t filters, char *enc_name, char *params )
-{
-    const audio_encoder_t *enc;
-
-#define IFSET(x) if( !strcmp( #x, enc_name ) ) enc = &audio_encoder_ ## x;
-    // TODO: support raw, pcm, adpcm_swf and aac
-    if( !strcmp( enc_name, "default" ) )
-    {
-        enc =
-#if HAVE_LAME
-            &audio_encoder_mp3;
-#else
-            &audio_encoder_raw;
-#endif
-    }
-#if HAVE_LAME
-    else IFSET( mp3 )
-#endif
-    else
-    {
-        x264_cli_log( "flv", X264_LOG_ERROR, "audio codec '%s' is unsupported\n", enc_name );
-        return -1;
-    }
-#undef IFSET
-
-    *h = audio_encoder_open( enc, filters, params );
-    return 0;
-}
-
 static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio_parameters )
 {
-    if( !strcmp( audio_enc, "none" ) )
+    if( !strcmp( audio_enc, "none" ) || !filters )
         return 0;
 
     // TODO: support adpcm_swf, pcm and aac
     const audio_encoder_t *encoder = select_audio_encoder( audio_enc, (char*[]){ "mp3", "raw", NULL } );
-    CHECK( encoder );
+    if( !encoder )
+        return -1;
 
     hnd_t enc;
-    CHECK( open_audio_encoder( &enc, filters, audio_enc, audio_parameters ) );
+    CHECK( enc = audio_encoder_open( encoder, filters, audio_parameters ) );
     flv_hnd_t *p_flv = handle;
     flv_audio_hnd_t *a_flv = p_flv->a_flv = calloc( 1, sizeof( flv_audio_hnd_t ) );
     audio_info_t *info = a_flv->info = audio_encoder_info( enc );
