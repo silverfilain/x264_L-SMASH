@@ -213,8 +213,9 @@ static int open_file( char *psz_filename, hnd_t *p_handle, hnd_t audio_filters, 
     if( !p_flv->c )
         return -1;
 
+    int ret = 0;
 #if HAVE_AUDIO
-    int ret = audio_init( p_flv, audio_filters, audio_enc, audio_params );
+    ret = audio_init( p_flv, audio_filters, audio_enc, audio_params );
     CHECK( ret );
 #endif
     CHECK( write_header( p_flv->c, ret ) );
