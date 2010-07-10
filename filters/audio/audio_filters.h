@@ -5,7 +5,31 @@
 #include "x264cli.h"
 #include "filters/common.h"
 
-// Ripped from ffmpeg
+// Ripped from ffmpeg's avcodec.h
+#ifndef CH_FRONT_LEFT
+#define CH_FRONT_LEFT             0x00000001
+#define CH_FRONT_RIGHT            0x00000002
+#define CH_FRONT_CENTER           0x00000004
+#define CH_LOW_FREQUENCY          0x00000008
+#define CH_BACK_LEFT              0x00000010
+#define CH_BACK_RIGHT             0x00000020
+#define CH_FRONT_LEFT_OF_CENTER   0x00000040
+#define CH_FRONT_RIGHT_OF_CENTER  0x00000080
+#define CH_BACK_CENTER            0x00000100
+#define CH_SIDE_LEFT              0x00000200
+#define CH_SIDE_RIGHT             0x00000400
+#define CH_TOP_CENTER             0x00000800
+#define CH_TOP_FRONT_LEFT         0x00001000
+#define CH_TOP_FRONT_CENTER       0x00002000
+#define CH_TOP_FRONT_RIGHT        0x00004000
+#define CH_TOP_BACK_LEFT          0x00008000
+#define CH_TOP_BACK_CENTER        0x00010000
+#define CH_TOP_BACK_RIGHT         0x00020000
+#define CH_STEREO_LEFT            0x20000000  ///< Stereo downmix.
+#define CH_STEREO_RIGHT           0x40000000  ///< See CH_STEREO_LEFT.
+#endif
+
+// Ripped from avcodec.h and renamed to avoidcolisions
 enum SampleFormats {
     SAMPLEFMT_NONE = -1,
     SAMPLEFMT_U8,
@@ -43,16 +67,14 @@ typedef struct audio_filter_t
     void (*help_callback)( int longhelp );
 } audio_filter_t;
 
-#include "libavcodec/avcodec.h"
-
 typedef struct audio_info_t
 {
     char *codec_name;
     int samplerate;              // Sample Rate in Hz
-    enum SampleFormat samplefmt; // Sample Format in SampleFormat
+    enum SampleFormats samplefmt; // Sample Format in SampleFormat
     size_t samplesize;           // How many bytes per sample
     int channels;                // How many channels
-    int64_t chanlayout;          // Channel layout (CH_* on avcodec.h)
+    int64_t chanlayout;          // Channel layout (CH_*)
     size_t chansize;             // How many bytes per channel
     int framelen;                // Frame length in samples
     size_t framesize;            // Frame size in bytes

@@ -26,9 +26,6 @@
 #define X264_INPUT_H
 
 #include "x264cli.h"
-#if HAVE_AUDIO
-#include "audio/audio.h"
-#endif
 
 /* options that are used by only some demuxers */
 typedef struct

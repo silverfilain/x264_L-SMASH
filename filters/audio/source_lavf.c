@@ -1,5 +1,5 @@
 #include "filters/audio/internal.h"
-#include "avutils.h"
+#undef DECLARE_ALIGNED
 #include "libavformat/avformat.h"
 #include "libavcodec/avcodec.h"
 #include <assert.h>

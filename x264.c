@@ -32,6 +32,9 @@
 
 #include "common/common.h"
 #include "x264cli.h"
+#if HAVE_AUDIO
+#include "audio/audio.h"
+#endif
 #include "input/input.h"
 #include "output/output.h"
 
