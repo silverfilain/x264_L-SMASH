@@ -359,7 +359,7 @@ fail:
     return NULL;
 }
 
-static void close( hnd_t handle )
+static void lavfsource_close( hnd_t handle )
 {
     assert( handle );
     lavf_source_t *h = handle;
@@ -378,5 +378,5 @@ const audio_filter_t audio_source_lavf =
         .init        = init,
         .get_samples = get_samples,
         .free_packet = free_packet,
-        .close       = close
+        .close       = lavfsource_close
 };

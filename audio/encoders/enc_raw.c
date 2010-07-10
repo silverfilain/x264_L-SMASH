@@ -52,7 +52,7 @@ static void free_packet( hnd_t handle, audio_packet_t *packet )
     free( packet );
 }
 
-static void close( hnd_t handle )
+static void raw_close( hnd_t handle )
 {
     enc_raw_t *h = handle;
 
@@ -65,6 +65,6 @@ const audio_encoder_t audio_encoder_raw = {
     .get_info = get_info,
     .get_next_packet = get_next_packet,
     .free_packet = free_packet,
-    .close = close
+    .close = raw_close
 };
 

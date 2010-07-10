@@ -132,7 +132,7 @@ error:
     return NULL;
 }
 
-static void close( hnd_t handle )
+static void mp3_close( hnd_t handle )
 {
     enc_lame_t *h = handle;
 
@@ -146,6 +146,6 @@ const audio_encoder_t audio_encoder_mp3 = {
     .get_info = get_info,
     .get_next_packet = get_next_packet,
     .free_packet = free_packet,
-    .close = close
+    .close = mp3_close
 };
 
