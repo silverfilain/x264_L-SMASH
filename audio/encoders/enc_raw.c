@@ -59,7 +59,6 @@ static audio_packet_t *get_next_packet( hnd_t handle )
 static void free_packet( hnd_t handle, audio_packet_t *packet )
 {
     af_free_packet( packet );
-    free( packet );
 }
 
 static void raw_close( hnd_t handle )
