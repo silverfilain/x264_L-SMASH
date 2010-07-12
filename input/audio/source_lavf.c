@@ -13,6 +13,7 @@ typedef struct lavf_source_t
     AVCodecContext *ctx;
     AVCodec *codec;
 
+    int samplefmt;
     unsigned track;
     uint8_t *buffer;
     intptr_t bufsize;
@@ -27,11 +28,10 @@ static int buffer_next_frame( lavf_source_t *h );
 
 const audio_filter_t audio_source_lavf;
 
-static int init( hnd_t *handle, hnd_t previous, const char *opt_str )
+static int init( hnd_t *handle, const char *opt_str )
 {
     assert( opt_str );
-    assert( !previous ); // This must be the first filter
-    assert( handle );
+    assert( !(*handle) ); // This must be the first filter
     char **opts = split_options( opt_str, (char*[]){ "filename", "track", NULL } );
 
     if( !opts )
@@ -99,23 +99,24 @@ static int init( hnd_t *handle, hnd_t previous, const char *opt_str )
     if( avcodec_open( h->ctx, h->codec ) )
         goto codecfail;
 
-    h->info = calloc( 1, sizeof( audio_info_t ) );
-
-    h->info->samplerate = h->ctx->sample_rate;
-    h->info->samplefmt = h->ctx->sample_fmt;
-    h->info->chansize = ( av_get_bits_per_sample_format( h->ctx->sample_fmt ) ) / 8;
-    h->info->samplesize = h->info->chansize * h->ctx->channels;
-    h->info->channels = h->ctx->channels;
-    h->info->chanlayout = h->ctx->channel_layout;
-    h->info->framelen = h->ctx->frame_size;
-    h->info->framesize = h->ctx->frame_size * h->info->samplesize;
-    h->info->time_base_num = h->ctx->time_base.num;
-    h->info->time_base_den = h->ctx->time_base.den;
-    h->info->extradata = h->ctx->extradata;
-    h->info->extradata_size = h->ctx->extradata_size;
+    h->samplefmt  = h->ctx->sample_fmt;
+    h->info = (audio_info_t)
+    {
+        .samplerate     = h->ctx->sample_rate,
+        .channels       = h->ctx->channels,
+        .chanlayout     = h->ctx->channel_layout,
+        .framelen       = h->ctx->frame_size,
+        .framesize      = h->ctx->frame_size * sizeof( float ),
+        .chansize       = av_get_bits_per_sample_format( h->samplefmt ) / 8,
+        .samplesize     = av_get_bits_per_sample_format( h->samplefmt ) * h->ctx->channels / 8,
+        .time_base_num  = h->ctx->time_base.num,
+        .time_base_den  = h->ctx->time_base.den,
+        .extradata      = h->ctx->extradata,
+        .extradata_size = h->ctx->extradata_size
+    };
 
     h->bufsize = DEFAULT_BUFSIZE;
-    h->surplus = h->info->framesize * 3 / 2;
+    h->surplus = h->info.framesize * 3 / 2;
     assert( h->bufsize > h->surplus * 2 );
     h->buffer = av_malloc( h->bufsize );
 
@@ -131,7 +132,7 @@ fail:
     free_string_array( opts );
     if( h->lavf )
         av_close_input_file( h->lavf );
-    free( *handle );
+    free( h );
     *handle = NULL;
     return -1;
 }
@@ -257,7 +258,7 @@ static int buffer_next_frame( lavf_source_t *h )
 
 static inline int not_in_cache( lavf_source_t *h, int64_t sample )
 {
-    int64_t samplebyte = sample * h->info->samplesize;
+    int64_t samplebyte = sample * h->info.samplesize;
     if( samplebyte < h->bytepos )
         return -1; // before
     else if( samplebyte < h->bytepos + h->len )
@@ -274,7 +275,7 @@ static int64_t fill_buffer_until( lavf_source_t *h, int64_t lastsample )
     {
         AF_LOG_ERR( h, "backwards seeking not supported yet "
                        "(requested sample %"PRIu64", first available is %"PRIu64")\n",
-                       lastsample, h->bytepos / h->info->samplesize );
+                       lastsample, h->bytepos / h->info.samplesize );
         return -1;
     }
     int ret;
@@ -301,12 +302,13 @@ static struct audio_packet_t *get_samples( hnd_t handle, int64_t first_sample, i
         return NULL;
 
     audio_packet_t *pkt = calloc( 1, sizeof( audio_packet_t ) );
-    pkt->data = malloc( (pkt->size = ( last_sample - first_sample ) * h->info->samplesize ) );
+    pkt->samplecount = last_sample - first_sample;
+    pkt->size        = pkt->samplecount * h->info.samplesize;
 
     if( pkt->size + h->surplus > h->bufsize )
     {
-        int64_t pivot = first_sample + ( h->bufsize - h->surplus * 2 ) / h->info->samplesize;
-        int64_t expected_size = ( pivot - first_sample ) * h->info->samplesize;
+        int64_t pivot = first_sample + ( h->bufsize - h->surplus * 2 ) / h->info.samplesize;
+        int64_t expected_size = ( pivot - first_sample ) * h->info.samplesize;
 
         audio_packet_t *prev = get_samples( h, first_sample, pivot );
         if( !prev )
@@ -327,29 +329,32 @@ static struct audio_packet_t *get_samples( hnd_t handle, int64_t first_sample, i
             goto fail;
         }
 
-        memcpy( pkt->data, prev->data, prev->size );
-        memcpy( pkt->data + prev->size, next->data, next->size );
-        pkt->size = prev->size + next->size;
+        pkt->data = af_dup_buffer( prev->data, prev->channels, prev->samplecount );
+        af_cat_buffer( pkt->data, pkt->samplecount, next->data, next->samplecount, pkt->channels );
+
+        pkt->samplecount = prev->samplecount + next->samplecount;
+        pkt->size        = prev->size + next->size;
 
         af_free_packet( prev );
         af_free_packet( next );
     }
     else
     {
-        int64_t lastreq = last_sample * h->info->samplesize;
+        int64_t lastreq = last_sample * h->info.samplesize;
         int64_t lastavail = fill_buffer_until( h, last_sample );
         if( lastavail < 0 )
             goto fail;
 
-        intptr_t start  = ( first_sample * h->info->samplesize ) - h->bytepos;
+        intptr_t start  = ( first_sample * h->info.samplesize ) - h->bytepos;
 
         if( lastavail < lastreq )
         {
-            pkt->size  = lastavail - h->bytepos - start;
-            pkt->flags = AUDIO_FLAG_EOF;
+            pkt->size        = lastavail - h->bytepos - start;
+            pkt->samplecount = pkt->size / h->info.samplesize;
+            pkt->flags       = AUDIO_FLAG_EOF;
         }
         assert( start + pkt->size <= h->bufsize );
-        memcpy( pkt->data, h->buffer + start, pkt->size );
+        pkt->data = af_deinterleave2( h->buffer + start, h->samplefmt, h->info.channels, pkt->samplecount );
     }
 
     return pkt;
@@ -366,7 +371,6 @@ static void lavfsource_close( hnd_t handle )
     av_free( h->buffer );
     avcodec_close( h->ctx );
     av_close_input_file( h->lavf );
-    free( h->info );
     free( h );
 }
 

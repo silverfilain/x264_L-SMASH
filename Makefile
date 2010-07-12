@@ -47,6 +47,7 @@ endif
 ifneq ($(findstring HAVE_AUDIO, $(CONFIG)),)
 SRCCLI += audio/audio.c audio/encoders.c \
           filters/common.c filters/audio/audio_filters.c \
+          filters/audio/internal.c \
           audio/encoders/enc_raw.c input/audio/source_lavf.c
 endif
 

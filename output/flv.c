@@ -175,7 +175,7 @@ static int write_header( flv_buffer *c, int audio )
 static int open_file( char *psz_filename, hnd_t *p_handle, hnd_t audio_filters, char *audio_enc, char *audio_params )
 {
     flv_hnd_t *p_flv = malloc( sizeof(*p_flv) );
-    
+
     *p_handle = NULL;
     if( !p_flv )
         return -1;
@@ -256,7 +256,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
         x264_put_amf_string( c, "audiocodecid" );
         x264_put_amf_double( c, a_flv->codecid >> FLV_AUDIO_CODECID_OFFSET );
         x264_put_amf_string( c, "audiosamplesize" );
-        x264_put_amf_double( c, a_flv->info->samplesize );
+        x264_put_amf_double( c, a_flv->info->chansize );
         x264_put_amf_string( c, "audiosamplerate" );
         x264_put_amf_double( c, a_flv->info->samplerate );
         x264_put_amf_string( c, "stereo" );
@@ -389,7 +389,7 @@ static int write_audio( flv_hnd_t *p_flv, int64_t video_dts )
         x264_put_byte( c, a_flv->header );
         if( aac )
             x264_put_byte( c, 1 );
-        flv_append_data( c, frame->data, frame->size );
+        flv_append_data( c, frame->rawdata, frame->size );
 
         x264_put_be32( c, 11 + 1 + aac + frame->size );
 

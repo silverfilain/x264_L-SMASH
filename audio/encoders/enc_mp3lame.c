@@ -4,9 +4,10 @@
 #include "lame/lame.h"
 #include <assert.h>
 
-typedef struct enc_lame_t {
-    audio_info_t *info;
-    audio_info_t *af_info;
+typedef struct enc_lame_t
+{
+    audio_info_t info;
+    audio_info_t af_info;
     hnd_t filter_chain;
 
     lame_global_flags *lame;
@@ -19,18 +20,15 @@ typedef struct enc_lame_t {
 static hnd_t init( hnd_t filter_chain, const char *opt_str )
 {
     assert( filter_chain );
-    enc_lame_t *h = calloc( 1, sizeof( enc_lame_t ) );
-    audio_hnd_t *chain = h->filter_chain = filter_chain;
-    h->af_info = af_get_info(chain);
-    h->info = malloc( sizeof( audio_info_t ) );
-    memcpy( h->info, h->af_info, sizeof( audio_info_t ) );
-
-    if( h->info->chansize != 2 )
+    audio_hnd_t *chain = filter_chain;
+    if( chain->info.channels > 2 )
     {
-        // FIXME: auto-insert converter when it is implemented
-        x264_cli_log("lame", X264_LOG_ERROR, "lame only sanely supports 16 bits per channel.\n" );
-        goto error;
+        x264_cli_log( "lame", X264_LOG_ERROR, "only mono or stereo audio is supported\n" );
+        return 0;
     }
+    enc_lame_t *h = calloc( 1, sizeof( enc_lame_t ) );
+    h->filter_chain = chain;
+    h->info = h->af_info = chain->info;
 
     char *optlist[] = { "bitrate", "vbr", "quality", NULL };
     char **opts     = split_options( opt_str, optlist );
@@ -45,13 +43,14 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
 
     assert( ( cbr && !vbr ) || ( !cbr && vbr ) );
 
-    h->info->codec_name     = "mp3";
-    h->info->extradata      = NULL;
-    h->info->extradata_size = 0;
+    h->info.codec_name     = "mp3";
+    h->info.extradata      = NULL;
+    h->info.extradata_size = 0;
 
     h->lame = lame_init();
-    lame_set_in_samplerate( h->lame, h->info->samplerate );
-    lame_set_num_channels( h->lame, h->info->channels );
+    lame_set_scale( h->lame, 32768 );
+    lame_set_in_samplerate( h->lame, h->info.samplerate );
+    lame_set_num_channels( h->lame, h->info.channels );
     lame_set_quality( h->lame, 0 );
     lame_set_VBR( h->lame, vbr_default );
 
@@ -67,21 +66,18 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
 
     lame_init_params( h->lame );
 
-    h->info->framelen = lame_get_framesize( h->lame );
-    h->info->framesize = h->info->framelen * h->info->samplesize;
+    h->info.framelen   = lame_get_framesize( h->lame );
+    h->info.framesize  = h->info.framelen * 2;
+    h->info.chansize   = 2;
+    h->info.samplesize = 2 * h->info.channels;
 
-    h->bufsize = 125 * h->info->framelen / 100 + 7200;
+    h->bufsize = 125 * h->info.framelen / 100 + 7200;
 
     x264_cli_log( "audio", X264_LOG_INFO, "opened lame mp3 encoder (%s: %g%s)\n",
-             ( cbr ? "bitrate" : "VBR" ), brval,
-             ( cbr ? "kbps" : "" ) );
+                  ( cbr ? "bitrate" : "VBR" ), brval,
+                  ( cbr ? "kbps" : "" ) );
 
     return h;
-
-error:
-    free( h->info );
-    free( h );
-    return NULL;
 }
 
 static audio_info_t *get_info( hnd_t handle )
@@ -89,7 +85,7 @@ static audio_info_t *get_info( hnd_t handle )
     assert( handle );
     enc_lame_t *h = handle;
 
-    return h->info;
+    return &h->info;
 }
 
 static void free_packet( hnd_t handle, audio_packet_t *packet )
@@ -103,25 +99,24 @@ static audio_packet_t *get_next_packet( hnd_t handle )
     enc_lame_t *h = handle;
 
     audio_packet_t *out = calloc( 1, sizeof( audio_packet_t ) );
-    out->data = malloc( h->bufsize );
+    out->rawdata = malloc( h->bufsize );
 
     while( !out->size )
     {
         if( h->in && h->in->flags & AUDIO_FLAG_EOF )
         {
-            out->size = lame_encode_flush( h->lame, out->data, h->bufsize );
+            out->size = lame_encode_flush( h->lame, out->rawdata, h->bufsize );
             if( !out->size )
                 goto error;
             break;
         }
 
-        if( !( h->in = af_get_samples( h->filter_chain, h->last_sample, h->last_sample + h->info->framelen ) ) )
+        if( !( h->in = af_get_samples( h->filter_chain, h->last_sample, h->last_sample + h->info.framelen ) ) )
             goto error;
         h->last_sample += h->in->samplecount;
 
-        out->size = lame_encode_buffer_interleaved( h->lame, (short*) h->in->data,
-                                                   h->in->samplecount,
-                                                   out->data, h->bufsize );
+        out->size = lame_encode_buffer_float( h->lame, h->in->data[0], h->in->data[1],
+                                              h->in->samplecount, out->rawdata, h->bufsize );
         af_free_packet( h->in );
     }
 
@@ -137,11 +132,11 @@ static void mp3_close( hnd_t handle )
     enc_lame_t *h = handle;
 
     lame_close( h->lame );
-    free( h->info );
     free( h );
 }
 
-const audio_encoder_t audio_encoder_mp3 = {
+const audio_encoder_t audio_encoder_mp3 =
+{
     .init = init,
     .get_info = get_info,
     .get_next_packet = get_next_packet,

@@ -3,28 +3,23 @@
 
 #include "filters/audio/audio_filters.h"
 
-#define AUDIO_FILTER_COMMON \
+#define AUDIO_FILTER_COMMON     \
     const audio_filter_t *self; \
-    audio_info_t *info; \
-    struct audio_hnd_t *next, *prev;
+    audio_info_t info;          \
+    struct audio_hnd_t *prev;
 
 #define INIT_FILTER_STRUCT(filterstruct, structname)            \
     structname *h;                                              \
     do                                                          \
     {                                                           \
-        h = *handle = calloc( 1, sizeof( structname ) );        \
+        h = calloc( 1, sizeof( structname ) );                  \
         if( !h )                                                \
             goto fail;                                          \
         h->self = &filterstruct;                                \
-        if( previous )                                          \
-        {                                                       \
-            audio_hnd_t *p = previous;                          \
-            p->next = (audio_hnd_t*) h;                         \
-            assert( p->info );                                  \
-            h->info = malloc( sizeof( audio_info_t ) );         \
-            memcpy( h->info, p->info, sizeof( audio_info_t ) ); \
-        }                                                       \
-        h->prev = previous;                                     \
+        h->prev = *handle;                                      \
+        if( h->prev )                                           \
+            h->info = h->prev->info;                            \
+        *handle = h;                                            \
     } while( 0 )
 
 // Generic audio handle (used to access fields from AUDIO_FILTER_COMMON)
@@ -37,13 +32,24 @@ typedef struct audio_hnd_t
 #define AF_LOG_ERR( handle, ... ) AF_LOG( (handle), X264_LOG_ERROR, __VA_ARGS__ )
 #define AF_LOG_WARN( handle, ... ) AF_LOG( (handle), X264_LOG_WARNING, __VA_ARGS__ )
 
-static inline audio_hnd_t *af_get_last_filter( audio_hnd_t *chain )
-{
-    if( !chain )
-        return NULL;
-    while( chain->next )
-        chain = chain->next;
-    return chain;
-}
+enum SampleFmt {
+    SMPFMT_NONE = -1,
+    SMPFMT_U8,
+    SMPFMT_S16,
+    SMPFMT_S32,
+    SMPFMT_FLT,
+    SMPFMT_DBL
+};
+
+float  **af_get_buffer   ( unsigned channels, unsigned samplecount );
+int      af_resize_buffer( float **buffer, unsigned channels, unsigned samplecount );
+void     af_free_buffer  ( float **buffer, unsigned channels );
+float  **af_dup_buffer   ( float **buffer, unsigned channels, unsigned samplecount );
+int      af_cat_buffer   ( float **buf, unsigned bufsamples, float **in, unsigned insamples, unsigned channels );
+float  **af_deinterleave ( float *input, unsigned channels, unsigned samplecount );
+float  **af_deinterleave2( uint8_t *input, enum SampleFmt fmt, unsigned channels, unsigned samplecount );
+float   *af_interleave   ( float **input, unsigned channels, unsigned samplecount );
+uint8_t *af_interleave2  ( enum SampleFmt outfmt, float **input, unsigned channels, unsigned samplecount );
+uint8_t *af_convert      ( enum SampleFmt outfmt, uint8_t *input, enum SampleFmt fmt, unsigned channels, unsigned samplecount );
 
 #endif /* FILTERS_AUDIO_INTERNAL_H_ */
