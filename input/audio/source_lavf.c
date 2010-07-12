@@ -302,6 +302,7 @@ static struct audio_packet_t *get_samples( hnd_t handle, int64_t first_sample, i
         return NULL;
 
     audio_packet_t *pkt = calloc( 1, sizeof( audio_packet_t ) );
+    pkt->channels    = h->info.channels;
     pkt->samplecount = last_sample - first_sample;
     pkt->size        = pkt->samplecount * h->info.samplesize;
 
@@ -354,7 +355,7 @@ static struct audio_packet_t *get_samples( hnd_t handle, int64_t first_sample, i
             pkt->flags       = AUDIO_FLAG_EOF;
         }
         assert( start + pkt->size <= h->bufsize );
-        pkt->data = af_deinterleave2( h->buffer + start, h->samplefmt, h->info.channels, pkt->samplecount );
+        pkt->data = af_deinterleave2( h->buffer + start, h->samplefmt, pkt->channels, pkt->samplecount );
     }
 
     return pkt;
