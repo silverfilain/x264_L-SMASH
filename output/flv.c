@@ -391,7 +391,6 @@ static int write_audio( flv_hnd_t *p_flv, int64_t video_dts, int finish )
         if( !frame ) break;
 
         a_flv->lastdts += a_flv->step_num / a_flv->step_den;
-        fprintf( stderr, "DEBUG: (vdts: %"PRId64", adts: %"PRId64")\n", video_dts, a_flv->lastdts );
 
         x264_put_byte( c, FLV_TAG_TYPE_AUDIO );
         x264_put_be24( c, 1 + aac + frame->size );
