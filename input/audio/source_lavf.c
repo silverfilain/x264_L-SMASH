@@ -351,7 +351,7 @@ static struct audio_packet_t *get_samples( hnd_t handle, int64_t first_sample, i
 
         if( lastavail < lastreq )
         {
-            pkt->size        = lastavail - start;
+            pkt->size        = lastavail - h->bytepos - start;
             pkt->samplecount = pkt->size / h->info.samplesize;
             pkt->flags       = AUDIO_FLAG_EOF;
         }
