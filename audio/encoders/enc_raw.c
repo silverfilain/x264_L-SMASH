@@ -6,6 +6,7 @@
 typedef struct enc_raw_t
 {
     audio_info_t info;
+    int finishing;
     hnd_t filter_chain;
     int64_t last_sample;
 } enc_raw_t;
@@ -39,6 +40,8 @@ static audio_info_t *get_info( hnd_t handle )
 static audio_packet_t *get_next_packet( hnd_t handle )
 {
     enc_raw_t *h = handle;
+    if( h->finishing )
+        return NULL;
 
     audio_packet_t *smp = af_get_samples( h->filter_chain, h->last_sample, h->last_sample + h->info.framelen );
     if( !smp )
@@ -56,6 +59,12 @@ static audio_packet_t *get_next_packet( hnd_t handle )
     return out;
 }
 
+static audio_packet_t *finish( hnd_t handle )
+{
+    ((enc_raw_t*)handle)->finishing = 1;
+    return NULL;
+}
+
 static void free_packet( hnd_t handle, audio_packet_t *packet )
 {
     af_free_packet( packet );
@@ -71,6 +80,7 @@ const audio_encoder_t audio_encoder_raw =
     .init = init,
     .get_info = get_info,
     .get_next_packet = get_next_packet,
+    .finish = finish,
     .free_packet = free_packet,
     .close = raw_close
 };

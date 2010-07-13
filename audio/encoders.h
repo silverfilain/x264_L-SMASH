@@ -9,6 +9,7 @@ typedef struct audio_encoder_t
     hnd_t (*init)( hnd_t filter_chain, const char *opts );
     audio_info_t *(*get_info)( hnd_t handle );
     audio_packet_t *(*get_next_packet)( hnd_t handle );
+    audio_packet_t *(*finish)( hnd_t handle );
     void (*free_packet)( hnd_t handle, audio_packet_t *samples );
     void (*close)( hnd_t handle );
 } audio_encoder_t;
@@ -28,6 +29,7 @@ hnd_t audio_encoder_open( const audio_encoder_t *encoder, hnd_t filter_chain, co
 
 audio_info_t *audio_encoder_info( hnd_t encoder );
 audio_packet_t *audio_encode_frame( hnd_t encoder );
+audio_packet_t *audio_encoder_finish( hnd_t encoder );
 void audio_free_frame( hnd_t encoder, audio_packet_t *frame );
 
 void audio_encoder_close( hnd_t encoder );

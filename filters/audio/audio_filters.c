@@ -27,10 +27,6 @@ audio_packet_t *af_get_samples( hnd_t handle, int64_t first_sample, int64_t last
     if( out )
     {
         out->owner = h;
-        if( !out->samplecount )
-            out->samplecount = out->size / 4;
-        else if( !out->size )
-            out->size = out->samplecount * 4;
         return out;
     }
     return 0;
@@ -38,6 +34,8 @@ audio_packet_t *af_get_samples( hnd_t handle, int64_t first_sample, int64_t last
 
 void af_free_packet( audio_packet_t *pkt )
 {
+    if( !pkt )
+        return;
     audio_hnd_t *owner = pkt->owner;
     if( owner )
         owner->self->free_packet( owner, pkt );
@@ -45,7 +43,10 @@ void af_free_packet( audio_packet_t *pkt )
     {
         if( pkt->priv )
             free( pkt->priv );
-        free( pkt->data );
+        if( pkt->rawdata )
+            free( pkt->rawdata );
+        if( pkt->data && pkt->channels )
+            af_free_buffer( pkt->data, pkt->channels );
         free( pkt );
     }
 }

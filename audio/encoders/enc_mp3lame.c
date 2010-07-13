@@ -10,6 +10,7 @@ typedef struct enc_lame_t
     audio_info_t af_info;
     hnd_t filter_chain;
 
+    int finishing;
     lame_global_flags *lame;
     int64_t last_sample;
     uint8_t *buffer;
@@ -97,6 +98,8 @@ static void free_packet( hnd_t handle, audio_packet_t *packet )
 static audio_packet_t *get_next_packet( hnd_t handle )
 {
     enc_lame_t *h = handle;
+    if( h->finishing )
+        return NULL;
 
     audio_packet_t *out = calloc( 1, sizeof( audio_packet_t ) );
     out->rawdata = malloc( h->bufsize );
@@ -105,11 +108,10 @@ static audio_packet_t *get_next_packet( hnd_t handle )
     {
         if( h->in && h->in->flags & AUDIO_FLAG_EOF )
         {
-            out->size = lame_encode_flush( h->lame, out->rawdata, h->bufsize );
-            if( !out->size )
-                goto error;
-            break;
+            h->finishing = 1;
+            goto error; // Not an error here but it'd do the same handling
         }
+        af_free_packet( h->in );
 
         if( !( h->in = af_get_samples( h->filter_chain, h->last_sample, h->last_sample + h->info.framelen ) ) )
             goto error;
@@ -117,15 +119,33 @@ static audio_packet_t *get_next_packet( hnd_t handle )
 
         out->size = lame_encode_buffer_float( h->lame, h->in->data[0], h->in->data[1],
                                               h->in->samplecount, out->rawdata, h->bufsize );
-        af_free_packet( h->in );
     }
 
     return out;
 
 error:
-    free_packet( h, out );
+    af_free_packet( h->in );
+    af_free_packet( out );
     return NULL;
 }
+
+static audio_packet_t *finish( hnd_t encoder )
+{
+    enc_lame_t *h = encoder;
+    h->finishing = 1;
+    
+    audio_packet_t *out = calloc( 1, sizeof( audio_packet_t ) );
+    out->rawdata = malloc( h->bufsize );
+    out->size = lame_encode_flush( h->lame, out->rawdata, h->bufsize );
+    if( !out->size )
+        goto error;
+    return out;
+    
+error:
+    af_free_packet( out );
+    return NULL;
+}
+
 
 static void mp3_close( hnd_t handle )
 {
@@ -140,6 +160,7 @@ const audio_encoder_t audio_encoder_mp3 =
     .init = init,
     .get_info = get_info,
     .get_next_packet = get_next_packet,
+    .finish = finish,
     .free_packet = free_packet,
     .close = mp3_close
 };

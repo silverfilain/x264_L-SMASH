@@ -20,6 +20,8 @@ typedef struct lavf_source_t
     intptr_t surplus;
     intptr_t len;
     uint64_t bytepos;
+
+    AVPacket *pkt;
 } lavf_source_t;
 
 #define DEFAULT_BUFSIZE AVCODEC_MAX_AUDIO_FRAME_SIZE * 2
@@ -176,12 +178,11 @@ static struct AVPacket *next_packet( lavf_source_t *h )
 static int low_decode_audio( lavf_source_t *h, uint8_t *buf, intptr_t buflen )
 {
     static AVPacket pkt_temp;
-    static AVPacket *pkt = NULL;
     static uint8_t desync_warn = 0;
 
     int len = 0, datalen = 0;
 
-    while( pkt && pkt_temp.size > 0 )
+    while( h->pkt && pkt_temp.size > 0 )
     {
         datalen = buflen;
         len = avcodec_decode_audio3( h->ctx, (int16_t*) buf, &datalen, &pkt_temp);
@@ -203,14 +204,14 @@ static int low_decode_audio( lavf_source_t *h, uint8_t *buf, intptr_t buflen )
         return datalen;
     }
 
-    free_avpacket( pkt );
-    pkt = next_packet( h );
+    free_avpacket( h->pkt );
+    h->pkt = next_packet( h );
 
-    if( !pkt )
+    if( !h->pkt )
         return -1;
 
-    pkt_temp.data = pkt->data;
-    pkt_temp.size = pkt->size;
+    pkt_temp.data = h->pkt->data;
+    pkt_temp.size = h->pkt->size;
 
     return 0;
 }
@@ -350,7 +351,7 @@ static struct audio_packet_t *get_samples( hnd_t handle, int64_t first_sample, i
 
         if( lastavail < lastreq )
         {
-            pkt->size        = lastavail - h->bytepos - start;
+            pkt->size        = lastavail - start;
             pkt->samplecount = pkt->size / h->info.samplesize;
             pkt->flags       = AUDIO_FLAG_EOF;
         }
@@ -370,6 +371,7 @@ static void lavfsource_close( hnd_t handle )
     assert( handle );
     lavf_source_t *h = handle;
     av_free( h->buffer );
+    free_avpacket( h->pkt );
     avcodec_close( h->ctx );
     av_close_input_file( h->lavf );
     free( h );

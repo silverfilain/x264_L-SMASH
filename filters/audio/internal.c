@@ -31,9 +31,11 @@ float **af_dup_buffer( float **buffer, unsigned channels, unsigned samplecount )
 
 void af_free_buffer( float **buffer, unsigned channels )
 {
+    if( !buffer )
+        return;
     for( int c = 0; c < channels; c++ )
         free( buffer[c] );
-    free( buffer-2 );
+    free( buffer );
 }
 
 int af_cat_buffer( float **buf, unsigned bufsamples, float **in, unsigned insamples, unsigned channels )
@@ -112,6 +114,8 @@ uint8_t *af_convert( enum SampleFmt outfmt, uint8_t *input, enum SampleFmt fmt, 
     int totalsamples = channels * samplecount;
     int sz = samplesize( outfmt ) * totalsamples;
     uint8_t *out = malloc( sz );
+    if( !out )
+        return NULL;
 
     if( fmt == outfmt )
     {

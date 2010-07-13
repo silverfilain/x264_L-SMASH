@@ -361,7 +361,7 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
 }
 
 #if HAVE_AUDIO
-static int write_audio( flv_hnd_t *p_flv, int64_t video_dts )
+static int write_audio( flv_hnd_t *p_flv, int64_t video_dts, int finish )
 {
     flv_audio_hnd_t *a_flv = p_flv->a_flv;
     flv_buffer *c = p_flv->c;
@@ -373,9 +373,16 @@ static int write_audio( flv_hnd_t *p_flv, int64_t video_dts )
     int64_t maxframe = video_dts * a_flv->step_den / a_flv->step_num;
     int64_t dts;
     audio_packet_t *frame;
-    while( a_flv->framenum <= maxframe )
+    while( a_flv->framenum <= maxframe || maxframe < 0 )
     {
-        frame = audio_encode_frame( a_flv->encoder );
+        if( finish )
+            frame = audio_encoder_finish( a_flv->encoder );
+        else if( !(frame = audio_encode_frame( a_flv->encoder )) )
+        {
+            finish = 1;
+            continue;
+        }
+        
         if( !frame ) break;
 
         dts = a_flv->framenum++ * a_flv->step_num / a_flv->step_den;
@@ -431,7 +438,7 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
     p_flv->i_prev_pts = p_picture->i_pts;
 
 #if HAVE_AUDIO
-    FAIL_IF_ERR( p_flv->a_flv && write_audio( p_flv, dts ) < 0, "flv", "error writing audio\n" );
+    FAIL_IF_ERR( p_flv->a_flv && write_audio( p_flv, dts, 0 ) < 0, "flv", "error writing audio\n" );
 #endif
 
     // A new frame - write packet header
@@ -475,6 +482,11 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
 {
     flv_hnd_t *p_flv = handle;
     flv_buffer *c = p_flv->c;
+    
+#if HAVE_AUDIO
+    FAIL_IF_ERR( p_flv->a_flv && write_audio( p_flv, -1, 1 ) < 0, "flv", "error flushing audio\n" );
+    audio_encoder_close( p_flv->a_flv->encoder );
+#endif
 
     CHECK( flv_flush_data( c ) );
 

@@ -35,6 +35,14 @@ audio_packet_t *audio_encode_frame( hnd_t encoder )
     return enc->enc->get_next_packet( enc->handle );
 }
 
+audio_packet_t *audio_encoder_finish( hnd_t encoder )
+{
+    assert( encoder );
+    struct aenc_t *enc = encoder;
+
+    return enc->enc->finish( enc->handle );
+}
+
 void audio_free_frame( hnd_t encoder, audio_packet_t *frame )
 {
     assert( encoder );
