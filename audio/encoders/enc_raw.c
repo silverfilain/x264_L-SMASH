@@ -59,6 +59,11 @@ static audio_packet_t *get_next_packet( hnd_t handle )
     return out;
 }
 
+static void skip_samples( hnd_t handle, uint64_t samplecount )
+{
+    ((enc_raw_t*)handle)->last_sample += samplecount;
+}
+
 static audio_packet_t *finish( hnd_t handle )
 {
     ((enc_raw_t*)handle)->finishing = 1;
@@ -80,6 +85,7 @@ const audio_encoder_t audio_encoder_raw =
     .init = init,
     .get_info = get_info,
     .get_next_packet = get_next_packet,
+    .skip_samples = skip_samples,
     .finish = finish,
     .free_packet = free_packet,
     .close = raw_close

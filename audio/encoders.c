@@ -35,6 +35,14 @@ audio_packet_t *audio_encode_frame( hnd_t encoder )
     return enc->enc->get_next_packet( enc->handle );
 }
 
+void audio_encoder_skip_samples( hnd_t encoder, uint64_t samplecount )
+{
+    assert( encoder );
+    struct aenc_t *enc = encoder;
+
+    return enc->enc->skip_samples( enc->handle, samplecount );
+}
+
 audio_packet_t *audio_encoder_finish( hnd_t encoder )
 {
     assert( encoder );

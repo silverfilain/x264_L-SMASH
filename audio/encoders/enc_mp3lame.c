@@ -129,6 +129,11 @@ error:
     return NULL;
 }
 
+static void skip_samples( hnd_t handle, uint64_t samplecount )
+{
+    ((enc_lame_t*)handle)->last_sample += samplecount;
+}
+
 static audio_packet_t *finish( hnd_t encoder )
 {
     enc_lame_t *h = encoder;
@@ -160,6 +165,7 @@ const audio_encoder_t audio_encoder_mp3 =
     .init = init,
     .get_info = get_info,
     .get_next_packet = get_next_packet,
+    .skip_samples = skip_samples,
     .finish = finish,
     .free_packet = free_packet,
     .close = mp3_close

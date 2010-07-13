@@ -35,7 +35,7 @@ typedef struct
     int header;
     int codecid;
     int stereo;
-    int64_t framenum;
+    int64_t lastdts;
     int64_t step_num;
     int64_t step_den;
 } flv_audio_hnd_t;
@@ -87,6 +87,7 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
     CHECK( enc = audio_encoder_open( encoder, filters, audio_parameters ) );
     flv_hnd_t *p_flv = handle;
     flv_audio_hnd_t *a_flv = p_flv->a_flv = calloc( 1, sizeof( flv_audio_hnd_t ) );
+    a_flv->lastdts = INT64_MIN;
     audio_info_t *info = a_flv->info = audio_encoder_info( enc );
 
     int header = 0;
@@ -368,12 +369,16 @@ static int write_audio( flv_hnd_t *p_flv, int64_t video_dts, int finish )
 
     assert( a_flv );
 
-    int64_t start = a_flv->framenum;
     int aac = a_flv->codecid == FLV_CODECID_AAC;
-    int64_t maxframe = video_dts * a_flv->step_den / a_flv->step_num;
-    int64_t dts;
+    if( a_flv->lastdts == INT64_MIN )
+    {
+        if( video_dts > 0 )
+            audio_encoder_skip_samples( a_flv->encoder, video_dts * a_flv->info->samplerate / 1000 );
+        a_flv->lastdts = video_dts; // first frame (--seek)
+    }
     audio_packet_t *frame;
-    while( a_flv->framenum <= maxframe || maxframe < 0 )
+    int frames = 0;
+    while( a_flv->lastdts <= video_dts || video_dts < 0 )
     {
         if( finish )
             frame = audio_encoder_finish( a_flv->encoder );
@@ -382,15 +387,16 @@ static int write_audio( flv_hnd_t *p_flv, int64_t video_dts, int finish )
             finish = 1;
             continue;
         }
-        
+
         if( !frame ) break;
 
-        dts = a_flv->framenum++ * a_flv->step_num / a_flv->step_den;
+        a_flv->lastdts += a_flv->step_num / a_flv->step_den;
+        fprintf( stderr, "DEBUG: (vdts: %"PRId64", adts: %"PRId64")\n", video_dts, a_flv->lastdts );
 
         x264_put_byte( c, FLV_TAG_TYPE_AUDIO );
         x264_put_be24( c, 1 + aac + frame->size );
-        x264_put_be24( c, (int32_t) dts );
-        x264_put_byte( c, (int32_t) dts >> 24 );
+        x264_put_be24( c, (int32_t) a_flv->lastdts );
+        x264_put_byte( c, (int32_t) a_flv->lastdts >> 24 );
         x264_put_be24( c, 0 );
 
         x264_put_byte( c, a_flv->header );
@@ -403,8 +409,9 @@ static int write_audio( flv_hnd_t *p_flv, int64_t video_dts, int finish )
         audio_free_frame( a_flv->encoder, frame );
 
         CHECK( flv_flush_data( c ) );
+        ++frames;
     }
-    return a_flv->framenum - start;
+    return frames;
 }
 #endif
 
@@ -484,8 +491,11 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
     flv_buffer *c = p_flv->c;
     
 #if HAVE_AUDIO
-    FAIL_IF_ERR( p_flv->a_flv && write_audio( p_flv, -1, 1 ) < 0, "flv", "error flushing audio\n" );
-    audio_encoder_close( p_flv->a_flv->encoder );
+    if( p_flv->a_flv )
+    {
+        FAIL_IF_ERR( p_flv->a_flv && write_audio( p_flv, -1, 1 ) < 0, "flv", "error flushing audio\n" );
+        audio_encoder_close( p_flv->a_flv->encoder );
+    }
 #endif
 
     CHECK( flv_flush_data( c ) );
