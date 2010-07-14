@@ -614,12 +614,13 @@ static void Help( x264_param_t *defaults, int longhelp )
     H0( "Audio:\n" );
 #if HAVE_AUDIO
     H0( "Audio is automatically opened from the input file if supported by the demuxer.\n" );
-    H0( "      --noaudio               Disables audio copy / transcoding\n" );
     H0( "      --audiofile <filename>  Uses audio from the specified file\n" );
-    H0( "      --acodec <string>       Specifies the audio codec.");
+    H0( "      --acodec <string>       Specifies the audio codec [default].");
     H1( " Supported codecs:\n" );
 #define CODEC( test, name ) if( test )                     \
     H1( "                                  - " name "\n" )
+    CODEC( 1        , "default (choose automatically)" );
+    CODEC( 1        , "none (disables audio)" );
     CODEC( 1        , "raw" );
     CODEC( HAVE_LAME, "mp3" );
 #undef CODEC
@@ -696,7 +697,6 @@ enum {
     OPT_TIMEBASE,
     OPT_PULLDOWN,
     OPT_LOG_LEVEL,
-    OPT_NOAUDIO,
     OPT_AUDIOFILE,
     OPT_AUDIOCODEC,
     OPT_AUDIOBITRATE,
@@ -848,7 +848,6 @@ static struct option long_options[] =
     { "nal-hrd",     required_argument, NULL, 0 },
     { "pulldown",    required_argument, NULL, OPT_PULLDOWN },
     { "fake-interlaced",   no_argument, NULL, 0 },
-    { "noaudio",           no_argument, NULL, OPT_NOAUDIO },
     { "audiofile",   required_argument, NULL, OPT_AUDIOFILE },
     { "acodec",      required_argument, NULL, OPT_AUDIOCODEC },
     { "abitrate",    required_argument, NULL, OPT_AUDIOBITRATE },
@@ -1019,11 +1018,11 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
     char *tune = NULL;
 
 #if HAVE_AUDIO
-    char *audio_enc = "default";
+    char *audio_enc      = "default";
     char *audio_filename = NULL;
-    int audio_bitrate = -1;
-    float audio_quality = 6;
-    int audio_enable = 1;
+    int audio_bitrate    = -1;
+    float audio_quality  = 6;
+    int audio_enable     = 1;
 #endif
 
     x264_param_default( &defaults );
@@ -1177,16 +1176,6 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
             case OPT_PULLDOWN:
                 FAIL_IF_ERROR( parse_enum_value( optarg, pulldown_names, &opt->i_pulldown ), "Unknown pulldown `%s'\n", optarg )
                 break;
-            case OPT_NOAUDIO:
-#if HAVE_AUDIO
-                audio_enable = 0;
-                break;
-#endif
-            case OPT_AUDIOFILE:
-#if HAVE_AUDIO
-                audio_filename = optarg;
-                break;
-#endif
             case OPT_AUDIOCODEC:
 #if HAVE_AUDIO
                 audio_enc = strdup( optarg );
@@ -1194,6 +1183,14 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
                     audio_enable = 0;
                 else FAIL_IF_ERROR( !strcmp( audio_enc, "default" ) || !encoder_by_name( audio_enc ),
                                     "audio encoder %s not supported or not compiled in\n" )
+                break;
+#else
+                if( !strcmp( optarg, "none" ) || !strcmp( optarg, "default" ) )
+                    break;
+#endif
+            case OPT_AUDIOFILE:
+#if HAVE_AUDIO
+                audio_filename = optarg;
                 break;
 #endif
             case OPT_AUDIOBITRATE:

@@ -267,10 +267,8 @@ static hnd_t open_audio( hnd_t handle, int track )
     }
     return audio_open_from_file( NULL, h->filename, track );
 }
-#endif
 
-const cli_input_t lavf_input = { open_file, get_frame_total, picture_alloc, read_frame, NULL, picture_clean, close_file,
-#if HAVE_AUDIO
-                                 open_audio
+const cli_input_t lavf_input = { open_file, get_frame_total, picture_alloc, read_frame, NULL, picture_clean, close_file, open_audio };
+#else
+const cli_input_t lavf_input = { open_file, get_frame_total, picture_alloc, read_frame, NULL, picture_clean, close_file };
 #endif
-};

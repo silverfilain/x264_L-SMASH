@@ -138,14 +138,14 @@ static audio_packet_t *finish( hnd_t encoder )
 {
     enc_lame_t *h = encoder;
     h->finishing = 1;
-    
+
     audio_packet_t *out = calloc( 1, sizeof( audio_packet_t ) );
     out->rawdata = malloc( h->bufsize );
     out->size = lame_encode_flush( h->lame, out->rawdata, h->bufsize );
     if( !out->size )
         goto error;
     return out;
-    
+
 error:
     af_free_packet( out );
     return NULL;

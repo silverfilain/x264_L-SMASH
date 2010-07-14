@@ -13,8 +13,8 @@ hnd_t audio_encoder_open( const audio_encoder_t *encoder, hnd_t filter_chain, co
 {
     assert( encoder && filter_chain );
     struct aenc_t *enc = calloc( 1, sizeof( struct aenc_t ) );
-    enc->enc = encoder;
-    enc->handle = encoder->init( filter_chain, opts );
+    enc->enc           = encoder;
+    enc->handle        = encoder->init( filter_chain, opts );
 
     return enc;
 }

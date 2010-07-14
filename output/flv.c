@@ -488,7 +488,7 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
 {
     flv_hnd_t *p_flv = handle;
     flv_buffer *c = p_flv->c;
-    
+
 #if HAVE_AUDIO
     if( p_flv->a_flv )
     {

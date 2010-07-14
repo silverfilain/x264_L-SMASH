@@ -73,7 +73,7 @@ static int init( hnd_t *handle, const char *opt_str )
     if( track >= 0 )
     {
         if( track < h->lavf->nb_streams &&
-                h->lavf->streams[track]->codec->codec_type == CODEC_TYPE_AUDIO )
+            h->lavf->streams[track]->codec->codec_type == CODEC_TYPE_AUDIO )
             tid = track;
         else
             AF_LOG_ERR( h, "requested track %d is unavailable "
@@ -82,8 +82,8 @@ static int init( hnd_t *handle, const char *opt_str )
     else // TRACK_ANY (pick first)
     {
         for( track = 0;
-                track < h->lavf->nb_streams &&
-                h->lavf->streams[track]->codec->codec_type != CODEC_TYPE_AUDIO; )
+             track < h->lavf->nb_streams &&
+             h->lavf->streams[track]->codec->codec_type != CODEC_TYPE_AUDIO; )
             ++track;
         if( track < h->lavf->nb_streams )
             tid = track;
@@ -120,7 +120,7 @@ static int init( hnd_t *handle, const char *opt_str )
     h->bufsize = DEFAULT_BUFSIZE;
     h->surplus = h->info.framesize * 3 / 2;
     assert( h->bufsize > h->surplus * 2 );
-    h->buffer = av_malloc( h->bufsize );
+    h->buffer  = av_malloc( h->bufsize );
 
     if( !buffer_next_frame( h ) )
         goto codecfail;
@@ -185,7 +185,7 @@ static int low_decode_audio( lavf_source_t *h, uint8_t *buf, intptr_t buflen )
     while( h->pkt && pkt_temp.size > 0 )
     {
         datalen = buflen;
-        len = avcodec_decode_audio3( h->ctx, (int16_t*) buf, &datalen, &pkt_temp);
+        len = avcodec_decode_audio3( h->ctx, (int16_t*) buf, &datalen, &pkt_temp );
 
         if( len < 0 ) {
             // Broken frame, drop
@@ -246,7 +246,7 @@ static int buffer_next_frame( lavf_source_t *h )
     if( h->len + dec->size > h->bufsize )
     {
         memmove( h->buffer, h->buffer + dec->size, h->bufsize - dec->size );
-        h->len -= dec->size;
+        h->len     -= dec->size;
         h->bytepos += dec->size;
     }
     memcpy( h->buffer + h->len, dec->data, dec->size );
@@ -303,9 +303,9 @@ static struct audio_packet_t *get_samples( hnd_t handle, int64_t first_sample, i
         return NULL;
 
     audio_packet_t *pkt = calloc( 1, sizeof( audio_packet_t ) );
-    pkt->channels    = h->info.channels;
-    pkt->samplecount = last_sample - first_sample;
-    pkt->size        = pkt->samplecount * h->info.samplesize;
+    pkt->channels       = h->info.channels;
+    pkt->samplecount    = last_sample - first_sample;
+    pkt->size           = pkt->samplecount * h->info.samplesize;
 
     if( pkt->size + h->surplus > h->bufsize )
     {
@@ -342,12 +342,12 @@ static struct audio_packet_t *get_samples( hnd_t handle, int64_t first_sample, i
     }
     else
     {
-        int64_t lastreq = last_sample * h->info.samplesize;
+        int64_t lastreq   = last_sample * h->info.samplesize;
         int64_t lastavail = fill_buffer_until( h, last_sample );
         if( lastavail < 0 )
             goto fail;
 
-        intptr_t start  = ( first_sample * h->info.samplesize ) - h->bytepos;
+        intptr_t start = ( first_sample * h->info.samplesize ) - h->bytepos;
 
         if( lastavail < lastreq )
         {
