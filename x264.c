@@ -1192,6 +1192,8 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
                 audio_enc = strdup( optarg );
                 if( !strcmp( audio_enc, "none" ) )
                     audio_enable = 0;
+                else FAIL_IF_ERROR( !strcmp( audio_enc, "default" ) || !encoder_by_name( audio_enc ),
+                                    "audio encoder %s not supported or not compiled in\n" )
                 break;
 #endif
             case OPT_AUDIOBITRATE:

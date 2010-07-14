@@ -69,7 +69,7 @@ void audio_encoder_close( hnd_t encoder )
     free( enc );
 }
 
-static const audio_encoder_t *encoder_by_name( char *name )
+const audio_encoder_t *encoder_by_name( char *name )
 {
 #define IFRET( enc ) if( !strcmp( #enc, name ) ) return &audio_encoder_ ## enc;
 #if HAVE_LAME
