@@ -591,10 +591,12 @@ fi
 
 if [ "$audio" = "auto" -a "$lavf" = "yes" ]; then
     audio="yes"
+    audio_encs="raw"
     if [ "$audio_mp3" = "auto" ]; then
         if cc_check lame/lame.h "-lmp3lame" "get_lame_version();"; then
             LDFLAGSCLI="-lmp3lame $LDFLAGSCLI"
             audio_mp3="yes"
+            audio_encs="$audio_encs, mp3"
         else
             audio_mp3="no"
         fi
@@ -755,7 +757,7 @@ asm:        $asm
 avs:        $avs
 lavf:       $lavf
 ffms:       $ffms
-audio:      $audio
+audio:      $audio$(test $audio = "yes" && echo " ($audio_encs)")
 gpac:       $gpac
 pthread:    $pthread
 debug:      $debug
