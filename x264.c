@@ -1133,7 +1133,7 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
     char *audio_enc      = "auto";
     char *audio_filename = NULL;
     int audio_bitrate    = -1;
-    float audio_quality  = 6;
+    float audio_quality  = NAN;
     int audio_enable     = 1;
 #endif
 
@@ -1420,9 +1420,9 @@ generic_option:
     char arg[30] = { 0 };
     if( audio_enable )
     {
-        if ( audio_bitrate > 0 )
+        if( audio_bitrate > 0 )
             snprintf( arg, 30, "bitrate=%d", audio_bitrate );
-        else
+        else if( audio_quality == audio_quality ) // not NaN
             snprintf( arg, 30, "vbr=%f", audio_quality );
     }
 #endif
