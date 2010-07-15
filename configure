@@ -822,3 +822,4 @@ rm conftest.log
 
 echo
 echo "You can run 'make' or 'make fprofiled' now."
+
