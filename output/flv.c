@@ -80,11 +80,10 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
 
     // TODO: support adpcm_swf, pcm and aac
     const audio_encoder_t *encoder = select_audio_encoder( audio_enc, (char*[]){ "mp3", "raw", NULL } );
-    if( !encoder )
-        return -1;
+    FAIL_IF_ERR( !encoder, "flv", "unable to select audio encoder\n" );
 
     hnd_t enc;
-    CHECK( enc = audio_encoder_open( encoder, filters, audio_parameters ) );
+    FAIL_IF_ERR( !(enc = audio_encoder_open( encoder, filters, audio_parameters )), "flv", "error opening audio encoder" );
     flv_hnd_t *p_flv = handle;
     flv_audio_hnd_t *a_flv = p_flv->a_flv = calloc( 1, sizeof( flv_audio_hnd_t ) );
     a_flv->lastdts = INT64_MIN;
@@ -189,7 +188,7 @@ static int open_file( char *psz_filename, hnd_t *p_handle, hnd_t audio_filters, 
     int ret = 0;
 #if HAVE_AUDIO
     ret = audio_init( p_flv, audio_filters, audio_enc, audio_params );
-    CHECK( ret );
+    FAIL_IF_ERR( ret < 0, "flv", "unable to init audio output" );
 #endif
     CHECK( write_header( p_flv->c, ret ) );
     *p_handle = p_flv;
