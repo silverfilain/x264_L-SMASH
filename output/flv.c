@@ -373,7 +373,7 @@ static int write_audio( flv_hnd_t *p_flv, int64_t video_dts, int finish )
     {
         if( video_dts > 0 )
             audio_encoder_skip_samples( a_flv->encoder, video_dts * a_flv->info->samplerate / 1000 );
-        a_flv->lastdts = video_dts; // first frame (--seek)
+        a_flv->lastdts = video_dts; // first frame (nonzero if --seek is used)
     }
     audio_packet_t *frame;
     int frames = 0;
