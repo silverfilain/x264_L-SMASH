@@ -1300,7 +1300,7 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
                 break;
             case OPT_AUDIOCODEC:
 #if HAVE_AUDIO
-                audio_enc = strdup( optarg );
+                audio_enc = optarg;
                 if( !strcmp( audio_enc, "none" ) )
                     audio_enable = 0;
                 else FAIL_IF_ERROR( !strcmp( audio_enc, "auto" ) || !encoder_by_name( audio_enc ),
