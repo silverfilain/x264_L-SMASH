@@ -36,13 +36,16 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
 
     char *cbr = x264_get_option( "bitrate", opts );
     char *vbr = x264_get_option( "vbr", opts );
-    assert( ( cbr && !vbr ) || ( !cbr && vbr ) );
 
     float brval = x264_otof( vbr, 6.0 );
     brval       = x264_otof( cbr, brval );
     int quality = x264_otoi( x264_get_option( "quality", opts ), 0 );
 
     x264_free_string_array( opts );
+    if( cbr && vbr ) {
+        x264_cli_log( "lame", X264_LOG_ERROR, "both bitrate and quality mode specified" );
+        return 0;
+    }
 
     h->info.codec_name     = "mp3";
     h->info.extradata      = NULL;

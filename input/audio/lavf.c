@@ -42,7 +42,11 @@ static int init( hnd_t *handle, const char *opt_str )
     char *filename = x264_get_option( "filename", opts );
     char *trackstr = x264_otos( x264_get_option( "track", opts ), "any" );
 
-    assert( filename );
+    if( !filename )
+    {
+        x264_cli_log( "lavf", X264_LOG_ERROR, "no filename given" );
+        goto fail2;
+    }
 
     int track;
     if ( !strcmp( trackstr, "any" ) )
