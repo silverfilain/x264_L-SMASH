@@ -39,7 +39,7 @@ static int open_file( char *psz_filename, hnd_t *p_handle, hnd_t audio_filters, 
 {
     mkv_hnd_t *p_mkv;
 
-    FAIL_IF_ERR( audio_enc && ( strcmp( audio_enc, "none" ) && strcmp( audio_enc, "default" ) ), "matroska",
+    FAIL_IF_ERR( audio_enc && ( strcmp( audio_enc, "none" ) && strcmp( audio_enc, "auto" ) ), "matroska",
                  "audio is not yet supported on this muxer\n" );
 
     *p_handle = NULL;

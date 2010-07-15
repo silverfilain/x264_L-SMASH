@@ -663,12 +663,12 @@ static void Help( x264_param_t *defaults, int longhelp )
 #if HAVE_AUDIO
     H0( "Audio is automatically opened from the input file if supported by the demuxer.\n" );
     H0( "      --audiofile <filename>  Uses audio from the specified file\n" );
-    H0( "      --acodec <string>       Specifies the audio codec [default].");
+    H0( "      --acodec <string>       Specifies the audio codec [auto].");
     H1( " Supported codecs:\n" );
 #define CODEC( test, name ) if( test )                     \
     H1( "                                  - " name "\n" )
-    CODEC( 1        , "default (choose automatically)" );
-    CODEC( 1        , "none (disables audio)" );
+    CODEC( 1        , "auto" );
+    CODEC( 1        , "none" );
     CODEC( 1        , "raw" );
     CODEC( HAVE_LAME, "mp3" );
 #undef CODEC
@@ -1130,7 +1130,7 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
     char *tune = NULL;
 
 #if HAVE_AUDIO
-    char *audio_enc      = "default";
+    char *audio_enc      = "auto";
     char *audio_filename = NULL;
     int audio_bitrate    = -1;
     float audio_quality  = 6;
@@ -1303,11 +1303,11 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
                 audio_enc = strdup( optarg );
                 if( !strcmp( audio_enc, "none" ) )
                     audio_enable = 0;
-                else FAIL_IF_ERROR( !strcmp( audio_enc, "default" ) || !encoder_by_name( audio_enc ),
+                else FAIL_IF_ERROR( !strcmp( audio_enc, "auto" ) || !encoder_by_name( audio_enc ),
                                     "audio encoder %s not supported or not compiled in\n" )
                 break;
 #else
-                if( !strcmp( optarg, "none" ) || !strcmp( optarg, "default" ) )
+                if( !strcmp( optarg, "none" ) || !strcmp( optarg, "auto" ) )
                     break;
 #endif
             case OPT_AUDIOFILE:
