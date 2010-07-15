@@ -26,7 +26,7 @@ extern const audio_encoder_t audio_encoder_mp3;
  * If the user wants 'none' to be a default, it must be tested outside of this function
  * If the user wants to allow any encoder, the default case must be tested outside of this function */
 const audio_encoder_t *select_audio_encoder( char *encoder, char* allowed_list[] );
-const audio_encoder_t *encoder_by_name( char *name )
+const audio_encoder_t *encoder_by_name( char *name );
 hnd_t audio_encoder_open( const audio_encoder_t *encoder, hnd_t filter_chain, const char *opts );
 
 audio_info_t *audio_encoder_info( hnd_t encoder );
