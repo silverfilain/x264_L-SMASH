@@ -52,6 +52,7 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     h->info.extradata_size = 0;
 
     h->lame = lame_init();
+    // lame expects floats to be in the same range as shorts, our floats are -1..1 so tell it to scale
     lame_set_scale( h->lame, 32768 );
     lame_set_in_samplerate( h->lame, h->info.samplerate );
     lame_set_num_channels( h->lame, h->info.channels );
@@ -73,7 +74,7 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     h->info.chansize   = 2;
     h->info.samplesize = 2 * h->info.channels;
 
-    h->bufsize = 125 * h->info.framelen / 100 + 7200;
+    h->bufsize = 125 * h->info.framelen / 100 + 7200; // from lame.h, largest frame that the encoding functions may return
 
     x264_cli_log( "audio", X264_LOG_INFO, "opened lame mp3 encoder (%s: %g%s)\n",
                   ( cbr ? "bitrate" : "VBR" ), brval,
