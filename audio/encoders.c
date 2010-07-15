@@ -86,17 +86,29 @@ const audio_encoder_t *select_audio_encoder( char *encoder, char* allowed_list[]
         return NULL;
     if( allowed_list )
     {
-        if( !strcmp( encoder, "default" ) )
-            return encoder_by_name( allowed_list[0] );
-        int valid = 0;
-        for( int i = 0; allowed_list[i] != NULL; i++ )
-            if( !strcmp( encoder, allowed_list[i] ) )
+        if( !strcmp( encoder, "auto" ) )
+        {
+            audio_encoder_t *enc;
+            for( int i = 0; allowed_list[i] != NULL; i++ )
             {
-                valid = 1;
-                break;
+                enc = encoder_by_name( allowed_list[i] );
+                if( enc )
+                    return enc;
             }
-        if( !valid )
             return NULL;
+        }
+        else
+        {
+            int valid = 0;
+            for( int i = 0; allowed_list[i] != NULL; i++ )
+                if( !strcmp( encoder, allowed_list[i] ) )
+                {
+                    valid = 1;
+                    break;
+                }
+            if( !valid )
+                return NULL;
+        }
     }
     return encoder_by_name( encoder );
 }

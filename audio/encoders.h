@@ -20,7 +20,7 @@ extern const audio_encoder_t audio_encoder_raw;
 extern const audio_encoder_t audio_encoder_mp3;
 #endif
 
-/* allowed_list[0] is the prefered encoder if encoder is "default"
+/* the first available encoder on allowed_list is the prefered encoder if encoder is "auto"
  * allowed_list = NULL means any valid encoder is allowed
  * The 'none' case isn't handled by this function (will return NULL like with any other invalid encoder)
  * If the user wants 'none' to be a default, it must be tested outside of this function
