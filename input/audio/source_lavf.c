@@ -53,7 +53,7 @@ static int init( hnd_t *handle, const char *opt_str )
     if( track == TRACK_NONE )
     {
         x264_cli_log( "lavfsource", X264_LOG_ERROR, "no valid track requested ('any', 0 or a positive integer)\n" );
-        goto fail;
+        goto fail2;
     }
 
     INIT_FILTER_STRUCT( audio_source_lavf, lavf_source_t );
@@ -136,12 +136,13 @@ static int init( hnd_t *handle, const char *opt_str )
 codecfail:
     AF_LOG_ERR( h, "error opening the %s decoder for track %d\n", h->codec->name, h->track );
 fail:
-    x264_free_string_array( opts );
     if( h->lavf )
         av_close_input_file( h->lavf );
     if( h )
         free( h );
     *handle = NULL;
+fail2:
+    x264_free_string_array( opts );
     return -1;
 }
 
