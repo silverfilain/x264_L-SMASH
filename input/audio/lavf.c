@@ -28,7 +28,7 @@ typedef struct lavf_source_t
 
 static int buffer_next_frame( lavf_source_t *h );
 
-const audio_filter_t audio_source_lavf;
+const audio_filter_t audio_filter_lavf;
 
 static int init( hnd_t *handle, const char *opt_str )
 {
@@ -56,7 +56,7 @@ static int init( hnd_t *handle, const char *opt_str )
         goto fail2;
     }
 
-    INIT_FILTER_STRUCT( audio_source_lavf, lavf_source_t );
+    INIT_FILTER_STRUCT( audio_filter_lavf, lavf_source_t );
 
     av_register_all();
     if( !strcmp( filename, "-" ) )
