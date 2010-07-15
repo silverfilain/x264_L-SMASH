@@ -48,35 +48,35 @@ int af_cat_buffer( float **buf, unsigned bufsamples, float **in, unsigned insamp
     return 0;
 }
 
-float **af_deinterleave ( float *input, unsigned channels, unsigned samplecount )
+float **af_deinterleave ( float *samples, unsigned channels, unsigned samplecount )
 {
     float **deint = af_get_buffer( channels, samplecount );
     for( int s = 0; s < samplecount; s++ )
         for( int c = 0; c < channels; c++ )
-            deint[c][s] = input[s*channels + c];
+            deint[c][s] = samples[s*channels + c];
     return deint;
 }
 
-float *af_interleave ( float **input, unsigned channels, unsigned samplecount )
+float *af_interleave ( float **in, unsigned channels, unsigned samplecount )
 {
     float *inter = malloc( sizeof( float ) * channels * samplecount );
     for( int c = 0; c < channels; c++ )
         for( int s = 0; s < samplecount; s++ )
-            inter[s*channels + c] = input[c][s];
+            inter[s*channels + c] = in[c][s];
     return inter;
 }
 
-float **af_deinterleave2( uint8_t *input, enum SampleFmt fmt, unsigned channels, unsigned samplecount )
+float **af_deinterleave2( uint8_t *samples, enum SampleFmt fmt, unsigned channels, unsigned samplecount )
 {
-    float  *in  = (float*) af_convert( SMPFMT_FLT, input, fmt, channels, samplecount );
+    float  *in  = (float*) af_convert( SMPFMT_FLT, samples, fmt, channels, samplecount );
     float **out = af_deinterleave( in, channels, samplecount );
     free( in );
     return out;
 }
 
-uint8_t *af_interleave2( enum SampleFmt outfmt, float **input, unsigned channels, unsigned samplecount )
+uint8_t *af_interleave2( enum SampleFmt outfmt, float **in, unsigned channels, unsigned samplecount )
 {
-    float   *tmp = af_interleave( input, channels, samplecount );
+    float   *tmp = af_interleave( in, channels, samplecount );
     uint8_t *out = af_convert( outfmt, (uint8_t*) tmp, SMPFMT_FLT, channels, samplecount );
     free( tmp );
     return out;
@@ -109,7 +109,7 @@ CLIPFUN( 16, int16_t, INT16_MIN, INT16_MAX )
 CLIPFUN( 32, int32_t, INT32_MIN, INT32_MAX )
 #undef CLIPFUN
 
-uint8_t *af_convert( enum SampleFmt outfmt, uint8_t *input, enum SampleFmt fmt, unsigned channels, unsigned samplecount )
+uint8_t *af_convert( enum SampleFmt outfmt, uint8_t *in, enum SampleFmt fmt, unsigned channels, unsigned samplecount )
 {
     int totalsamples = channels * samplecount;
     int sz = samplesize( outfmt ) * totalsamples;
@@ -119,7 +119,7 @@ uint8_t *af_convert( enum SampleFmt outfmt, uint8_t *input, enum SampleFmt fmt, 
 
     if( fmt == outfmt )
     {
-        memcpy( out, input, sz );
+        memcpy( out, in, sz );
         return out;
     }
 
@@ -131,7 +131,7 @@ uint8_t *af_convert( enum SampleFmt outfmt, uint8_t *input, enum SampleFmt fmt, 
         }                                                   \
         return out;                                         \
     }
-#define IN( itype ) (((itype*)input)[i])
+#define IN( itype ) (((itype*)in)[i])
 
     CONVERT( SMPFMT_U8,  SMPFMT_S16, int16_t, (IN( uint8_t ) - 0x80) << 8 );
     CONVERT( SMPFMT_U8,  SMPFMT_S32, int32_t, (IN( uint8_t ) - 0x80) << 24 );
