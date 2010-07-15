@@ -52,7 +52,7 @@ static int init( hnd_t *handle, const char *opt_str )
 
     if( track == TRACK_NONE )
     {
-        x264_cli_log( "lavfsource", X264_LOG_ERROR, "no valid track requested ('any', 0 or a positive integer)\n" );
+        x264_cli_log( "lavf", X264_LOG_ERROR, "no valid track requested ('any', 0 or a positive integer)\n" );
         goto fail2;
     }
 
@@ -373,7 +373,7 @@ fail:
     return NULL;
 }
 
-static void lavfsource_close( hnd_t handle )
+static void lavf_close( hnd_t handle )
 {
     assert( handle );
     lavf_source_t *h = handle;
@@ -384,13 +384,13 @@ static void lavfsource_close( hnd_t handle )
     free( h );
 }
 
-const audio_filter_t audio_source_lavf =
+const audio_filter_t audio_filter_lavf =
 {
-        .name        = "lavfsource",
+        .name        = "lavf",
         .description = "Demuxes and decodes audio files using libavformat + libavcodec",
         .help        = "Arguments: filename[:track]",
         .init        = init,
         .get_samples = get_samples,
         .free_packet = free_packet,
-        .close       = lavfsource_close
+        .close       = lavf_close
 };

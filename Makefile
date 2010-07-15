@@ -52,7 +52,7 @@ SRCCLI += audio/audio.c audio/encoders.c \
           filters/audio/internal.c \
           audio/encoders/enc_raw.c
 ifneq ($(findstring HAVE_LAVF, $(CONFIG)),)
-SRCCLI += input/audio/source_lavf.c
+SRCCLI += input/audio/lavf.c
 endif
 endif
 

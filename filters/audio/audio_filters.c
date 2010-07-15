@@ -9,13 +9,12 @@ audio_info_t *af_get_info( hnd_t handle )
 
 audio_filter_t *af_get_filter( char *name )
 {
-#define CHECK( filter, type )                             \
-    extern audio_filter_t audio_##type##_##filter;        \
-    if ( !strcmp( name, audio_##type##_##filter.name ) )  \
-        return &audio_##type##_##filter
-#define CHECKFLT( fname ) CHECK( fname, filter )
+#define CHECK( filter )                                 \
+    extern audio_filter_t audio_filter_##filter;        \
+    if ( !strcmp( name, audio_filter_##filter.name ) )  \
+        return &audio_filter_##filter
 #if HAVE_LAVF
-    CHECK( lavf, source );
+    CHECK( lavf );
 #endif
 #undef CHECKFLT
 #undef CHECK
