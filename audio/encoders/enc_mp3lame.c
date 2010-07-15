@@ -31,18 +31,18 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     h->filter_chain = chain;
     h->info = h->af_info = chain->info;
 
-    char *optlist[] = { "bitrate", "vbr", "quality", NULL };
-    char **opts     = split_options( opt_str, optlist );
+    char **opts     = x264_split_options( opt_str, (const char*[]){ "bitrate", "vbr", "quality", NULL } );
     assert( opts );
 
-    char *cbr = get_option( "bitrate", opts );
-    char *vbr = get_option( "vbr"    , opts );
-    char *qua = get_option( "quality", opts );
-    float brval = cbr ? (float) atoi( cbr ) : vbr ? atof( vbr ) : 6.0;
-
-    free_string_array( opts );
-
+    char *cbr = x264_get_option( "bitrate", opts );
+    char *vbr = x264_get_option( "vbr", opts );
     assert( ( cbr && !vbr ) || ( !cbr && vbr ) );
+
+    float brval = x264_otof( vbr, 6.0 );
+    brval       = x264_otof( cbr, brval );
+    int quality = x264_otoi( x264_get_option( "quality", opts ), 0 );
+
+    x264_free_string_array( opts );
 
     h->info.codec_name     = "mp3";
     h->info.extradata      = NULL;
@@ -52,7 +52,7 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     lame_set_scale( h->lame, 32768 );
     lame_set_in_samplerate( h->lame, h->info.samplerate );
     lame_set_num_channels( h->lame, h->info.channels );
-    lame_set_quality( h->lame, 0 );
+    lame_set_quality( h->lame, quality );
     lame_set_VBR( h->lame, vbr_default );
 
     if( cbr )
@@ -62,8 +62,6 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     }
     else
         lame_set_VBR_quality( h->lame, brval );
-    if( qua )
-        lame_set_quality( h->lame, atoi( qua ) );
 
     lame_init_params( h->lame );
 

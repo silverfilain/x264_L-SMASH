@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 #include "x264cli.h"
-#include "filters/common.h"
+#include "filters/filters.h"
 
 // Ripped from ffmpeg's avcodec.h
 #ifndef CH_FRONT_LEFT

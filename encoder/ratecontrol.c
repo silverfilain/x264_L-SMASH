@@ -204,22 +204,32 @@ static inline double qscale2bits( ratecontrol_entry_t *rce, double qscale )
            + rce->misc_bits;
 }
 
-static ALWAYS_INLINE uint32_t ac_energy_plane( x264_t *h, int mb_x, int mb_y, x264_frame_t *frame, int i )
+static ALWAYS_INLINE uint32_t ac_energy_var( uint64_t sum_ssd, int shift, x264_frame_t *frame, int i )
 {
-    int w = i ? 8 : 16;
-    int shift = i ? 6 : 8;
-    int stride = frame->i_stride[i];
-    int offset = h->mb.b_interlaced
-        ? w * (mb_x + (mb_y&~1) * stride) + (mb_y&1) * stride
-        : w * (mb_x + mb_y * stride);
-    int pix = i ? PIXEL_8x8 : PIXEL_16x16;
-    stride <<= h->mb.b_interlaced;
-    uint64_t res = h->pixf.var[pix]( frame->plane[i] + offset, stride );
-    uint32_t sum = (uint32_t)res;
-    uint32_t ssd = res >> 32;
+    uint32_t sum = sum_ssd;
+    uint32_t ssd = sum_ssd >> 32;
     frame->i_pixel_sum[i] += sum;
     frame->i_pixel_ssd[i] += ssd;
     return ssd - ((uint64_t)sum * sum >> shift);
+}
+
+static ALWAYS_INLINE uint32_t ac_energy_plane( x264_t *h, int mb_x, int mb_y, x264_frame_t *frame, int i )
+{
+    int w = i ? 8 : 16;
+    int stride = frame->i_stride[i];
+    int offset = h->mb.b_interlaced
+        ? 16 * mb_x + w * (mb_y&~1) * stride + (mb_y&1) * stride
+        : 16 * mb_x + w * mb_y * stride;
+    stride <<= h->mb.b_interlaced;
+    if( i )
+    {
+        ALIGNED_ARRAY_16( pixel, pix,[FENC_STRIDE*8] );
+        h->mc.load_deinterleave_8x8x2_fenc( pix, frame->plane[1] + offset, stride );
+        return ac_energy_var( h->pixf.var[PIXEL_8x8]( pix, FENC_STRIDE ), 6, frame, i )
+             + ac_energy_var( h->pixf.var[PIXEL_8x8]( pix+FENC_STRIDE/2, FENC_STRIDE ), 6, frame, i );
+    }
+    else
+        return ac_energy_var( h->pixf.var[PIXEL_16x16]( frame->plane[0] + offset, stride ), 8, frame, i );
 }
 
 // Find the total AC energy of the block in all planes.
@@ -231,7 +241,6 @@ static NOINLINE uint32_t x264_ac_energy_mb( x264_t *h, int mb_x, int mb_y, x264_
      * sure no reordering goes on. */
     uint32_t var = ac_energy_plane( h, mb_x, mb_y, frame, 0 );
     var         += ac_energy_plane( h, mb_x, mb_y, frame, 1 );
-    var         += ac_energy_plane( h, mb_x, mb_y, frame, 2 );
     x264_emms();
     return var;
 }
@@ -724,8 +733,21 @@ int x264_ratecontrol_new( x264_t *h )
             CMP_OPT_FIRST_PASS( "bframes", h->param.i_bframe );
             CMP_OPT_FIRST_PASS( "b_pyramid", h->param.i_bframe_pyramid );
             CMP_OPT_FIRST_PASS( "intra_refresh", h->param.b_intra_refresh );
-            CMP_OPT_FIRST_PASS( "keyint", h->param.i_keyint_max );
             CMP_OPT_FIRST_PASS( "open_gop", h->param.i_open_gop );
+
+            if( (p = strstr( opts, "keyint=" )) )
+            {
+                p += 7;
+                char buf[13] = "infinite ";
+                if( h->param.i_keyint_max != X264_KEYINT_MAX_INFINITE )
+                    sprintf( buf, "%d ", h->param.i_keyint_max );
+                if( strncmp( p, buf, strlen(buf) ) )
+                {
+                    x264_log( h, X264_LOG_ERROR, "different keyint setting than first pass (%.*s vs %.*s)\n",
+                              strlen(buf)-1, buf, strcspn(p, " "), p );
+                    return -1;
+                }
+            }
 
             if( strstr( opts, "qp=0" ) && h->param.rc.i_rc_method == X264_RC_ABR )
                 x264_log( h, X264_LOG_WARNING, "1st pass was lossless, bitrate prediction will be inaccurate\n" );
@@ -2292,7 +2314,7 @@ void x264_threads_merge_ratecontrol( x264_t *h )
                 size += h->fdec->i_row_satd[row];
             int bits = t->stat.frame.i_mv_bits + t->stat.frame.i_tex_bits + t->stat.frame.i_misc_bits;
             int mb_count = (t->i_threadslice_end - t->i_threadslice_start) * h->mb.i_mb_width;
-            update_predictor( &rc->pred[h->sh.i_type+5*i], qp2qscale( rct->qpa_rc/mb_count ), size, bits );
+            update_predictor( &rc->pred[h->sh.i_type+(i+1)*5], qp2qscale( rct->qpa_rc/mb_count ), size, bits );
         }
         if( !i )
             continue;

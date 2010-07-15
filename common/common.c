@@ -1036,17 +1036,26 @@ void x264_picture_init( x264_picture_t *pic )
  ****************************************************************************/
 int x264_picture_alloc( x264_picture_t *pic, int i_csp, int i_width, int i_height )
 {
+    int csp = i_csp & X264_CSP_MASK;
+    if( csp <= X264_CSP_NONE || csp >= X264_CSP_MAX )
+        return -1;
     x264_picture_init( pic );
     pic->img.i_csp = i_csp;
-    pic->img.i_plane = 3;
+    pic->img.i_plane = csp == X264_CSP_NV12 ? 2 : 3;
     pic->img.plane[0] = x264_malloc( 3 * i_width * i_height / 2 );
     if( !pic->img.plane[0] )
         return -1;
     pic->img.plane[1] = pic->img.plane[0] + i_width * i_height;
-    pic->img.plane[2] = pic->img.plane[1] + i_width * i_height / 4;
+    if( csp != X264_CSP_NV12 )
+        pic->img.plane[2] = pic->img.plane[1] + i_width * i_height / 4;
     pic->img.i_stride[0] = i_width;
-    pic->img.i_stride[1] = i_width / 2;
-    pic->img.i_stride[2] = i_width / 2;
+    if( csp == X264_CSP_NV12 )
+        pic->img.i_stride[1] = i_width;
+    else
+    {
+        pic->img.i_stride[1] = i_width / 2;
+        pic->img.i_stride[2] = i_width / 2;
+    }
     return 0;
 }
 
@@ -1220,8 +1229,12 @@ char *x264_param2string( x264_param_t *p, int b_res )
     }
     s += sprintf( s, " weightp=%d", p->analyse.i_weighted_pred > 0 ? p->analyse.i_weighted_pred : 0 );
 
-    s += sprintf( s, " keyint=%d keyint_min=%d scenecut=%d intra_refresh=%d",
-                  p->i_keyint_max, p->i_keyint_min, p->i_scenecut_threshold, p->b_intra_refresh );
+    if( p->i_keyint_max == X264_KEYINT_MAX_INFINITE )
+        s += sprintf( s, " keyint=infinite" );
+    else
+        s += sprintf( s, " keyint=%d", p->i_keyint_max );
+    s += sprintf( s, " keyint_min=%d scenecut=%d intra_refresh=%d",
+                  p->i_keyint_min, p->i_scenecut_threshold, p->b_intra_refresh );
 
     if( p->rc.b_mb_tree || p->rc.i_vbv_buffer_size )
         s += sprintf( s, " rc_lookahead=%d", p->rc.i_lookahead );

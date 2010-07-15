@@ -34,22 +34,20 @@ static int init( hnd_t *handle, const char *opt_str )
 {
     assert( opt_str );
     assert( !(*handle) ); // This must be the first filter
-    char **opts = split_options( opt_str, (char*[]){ "filename", "track", NULL } );
+    char **opts = x264_split_options( opt_str, (const char*[]){ "filename", "track", NULL } );
 
     if( !opts )
         return -1;
 
-    char *filename = get_option( "filename", opts );
-    char *trackstr = get_option( "track", opts );
+    char *filename = x264_get_option( "filename", opts );
+    char *trackstr = x264_otos( x264_get_option( "track", opts ), "any" );
 
     assert( filename );
     int track;
-    if( !trackstr )
-        track = TRACK_ANY;
-    else if ( !strcmp( trackstr, "any" ) )
+    if ( !strcmp( trackstr, "any" ) )
         track = TRACK_ANY;
     else
-        track = atoi( trackstr );
+        track = x264_otoi( trackstr, TRACK_NONE );
 
     INIT_FILTER_STRUCT( audio_source_lavf, lavf_source_t );
 
@@ -125,13 +123,13 @@ static int init( hnd_t *handle, const char *opt_str )
     if( !buffer_next_frame( h ) )
         goto codecfail;
 
-    free_string_array( opts );
+    x264_free_string_array( opts );
     return 0;
 
 codecfail:
     AF_LOG_ERR( h, "error opening the %s decoder for track %d\n", h->codec->name, h->track );
 fail:
-    free_string_array( opts );
+    x264_free_string_array( opts );
     if( h->lavf )
         av_close_input_file( h->lavf );
     free( h );
