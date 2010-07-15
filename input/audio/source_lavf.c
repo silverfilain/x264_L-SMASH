@@ -43,11 +43,18 @@ static int init( hnd_t *handle, const char *opt_str )
     char *trackstr = x264_otos( x264_get_option( "track", opts ), "any" );
 
     assert( filename );
+
     int track;
     if ( !strcmp( trackstr, "any" ) )
         track = TRACK_ANY;
     else
         track = x264_otoi( trackstr, TRACK_NONE );
+
+    if( track == TRACK_NONE )
+    {
+        x264_cli_log( "lavfsource", X264_LOG_ERROR, "no valid track requested ('any', 0 or a positive integer)\n" );
+        goto fail;
+    }
 
     INIT_FILTER_STRUCT( audio_source_lavf, lavf_source_t );
 
@@ -132,7 +139,8 @@ fail:
     x264_free_string_array( opts );
     if( h->lavf )
         av_close_input_file( h->lavf );
-    free( h );
+    if( h )
+        free( h );
     *handle = NULL;
     return -1;
 }
