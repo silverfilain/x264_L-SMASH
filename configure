@@ -632,7 +632,7 @@ elif [ "$swscale" = "yes" ]; then
     CFLAGS="$CFLAGS $SWSCALE_CFLAGS"
 fi
 
-if [ "$audio" = "auto" -a "$lavf" = "yes" ]; then
+if [ "$audio" = "auto" ]; then
     audio="yes"
     audio_encs="raw"
     if [ "$audio_mp3" = "auto" ]; then

@@ -50,7 +50,10 @@ ifneq ($(findstring HAVE_AUDIO 1, $(CONFIG)),)
 SRCCLI += audio/audio.c audio/encoders.c \
           filters/audio/audio_filters.c \
           filters/audio/internal.c \
-          audio/encoders/enc_raw.c input/audio/source_lavf.c
+          audio/encoders/enc_raw.c
+ifneq ($(findstring HAVE_LAVF, $(CONFIG)),)
+SRCCLI += input/audio/source_lavf.c
+endif
 endif
 
 ifneq ($(findstring HAVE_LAME 1, $(CONFIG)),)

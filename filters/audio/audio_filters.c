@@ -14,7 +14,9 @@ audio_filter_t *af_get_filter( char *name )
     if ( !strcmp( name, audio_##type##_##filter.name ) )  \
         return &audio_##type##_##filter
 #define CHECKFLT( fname ) CHECK( fname, filter )
+#if HAVE_LAVF
     CHECK( lavf, source );
+#endif
 #undef CHECKFLT
 #undef CHECK
     return NULL;
