@@ -47,14 +47,14 @@ ifneq ($(findstring HAVE_GPAC, $(CONFIG)),)
 SRCCLI += output/mp4.c
 endif
 
-ifneq ($(findstring HAVE_AUDIO 1, $(CONFIG)),)
+ifneq ($(findstring HAVE_AUDIO, $(CONFIG)),)
 SRCCLI += audio/encoders/enc_raw.c
 ifneq ($(findstring HAVE_LAVF, $(CONFIG)),)
 SRCCLI += input/audio/lavf.c
 endif
 endif
 
-ifneq ($(findstring HAVE_LAME 1, $(CONFIG)),)
+ifneq ($(findstring HAVE_LAME, $(CONFIG)),)
 SRCCLI += audio/encoders/enc_mp3lame.c
 endif
 

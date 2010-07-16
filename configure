@@ -633,11 +633,13 @@ elif [ "$swscale" = "yes" ]; then
 fi
 
 if [ "$audio" = "auto" ]; then
+    define HAVE_AUDIO
     audio="yes"
     audio_encs="raw"
     if [ "$audio_mp3" = "auto" ]; then
         if cc_check lame/lame.h "-lmp3lame" "get_lame_version();"; then
             LDFLAGSCLI="-lmp3lame $LDFLAGSCLI"
+            define HAVE_LAME
             audio_mp3="yes"
             audio_encs="$audio_encs, mp3"
         else
@@ -645,9 +647,6 @@ if [ "$audio" = "auto" ]; then
         fi
     fi
 fi
-
-define HAVE_AUDIO $(test "$audio"     = "yes" && echo 1 || echo 0)
-define HAVE_LAME  $(test "$audio_mp3" = "yes" && echo 1 || echo 0)
 
 GPAC_LIBS="-lgpac_static"
 if [ $SYS = MINGW ]; then
