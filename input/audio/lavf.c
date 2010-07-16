@@ -159,7 +159,7 @@ static inline void free_avpacket( AVPacket *pkt )
 static void free_packet( hnd_t handle, audio_packet_t *pkt )
 {
     pkt->owner = NULL;
-    af_free_packet( pkt );
+    x264_af_free_packet( pkt );
 }
 
 static struct AVPacket *next_packet( lavf_source_t *h )
@@ -328,7 +328,7 @@ static struct audio_packet_t *get_samples( hnd_t handle, int64_t first_sample, i
 
         if( prev->size < expected_size ) // EOF
         {
-            af_free_packet( pkt );
+            x264_af_free_packet( pkt );
             prev->flags |= AUDIO_FLAG_EOF;
             return prev;
         }
@@ -337,18 +337,18 @@ static struct audio_packet_t *get_samples( hnd_t handle, int64_t first_sample, i
         audio_packet_t *next = get_samples( h, pivot, last_sample );
         if( !next )
         {
-            af_free_packet( prev );
+            x264_af_free_packet( prev );
             goto fail;
         }
 
-        pkt->data = af_dup_buffer( prev->data, prev->channels, prev->samplecount );
-        af_cat_buffer( pkt->data, pkt->samplecount, next->data, next->samplecount, pkt->channels );
+        pkt->data = x264_af_dup_buffer( prev->data, prev->channels, prev->samplecount );
+        x264_af_cat_buffer( pkt->data, pkt->samplecount, next->data, next->samplecount, pkt->channels );
 
         pkt->samplecount = prev->samplecount + next->samplecount;
         pkt->size        = prev->size + next->size;
 
-        af_free_packet( prev );
-        af_free_packet( next );
+        x264_af_free_packet( prev );
+        x264_af_free_packet( next );
     }
     else
     {
@@ -366,13 +366,13 @@ static struct audio_packet_t *get_samples( hnd_t handle, int64_t first_sample, i
             pkt->flags       = AUDIO_FLAG_EOF;
         }
         assert( start + pkt->size <= h->bufsize );
-        pkt->data = af_deinterleave2( h->buffer + start, h->samplefmt, pkt->channels, pkt->samplecount );
+        pkt->data = x264_af_deinterleave2( h->buffer + start, h->samplefmt, pkt->channels, pkt->samplecount );
     }
 
     return pkt;
 
 fail:
-    af_free_packet( pkt );
+    x264_af_free_packet( pkt );
     return NULL;
 }
 

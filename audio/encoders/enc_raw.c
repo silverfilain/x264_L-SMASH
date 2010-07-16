@@ -43,7 +43,7 @@ static audio_packet_t *get_next_packet( hnd_t handle )
     if( h->finishing )
         return NULL;
 
-    audio_packet_t *smp = af_get_samples( h->filter_chain, h->last_sample, h->last_sample + h->info.framelen );
+    audio_packet_t *smp = x264_af_get_samples( h->filter_chain, h->last_sample, h->last_sample + h->info.framelen );
     if( !smp )
         return NULL;
     h->last_sample += h->info.framelen;
@@ -52,9 +52,9 @@ static audio_packet_t *get_next_packet( hnd_t handle )
     memcpy( out, smp, sizeof( audio_packet_t ) );
     out->data = NULL;
     out->size = 0;
-    out->rawdata = af_interleave2( SMPFMT_S16, smp->data, smp->channels, smp->samplecount );
+    out->rawdata = x264_af_interleave2( SMPFMT_S16, smp->data, smp->channels, smp->samplecount );
     out->size = smp->samplecount * h->info.samplesize;
-    af_free_packet( smp );
+    x264_af_free_packet( smp );
 
     return out;
 }
@@ -72,7 +72,7 @@ static audio_packet_t *finish( hnd_t handle )
 
 static void free_packet( hnd_t handle, audio_packet_t *packet )
 {
-    af_free_packet( packet );
+    x264_af_free_packet( packet );
 }
 
 static void raw_close( hnd_t handle )

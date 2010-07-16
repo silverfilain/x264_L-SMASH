@@ -94,7 +94,7 @@ static audio_info_t *get_info( hnd_t handle )
 static void free_packet( hnd_t handle, audio_packet_t *packet )
 {
     packet->owner = NULL;
-    af_free_packet( packet );
+    x264_af_free_packet( packet );
 }
 
 static audio_packet_t *get_next_packet( hnd_t handle )
@@ -113,9 +113,9 @@ static audio_packet_t *get_next_packet( hnd_t handle )
             h->finishing = 1;
             goto error; // Not an error here but it'd do the same handling
         }
-        af_free_packet( h->in );
+        x264_af_free_packet( h->in );
 
-        if( !( h->in = af_get_samples( h->filter_chain, h->last_sample, h->last_sample + h->info.framelen ) ) )
+        if( !( h->in = x264_af_get_samples( h->filter_chain, h->last_sample, h->last_sample + h->info.framelen ) ) )
             goto error;
         h->last_sample += h->in->samplecount;
 
@@ -126,8 +126,8 @@ static audio_packet_t *get_next_packet( hnd_t handle )
     return out;
 
 error:
-    af_free_packet( h->in );
-    af_free_packet( out );
+    x264_af_free_packet( h->in );
+    x264_af_free_packet( out );
     return NULL;
 }
 
@@ -149,7 +149,7 @@ static audio_packet_t *finish( hnd_t encoder )
     return out;
 
 error:
-    af_free_packet( out );
+    x264_af_free_packet( out );
     return NULL;
 }
 

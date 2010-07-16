@@ -231,7 +231,7 @@ static hnd_t open_audio( hnd_t handle, int track )
         x264_cli_log( "lavf", X264_LOG_WARNING, "reading audio from non-regular files is not implemented yet.\n" );
         return 0;
     }
-    return audio_open_from_file( NULL, h->filename, track );
+    return x264_audio_open_from_file( NULL, h->filename, track );
 }
 
 const cli_input_t lavf_input = { open_file, picture_alloc, read_frame, release_frame, picture_clean, close_file, open_audio };

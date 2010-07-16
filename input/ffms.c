@@ -187,7 +187,7 @@ static int close_file( hnd_t handle )
 static hnd_t open_audio( hnd_t handle, int track )
 {
     ffms_hnd_t *h = handle;
-    return audio_open_from_file( NULL, h->filename, track );
+    return x264_audio_open_from_file( NULL, h->filename, track );
 }
 
 const cli_input_t ffms_input = { open_file, picture_alloc, read_frame, NULL, picture_clean, close_file, open_audio };

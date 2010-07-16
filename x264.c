@@ -1300,7 +1300,7 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
                 audio_enc = optarg;
                 if( !strcmp( audio_enc, "none" ) )
                     audio_enable = 0;
-                else FAIL_IF_ERROR( !strcmp( audio_enc, "auto" ) || !encoder_by_name( audio_enc ),
+                else FAIL_IF_ERROR( !strcmp( audio_enc, "auto" ) || !x264_encoder_by_name( audio_enc ),
                                     "audio encoder %s not supported or not compiled in\n" )
                 break;
 #else
@@ -1393,7 +1393,7 @@ generic_option:
     if( audio_enable )
     {
         if( audio_filename )
-            haud = audio_open_from_file( NULL, audio_filename, TRACK_ANY );
+            haud = x264_audio_open_from_file( NULL, audio_filename, TRACK_ANY );
         else if( input.open_audio )
             haud = input.open_audio( opt->hin, TRACK_ANY );
         else

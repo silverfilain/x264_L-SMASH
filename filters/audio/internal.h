@@ -42,17 +42,17 @@ enum SampleFmt {
     SMPFMT_DBL
 };
 
-float  **af_get_buffer   ( unsigned channels, unsigned samplecount );
-int      af_resize_buffer( float **buffer, unsigned channels, unsigned samplecount );
-void     af_free_buffer  ( float **buffer, unsigned channels );
-float  **af_dup_buffer   ( float **buffer, unsigned channels, unsigned samplecount );
-int      af_cat_buffer   ( float **buf, unsigned bufsamples, float **in, unsigned insamples, unsigned channels );
+float  **x264_af_get_buffer   ( unsigned channels, unsigned samplecount );
+int      x264_af_resize_buffer( float **buffer, unsigned channels, unsigned samplecount );
+void     x264_af_free_buffer  ( float **buffer, unsigned channels );
+float  **x264_af_dup_buffer   ( float **buffer, unsigned channels, unsigned samplecount );
+int      x264_af_cat_buffer   ( float **buf, unsigned bufsamples, float **in, unsigned insamples, unsigned channels );
 
-float  **af_deinterleave ( float *samples, unsigned channels, unsigned samplecount );
-float   *af_interleave   ( float **in, unsigned channels, unsigned samplecount );
+float  **x264_af_deinterleave ( float *samples, unsigned channels, unsigned samplecount );
+float   *x264_af_interleave   ( float **in, unsigned channels, unsigned samplecount );
 
-float  **af_deinterleave2( uint8_t *samples, enum SampleFmt fmt, unsigned channels, unsigned samplecount );
-uint8_t *af_interleave2  ( enum SampleFmt outfmt, float **in, unsigned channels, unsigned samplecount );
-uint8_t *af_convert      ( enum SampleFmt outfmt, uint8_t *in, enum SampleFmt fmt, unsigned channels, unsigned samplecount );
+float  **x264_af_deinterleave2( uint8_t *samples, enum SampleFmt fmt, unsigned channels, unsigned samplecount );
+uint8_t *x264_af_interleave2  ( enum SampleFmt outfmt, float **in, unsigned channels, unsigned samplecount );
+uint8_t *x264_af_convert      ( enum SampleFmt outfmt, uint8_t *in, enum SampleFmt fmt, unsigned channels, unsigned samplecount );
 
 #endif /* FILTERS_AUDIO_INTERNAL_H_ */

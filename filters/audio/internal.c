@@ -2,7 +2,7 @@
 #include <stdint.h>
 #include <math.h>
 
-float **af_get_buffer( unsigned channels, unsigned samplecount )
+float **x264_af_get_buffer( unsigned channels, unsigned samplecount )
 {
     float **samples = malloc( sizeof( float* ) * channels );
     for( int i = 0; i < channels; i++ ) {
@@ -11,7 +11,7 @@ float **af_get_buffer( unsigned channels, unsigned samplecount )
     return samples;
 }
 
-int af_resize_buffer( float **buffer, unsigned channels, unsigned samplecount )
+int x264_af_resize_buffer( float **buffer, unsigned channels, unsigned samplecount )
 {
     for( int c = 0; c < channels; c++ )
     {
@@ -21,15 +21,15 @@ int af_resize_buffer( float **buffer, unsigned channels, unsigned samplecount )
     return 0;
 }
 
-float **af_dup_buffer( float **buffer, unsigned channels, unsigned samplecount )
+float **x264_af_dup_buffer( float **buffer, unsigned channels, unsigned samplecount )
 {
-    float **buf = af_get_buffer( channels, samplecount );
+    float **buf = x264_af_get_buffer( channels, samplecount );
     for( int c = 0; c < channels; c++ )
         memcpy( buf[c], buffer[c], samplecount );
     return buf;
 }
 
-void af_free_buffer( float **buffer, unsigned channels )
+void x264_af_free_buffer( float **buffer, unsigned channels )
 {
     if( !buffer )
         return;
@@ -38,9 +38,9 @@ void af_free_buffer( float **buffer, unsigned channels )
     free( buffer );
 }
 
-int af_cat_buffer( float **buf, unsigned bufsamples, float **in, unsigned insamples, unsigned channels )
+int x264_af_cat_buffer( float **buf, unsigned bufsamples, float **in, unsigned insamples, unsigned channels )
 {
-    if( af_resize_buffer( buf, channels, bufsamples + insamples ) < 0 )
+    if( x264_af_resize_buffer( buf, channels, bufsamples + insamples ) < 0 )
         return -1;
     for( int c = 0; c < channels; c++ )
         for( int s = 0; s < insamples; s++ )
@@ -48,16 +48,16 @@ int af_cat_buffer( float **buf, unsigned bufsamples, float **in, unsigned insamp
     return 0;
 }
 
-float **af_deinterleave ( float *samples, unsigned channels, unsigned samplecount )
+float **x264_af_deinterleave ( float *samples, unsigned channels, unsigned samplecount )
 {
-    float **deint = af_get_buffer( channels, samplecount );
+    float **deint = x264_af_get_buffer( channels, samplecount );
     for( int s = 0; s < samplecount; s++ )
         for( int c = 0; c < channels; c++ )
             deint[c][s] = samples[s*channels + c];
     return deint;
 }
 
-float *af_interleave ( float **in, unsigned channels, unsigned samplecount )
+float *x264_af_interleave ( float **in, unsigned channels, unsigned samplecount )
 {
     float *inter = malloc( sizeof( float ) * channels * samplecount );
     for( int c = 0; c < channels; c++ )
@@ -66,18 +66,18 @@ float *af_interleave ( float **in, unsigned channels, unsigned samplecount )
     return inter;
 }
 
-float **af_deinterleave2( uint8_t *samples, enum SampleFmt fmt, unsigned channels, unsigned samplecount )
+float **x264_af_deinterleave2( uint8_t *samples, enum SampleFmt fmt, unsigned channels, unsigned samplecount )
 {
-    float  *in  = (float*) af_convert( SMPFMT_FLT, samples, fmt, channels, samplecount );
-    float **out = af_deinterleave( in, channels, samplecount );
+    float  *in  = (float*) x264_af_convert( SMPFMT_FLT, samples, fmt, channels, samplecount );
+    float **out = x264_af_deinterleave( in, channels, samplecount );
     free( in );
     return out;
 }
 
-uint8_t *af_interleave2( enum SampleFmt outfmt, float **in, unsigned channels, unsigned samplecount )
+uint8_t *x264_af_interleave2( enum SampleFmt outfmt, float **in, unsigned channels, unsigned samplecount )
 {
-    float   *tmp = af_interleave( in, channels, samplecount );
-    uint8_t *out = af_convert( outfmt, (uint8_t*) tmp, SMPFMT_FLT, channels, samplecount );
+    float   *tmp = x264_af_interleave( in, channels, samplecount );
+    uint8_t *out = x264_af_convert( outfmt, (uint8_t*) tmp, SMPFMT_FLT, channels, samplecount );
     free( tmp );
     return out;
 }
@@ -109,7 +109,7 @@ CLIPFUN( 16, int16_t, INT16_MIN, INT16_MAX )
 CLIPFUN( 32, int32_t, INT32_MIN, INT32_MAX )
 #undef CLIPFUN
 
-uint8_t *af_convert( enum SampleFmt outfmt, uint8_t *in, enum SampleFmt fmt, unsigned channels, unsigned samplecount )
+uint8_t *x264_af_convert( enum SampleFmt outfmt, uint8_t *in, enum SampleFmt fmt, unsigned channels, unsigned samplecount )
 {
     int totalsamples = channels * samplecount;
     int sz = samplesize( outfmt ) * totalsamples;

@@ -2,9 +2,9 @@
 
 #include <assert.h>
 
-hnd_t audio_open_from_file( audio_filter_t *preferred_filter, char *path, int trackno )
+hnd_t x264_audio_open_from_file( audio_filter_t *preferred_filter, char *path, int trackno )
 {
-    audio_filter_t *source = preferred_filter ? preferred_filter : af_get_filter( "lavf" );
+    audio_filter_t *source = preferred_filter ? preferred_filter : x264_af_get_filter( "lavf" );
     if( !source )
     {
         x264_cli_log( "audio", X264_LOG_ERROR, "no decoder / demuxer avilable!\n" );

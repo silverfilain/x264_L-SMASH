@@ -79,15 +79,15 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
         return 0;
 
     // TODO: support adpcm_swf, pcm and aac
-    const audio_encoder_t *encoder = select_audio_encoder( audio_enc, (char*[]){ "mp3", "raw", NULL } );
+    const audio_encoder_t *encoder = x264_select_audio_encoder( audio_enc, (char*[]){ "mp3", "raw", NULL } );
     FAIL_IF_ERR( !encoder, "flv", "unable to select audio encoder\n" );
 
-    hnd_t henc = audio_encoder_open( encoder, filters, audio_parameters );
+    hnd_t henc = x264_audio_encoder_open( encoder, filters, audio_parameters );
     FAIL_IF_ERR( !henc, "flv", "error opening audio encoder" );
     flv_hnd_t *p_flv = handle;
     flv_audio_hnd_t *a_flv = p_flv->a_flv = calloc( 1, sizeof( flv_audio_hnd_t ) );
     a_flv->lastdts = INT64_MIN;
-    audio_info_t *info = a_flv->info = audio_encoder_info( henc );
+    audio_info_t *info = a_flv->info = x264_audio_encoder_info( henc );
 
     int header = 0;
     if ( !strcmp( info->codec_name, "raw" ) )
@@ -153,7 +153,7 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
     return 1;
 
     error:
-    audio_encoder_close( henc );
+    x264_audio_encoder_close( henc );
     free( p_flv->a_flv );
     p_flv->a_flv = NULL;
 
@@ -372,7 +372,7 @@ static int write_audio( flv_hnd_t *p_flv, int64_t video_dts, int finish )
     if( a_flv->lastdts == INT64_MIN )
     {
         if( video_dts > 0 )
-            audio_encoder_skip_samples( a_flv->encoder, video_dts * a_flv->info->samplerate / 1000 );
+            x264_audio_encoder_skip_samples( a_flv->encoder, video_dts * a_flv->info->samplerate / 1000 );
         a_flv->lastdts = video_dts; // first frame (nonzero if --seek is used)
     }
     audio_packet_t *frame;
@@ -380,8 +380,8 @@ static int write_audio( flv_hnd_t *p_flv, int64_t video_dts, int finish )
     while( a_flv->lastdts <= video_dts || video_dts < 0 )
     {
         if( finish )
-            frame = audio_encoder_finish( a_flv->encoder );
-        else if( !(frame = audio_encode_frame( a_flv->encoder )) )
+            frame = x264_audio_encoder_finish( a_flv->encoder );
+        else if( !(frame = x264_audio_encode_frame( a_flv->encoder )) )
         {
             finish = 1;
             continue;
@@ -405,7 +405,7 @@ static int write_audio( flv_hnd_t *p_flv, int64_t video_dts, int finish )
 
         x264_put_be32( c, 11 + 1 + aac + frame->size );
 
-        audio_free_frame( a_flv->encoder, frame );
+        x264_audio_free_frame( a_flv->encoder, frame );
 
         CHECK( flv_flush_data( c ) );
         ++frames;
@@ -493,7 +493,7 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
     if( p_flv->a_flv )
     {
         FAIL_IF_ERR( p_flv->a_flv && write_audio( p_flv, -1, 1 ) < 0, "flv", "error flushing audio\n" );
-        audio_encoder_close( p_flv->a_flv->encoder );
+        x264_audio_encoder_close( p_flv->a_flv->encoder );
     }
 #endif
 

@@ -10,7 +10,7 @@ struct aenc_t
     hnd_t filters;
 };
 
-hnd_t audio_encoder_open( const audio_encoder_t *encoder, hnd_t filter_chain, const char *opts )
+hnd_t x264_audio_encoder_open( const audio_encoder_t *encoder, hnd_t filter_chain, const char *opts )
 {
     assert( encoder && filter_chain );
     struct aenc_t *enc = calloc( 1, sizeof( struct aenc_t ) );
@@ -21,7 +21,7 @@ hnd_t audio_encoder_open( const audio_encoder_t *encoder, hnd_t filter_chain, co
     return enc;
 }
 
-audio_info_t *audio_encoder_info( hnd_t encoder )
+audio_info_t *x264_audio_encoder_info( hnd_t encoder )
 {
     assert( encoder );
     struct aenc_t *enc = encoder;
@@ -29,7 +29,7 @@ audio_info_t *audio_encoder_info( hnd_t encoder )
     return enc->enc->get_info( enc->handle );
 }
 
-audio_packet_t *audio_encode_frame( hnd_t encoder )
+audio_packet_t *x264_audio_encode_frame( hnd_t encoder )
 {
     assert( encoder );
     struct aenc_t *enc = encoder;
@@ -37,7 +37,7 @@ audio_packet_t *audio_encode_frame( hnd_t encoder )
     return enc->enc->get_next_packet( enc->handle );
 }
 
-void audio_encoder_skip_samples( hnd_t encoder, uint64_t samplecount )
+void x264_audio_encoder_skip_samples( hnd_t encoder, uint64_t samplecount )
 {
     assert( encoder );
     struct aenc_t *enc = encoder;
@@ -45,7 +45,7 @@ void audio_encoder_skip_samples( hnd_t encoder, uint64_t samplecount )
     return enc->enc->skip_samples( enc->handle, samplecount );
 }
 
-audio_packet_t *audio_encoder_finish( hnd_t encoder )
+audio_packet_t *x264_audio_encoder_finish( hnd_t encoder )
 {
     assert( encoder );
     struct aenc_t *enc = encoder;
@@ -53,7 +53,7 @@ audio_packet_t *audio_encoder_finish( hnd_t encoder )
     return enc->enc->finish( enc->handle );
 }
 
-void audio_free_frame( hnd_t encoder, audio_packet_t *frame )
+void x264_audio_free_frame( hnd_t encoder, audio_packet_t *frame )
 {
     assert( encoder );
     struct aenc_t *enc = encoder;
@@ -61,18 +61,18 @@ void audio_free_frame( hnd_t encoder, audio_packet_t *frame )
     return enc->enc->free_packet( enc->handle, frame );
 }
 
-void audio_encoder_close( hnd_t encoder )
+void x264_audio_encoder_close( hnd_t encoder )
 {
     if( !encoder )
         return;
     struct aenc_t *enc = encoder;
 
     enc->enc->close( enc->handle );
-    af_close( enc->filters );
+    x264_af_close( enc->filters );
     free( enc );
 }
 
-const audio_encoder_t *encoder_by_name( char *name )
+const audio_encoder_t *x264_encoder_by_name( char *name )
 {
 #define IFRET( enc ) if( !strcmp( #enc, name ) ) return &audio_encoder_ ## enc;
 #if HAVE_LAME
@@ -83,7 +83,7 @@ const audio_encoder_t *encoder_by_name( char *name )
     return NULL;
 }
 
-const audio_encoder_t *select_audio_encoder( char *encoder, char* allowed_list[] )
+const audio_encoder_t *x264_select_audio_encoder( char *encoder, char* allowed_list[] )
 {
     if( !encoder )
         return NULL;
@@ -91,10 +91,10 @@ const audio_encoder_t *select_audio_encoder( char *encoder, char* allowed_list[]
     {
         if( !strcmp( encoder, "auto" ) )
         {
-            audio_encoder_t *enc;
+            const audio_encoder_t *enc;
             for( int i = 0; allowed_list[i] != NULL; i++ )
             {
-                enc = encoder_by_name( allowed_list[i] );
+                enc = x264_encoder_by_name( allowed_list[i] );
                 if( enc )
                     return enc;
             }
@@ -113,5 +113,5 @@ const audio_encoder_t *select_audio_encoder( char *encoder, char* allowed_list[]
                 return NULL;
         }
     }
-    return encoder_by_name( encoder );
+    return x264_encoder_by_name( encoder );
 }

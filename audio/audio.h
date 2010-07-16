@@ -11,7 +11,7 @@ enum AudioTrack
     TRACK_NONE = -2
 };
 
-hnd_t audio_open_from_file( audio_filter_t *preferred_filter, char *path, int trackno );
+hnd_t x264_audio_open_from_file( audio_filter_t *preferred_filter, char *path, int trackno );
 
 #include "audio/encoders.h"
 
