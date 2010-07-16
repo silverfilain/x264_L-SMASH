@@ -67,10 +67,6 @@ typedef struct {
     int i_seek;
     hnd_t hin;
     hnd_t hout;
-#if HAVE_AUDIO
-    hnd_t haud;
-    hnd_t haenc;
-#endif
     FILE *qpfile;
     FILE *tcfile_out;
     double timebase_convert_multiplier;
@@ -1135,6 +1131,7 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
     int audio_bitrate    = -1;
     float audio_quality  = NAN;
     int audio_enable     = 1;
+    hnd_t haud           = NULL;
 #endif
 
     x264_param_default( &defaults );
@@ -1395,17 +1392,17 @@ generic_option:
 #if HAVE_AUDIO
     if( audio_enable )
     {
-        if ( audio_filename )
-            opt->haud = audio_open_from_file( NULL, audio_filename, TRACK_ANY );
-        else if ( input.open_audio )
-            opt->haud = input.open_audio( opt->hin, TRACK_ANY );
+        if( audio_filename )
+            haud = audio_open_from_file( NULL, audio_filename, TRACK_ANY );
+        else if( input.open_audio )
+            haud = input.open_audio( opt->hin, TRACK_ANY );
         else
         {
             x264_cli_log( "x264", X264_LOG_WARNING, "the used input does not support audio and --audiofile was not given, disabling audio.\n" );
             audio_enable = 0;
         }
 
-        if ( audio_filename && !opt->haud )
+        if( audio_filename && !haud )
             return -1;
     }
 #endif
@@ -1429,7 +1426,7 @@ generic_option:
 
     FAIL_IF_ERROR(
 #if HAVE_AUDIO
-        output.open_file( output_filename, &opt->hout, opt->haud, audio_enc, arg )
+        output.open_file( output_filename, &opt->hout, haud, audio_enc, arg )
 #else
         output.open_file( output_filename, &opt->hout, NULL, NULL, NULL )
 #endif
@@ -1833,12 +1830,6 @@ static int  Encode( x264_param_t *param, cli_opt_t *opt )
         opt->tcfile_out = NULL;
     }
 
-#if HAVE_AUDIO
-    if( opt->haenc )
-        audio_encoder_close( opt->haenc );
-    if( opt->haud )
-        af_close( opt->haud );
-#endif
     filter.free( opt->hin );
     output.close_file( opt->hout, largest_pts, second_largest_pts );
 

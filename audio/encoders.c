@@ -7,6 +7,7 @@ struct aenc_t
 {
     const audio_encoder_t *enc;
     hnd_t handle;
+    hnd_t filters;
 };
 
 hnd_t audio_encoder_open( const audio_encoder_t *encoder, hnd_t filter_chain, const char *opts )
@@ -15,6 +16,7 @@ hnd_t audio_encoder_open( const audio_encoder_t *encoder, hnd_t filter_chain, co
     struct aenc_t *enc = calloc( 1, sizeof( struct aenc_t ) );
     enc->enc           = encoder;
     enc->handle        = encoder->init( filter_chain, opts );
+    enc->filters       = filter_chain;
 
     return enc;
 }
@@ -66,6 +68,7 @@ void audio_encoder_close( hnd_t encoder )
     struct aenc_t *enc = encoder;
 
     enc->enc->close( enc->handle );
+    af_close( enc->filters );
     free( enc );
 }
 
