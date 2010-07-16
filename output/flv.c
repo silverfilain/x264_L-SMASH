@@ -188,7 +188,7 @@ static int open_file( char *psz_filename, hnd_t *p_handle, hnd_t audio_filters, 
     int ret = 0;
 #if HAVE_AUDIO
     ret = audio_init( p_flv, audio_filters, audio_enc, audio_params );
-    FAIL_IF_ERR( ret < 0, "flv", "unable to init audio output" );
+    FAIL_IF_ERR( ret < 0, "flv", "unable to init audio output\n" );
 #endif
     CHECK( write_header( p_flv->c, ret ) );
     *p_handle = p_flv;
