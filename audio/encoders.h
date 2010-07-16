@@ -16,10 +16,12 @@ typedef struct audio_encoder_t
     void (*close)( hnd_t handle );
 } audio_encoder_t;
 
+#if HAVE_AUDIO
 extern const audio_encoder_t audio_encoder_raw;
 #if HAVE_LAME
 extern const audio_encoder_t audio_encoder_mp3;
 #endif
+#endif /* HAVE_AUDIO */
 
 /* the first available encoder on allowed_list is the prefered encoder if encoder is "auto"
  * allowed_list = NULL means any valid encoder is allowed

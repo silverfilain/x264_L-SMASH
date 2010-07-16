@@ -18,7 +18,8 @@ SRCCLI = x264.c input/input.c input/timecode.c input/raw.c input/y4m.c \
          output/flv.c output/flv_bytestream.c filters/filters.c \
          filters/video/video.c filters/video/source.c filters/video/internal.c \
          filters/video/resize.c filters/video/cache.c filters/video/fix_vfr_pts.c \
-         filters/video/select_every.c filters/video/crop.c
+         filters/video/select_every.c filters/video/crop.c \
+         audio/audio.c audio/encoders.c filters/audio/audio_filters.c filters/audio/internal.c
 
 SRCSO =
 
@@ -47,10 +48,7 @@ SRCCLI += output/mp4.c
 endif
 
 ifneq ($(findstring HAVE_AUDIO 1, $(CONFIG)),)
-SRCCLI += audio/audio.c audio/encoders.c \
-          filters/audio/audio_filters.c \
-          filters/audio/internal.c \
-          audio/encoders/enc_raw.c
+SRCCLI += audio/encoders/enc_raw.c
 ifneq ($(findstring HAVE_LAVF, $(CONFIG)),)
 SRCCLI += input/audio/lavf.c
 endif

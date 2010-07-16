@@ -9,6 +9,7 @@ audio_info_t *x264_af_get_info( hnd_t handle )
 
 audio_filter_t *x264_af_get_filter( char *name )
 {
+#if HAVE_AUDIO
 #define CHECK( filter )                                 \
     extern audio_filter_t audio_filter_##filter;        \
     if ( !strcmp( name, audio_filter_##filter.name ) )  \
@@ -18,6 +19,7 @@ audio_filter_t *x264_af_get_filter( char *name )
 #endif
 #undef CHECKFLT
 #undef CHECK
+#endif /* HAVE_AUDIO */
     return NULL;
 }
 

@@ -83,10 +83,12 @@ void x264_audio_encoder_close( hnd_t encoder )
 const audio_encoder_t *x264_encoder_by_name( char *name )
 {
 #define IFRET( enc ) if( !strcmp( #enc, name ) ) return &audio_encoder_ ## enc;
+#if HAVE_AUDIO
 #if HAVE_LAME
     IFRET( mp3 );
 #endif
     IFRET( raw );
+#endif /* HAVE_AUDIO */
 #undef IFRET
     return NULL;
 }

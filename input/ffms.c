@@ -35,9 +35,7 @@
 #define SetConsoleTitle(t)
 #endif
 
-#if HAVE_AUDIO
 #include "audio/audio.h"
-#endif
 
 typedef struct
 {
@@ -183,7 +181,6 @@ static int close_file( hnd_t handle )
     return 0;
 }
 
-#if HAVE_AUDIO
 static hnd_t open_audio( hnd_t handle, int track )
 {
     ffms_hnd_t *h = handle;
@@ -191,6 +188,3 @@ static hnd_t open_audio( hnd_t handle, int track )
 }
 
 const cli_input_t ffms_input = { open_file, picture_alloc, read_frame, NULL, picture_clean, close_file, open_audio };
-#else
-const cli_input_t ffms_input = { open_file, picture_alloc, read_frame, NULL, picture_clean, close_file };
-#endif
