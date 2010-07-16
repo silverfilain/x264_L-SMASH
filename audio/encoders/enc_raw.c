@@ -18,7 +18,6 @@ static hnd_t init( hnd_t filter_chain, const char *opts )
     audio_hnd_t *chain = h->filter_chain = filter_chain;
     h->info = chain->info;
 
-    h->info.codec_name     = "raw";
     h->info.extradata      = NULL;
     h->info.extradata_size = 0;
     h->info.chansize       = 2;
@@ -27,6 +26,11 @@ static hnd_t init( hnd_t filter_chain, const char *opts )
     x264_cli_log( "audio", X264_LOG_INFO, "opened raw encoder (%dbits, %dch, %dhz)\n",
                   h->info.chansize * 8, h->info.channels, h->info.samplerate );
     return h;
+}
+
+static char *get_codec_name( hnd_t handle )
+{
+    return "raw";
 }
 
 static audio_info_t *get_info( hnd_t handle )
@@ -82,11 +86,12 @@ static void raw_close( hnd_t handle )
 
 const audio_encoder_t audio_encoder_raw =
 {
-    .init = init,
-    .get_info = get_info,
+    .init            = init,
+    .get_codec_name  = get_codec_name,
+    .get_info        = get_info,
     .get_next_packet = get_next_packet,
-    .skip_samples = skip_samples,
-    .finish = finish,
-    .free_packet = free_packet,
-    .close = raw_close
+    .skip_samples    = skip_samples,
+    .finish          = finish,
+    .free_packet     = free_packet,
+    .close           = raw_close
 };

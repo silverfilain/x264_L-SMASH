@@ -7,7 +7,6 @@
 typedef struct enc_lame_t
 {
     audio_info_t info;
-    audio_info_t af_info;
     hnd_t filter_chain;
 
     int finishing;
@@ -47,7 +46,6 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
         return 0;
     }
 
-    h->info.codec_name     = "mp3";
     h->info.extradata      = NULL;
     h->info.extradata_size = 0;
 
@@ -81,6 +79,11 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
                   ( cbr ? "kbps" : "" ) );
 
     return h;
+}
+
+static char *get_codec_name( hnd_t handle )
+{
+    return "mp3";
 }
 
 static audio_info_t *get_info( hnd_t handle )
@@ -164,12 +167,12 @@ static void mp3_close( hnd_t handle )
 
 const audio_encoder_t audio_encoder_mp3 =
 {
-    .init = init,
-    .get_info = get_info,
+    .init            = init,
+    .get_codec_name  = get_codec_name,
+    .get_info        = get_info,
     .get_next_packet = get_next_packet,
-    .skip_samples = skip_samples,
-    .finish = finish,
-    .free_packet = free_packet,
-    .close = mp3_close
+    .skip_samples    = skip_samples,
+    .finish          = finish,
+    .free_packet     = free_packet,
+    .close           = mp3_close
 };
-

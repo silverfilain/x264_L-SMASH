@@ -90,9 +90,10 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
     audio_info_t *info = a_flv->info = x264_audio_encoder_info( henc );
 
     int header = 0;
-    if ( !strcmp( info->codec_name, "raw" ) )
+    char *codec = x264_audio_encoder_codec_name( henc );
+    if ( !strcmp( codec, "raw" ) )
         a_flv->codecid = FLV_CODECID_RAW;
-    else if( !strcmp( info->codec_name, "mp3" ) )
+    else if( !strcmp( codec, "mp3" ) )
         a_flv->codecid = FLV_CODECID_MP3;
 
     header |= a_flv->codecid;

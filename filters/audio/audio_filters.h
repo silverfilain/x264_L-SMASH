@@ -61,7 +61,6 @@ typedef struct audio_filter_t
 
 typedef struct audio_info_t
 {
-    char    *codec_name;
     int     samplerate; // Sample Rate in Hz
     int     channels;   // How many channels
     int64_t chanlayout; // Channel layout (CH_*)

@@ -21,6 +21,14 @@ hnd_t x264_audio_encoder_open( const audio_encoder_t *encoder, hnd_t filter_chai
     return enc;
 }
 
+char *x264_audio_encoder_codec_name( hnd_t encoder )
+{
+    assert( encoder );
+    struct aenc_t *enc = encoder;
+
+    return enc->enc->get_codec_name( enc->handle );
+}
+
 audio_info_t *x264_audio_encoder_info( hnd_t encoder )
 {
     assert( encoder );
