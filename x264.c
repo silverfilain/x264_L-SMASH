@@ -107,6 +107,21 @@ static const char * const muxer_names[] =
     0
 };
 
+// Keep in sync with x264_encoder_by_name (audio/encoders.c)
+static const char * const audio_encoders[] =
+{
+    "auto",
+    "none",
+#if HAVE_AUDIO
+    "raw",
+#if HAVE_LAME
+    "mp3",
+#endif
+#endif /* HAVE_AUDIO */
+    NULL
+};
+
+
 static const char * const pulldown_names[] = { "none", "22", "32", "64", "double", "triple", "euro", 0 };
 static const char * const log_level_names[] = { "none", "error", "warning", "info", "debug", 0 };
 
@@ -654,24 +669,14 @@ static void Help( x264_param_t *defaults, int longhelp )
 
     H0( "\n" );
     H0( "Audio:\n" );
-#if HAVE_AUDIO
     H0( "Audio is automatically opened from the input file if supported by the demuxer.\n" );
-    H0( "      --audiofile <filename>  Uses audio from the specified file\n" );
-    H0( "      --acodec <string>       Specifies the audio codec [auto].");
-    H1( " Supported codecs:\n" );
-#define CODEC( test, name ) if( test )                     \
-    H1( "                                  - " name "\n" )
-    CODEC( 1        , "auto" );
-    CODEC( 1        , "none" );
-    CODEC( 1        , "raw" );
-    CODEC( HAVE_LAME, "mp3" );
-#undef CODEC
+    H0( "      --audiofile <filename>  Uses audio from the specified file.\n" );
+    H0( "      --acodec <string>       Specifies the audio codec [auto].\n");
+    H1( "                              Supported and compiled in codecs:\n" );
+    H1( "                                  - %s", stringify_names( buf, audio_encoders ) );
     H0( "\n" );
-    H0( "      --abitrate <integer>    Enable bitrate mode and specifies bitrate\n" );
-    H0( "      --aquality <float>      Specifies audio quality [6]\n" );
-#else /* HAVE_AUDIO */
-    H0( "Audio support was not compiled in.\n" );
-#endif
+    H0( "      --abitrate <integer>    Enables bitrate mode and specifies bitrate.\n" );
+    H0( "      --aquality <float>      Specifies audio quality [codec-dependent default]\n" );
     H0( "\n" );
     H0( "Input/Output:\n" );
     H0( "\n" );
