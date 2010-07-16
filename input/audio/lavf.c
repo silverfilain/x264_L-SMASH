@@ -49,7 +49,7 @@ static int init( hnd_t *handle, const char *opt_str )
     }
 
     int track;
-    if ( !strcmp( trackstr, "any" ) )
+    if( !strcmp( trackstr, "any" ) )
         track = TRACK_ANY;
     else
         track = x264_otoi( trackstr, TRACK_NONE );
@@ -180,8 +180,7 @@ static struct AVPacket *next_packet( lavf_source_t *h )
             free_avpacket( pkt );
             return NULL;
         }
-    }
-    while( pkt->stream_index != h->track );
+    } while( pkt->stream_index != h->track );
 
     return pkt;
 }
@@ -358,7 +357,7 @@ static struct audio_packet_t *get_samples( hnd_t handle, int64_t first_sample, i
         if( lastavail < 0 )
             goto fail;
 
-        intptr_t start = ( first_sample * h->info.samplesize ) - h->bytepos;
+        intptr_t start = first_sample * h->info.samplesize - h->bytepos;
 
         if( lastavail < lastreq )
         {

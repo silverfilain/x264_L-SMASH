@@ -28,7 +28,7 @@ typedef struct audio_hnd_t
     AUDIO_FILTER_COMMON
 } audio_hnd_t;
 
-#define AF_LOG( handle, level, ... ) do { x264_cli_log( ((audio_hnd_t*)handle)->self->name, (level), __VA_ARGS__ ); } while (0)
+#define AF_LOG( handle, level, ... ) x264_cli_log( ((audio_hnd_t*)handle)->self->name, (level), __VA_ARGS__ )
 
 #define AF_LOG_ERR( handle, ... )  AF_LOG( (handle), X264_LOG_ERROR  , __VA_ARGS__ )
 #define AF_LOG_WARN( handle, ... ) AF_LOG( (handle), X264_LOG_WARNING, __VA_ARGS__ )

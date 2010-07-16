@@ -90,7 +90,7 @@ static int open_file( char *psz_filename, hnd_t *p_handle, video_info_t *info, c
     int trackno = FFMS_GetFirstTrackOfType( idx, FFMS_TYPE_VIDEO, &e );
     FAIL_IF_ERROR( trackno < 0, "could not find video track\n" )
 
-    h->filename = strdup( psz_filename );
+    h->filename = psz_filename;
     h->video_source = FFMS_CreateVideoSource( psz_filename, trackno, idx, 1, seekmode, &e );
     FAIL_IF_ERROR( !h->video_source, "could not create video source\n" )
 
@@ -179,7 +179,6 @@ static int close_file( hnd_t handle )
 {
     ffms_hnd_t *h = handle;
     FFMS_DestroyVideoSource( h->video_source );
-    free( h->filename );
     free( h );
     return 0;
 }

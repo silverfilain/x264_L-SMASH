@@ -1422,7 +1422,7 @@ generic_option:
     {
         if( audio_bitrate > 0 )
             snprintf( arg, 30, "bitrate=%d", audio_bitrate );
-        else if( audio_quality == audio_quality ) // not NaN
+        else if( isfinite( audio_quality ) )
             snprintf( arg, 30, "vbr=%f", audio_quality );
     }
 #endif

@@ -82,12 +82,12 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
     const audio_encoder_t *encoder = select_audio_encoder( audio_enc, (char*[]){ "mp3", "raw", NULL } );
     FAIL_IF_ERR( !encoder, "flv", "unable to select audio encoder\n" );
 
-    hnd_t enc;
-    FAIL_IF_ERR( !(enc = audio_encoder_open( encoder, filters, audio_parameters )), "flv", "error opening audio encoder" );
+    hnd_t henc = audio_encoder_open( encoder, filters, audio_parameters );
+    FAIL_IF_ERR( !henc, "flv", "error opening audio encoder" );
     flv_hnd_t *p_flv = handle;
     flv_audio_hnd_t *a_flv = p_flv->a_flv = calloc( 1, sizeof( flv_audio_hnd_t ) );
     a_flv->lastdts = INT64_MIN;
-    audio_info_t *info = a_flv->info = audio_encoder_info( enc );
+    audio_info_t *info = a_flv->info = audio_encoder_info( henc );
 
     int header = 0;
     if ( !strcmp( info->codec_name, "raw" ) )
@@ -127,7 +127,7 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
             header |= FLV_SAMPLESSIZE_16BIT;
             break;
         default:
-            x264_cli_log( "flv", X264_LOG_ERROR, "%d-bit audio not supported\n", (int) info->chansize * 8 );
+            x264_cli_log( "flv", X264_LOG_ERROR, "%d-bit audio not supported\n", info->chansize * 8 );
             goto error;
     }
 
@@ -148,12 +148,12 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
     a_flv->step_num = a_flv->info->framelen * 1000;
     a_flv->step_den = a_flv->info->samplerate;
 
-    a_flv->encoder = enc;
+    a_flv->encoder = henc;
 
     return 1;
 
     error:
-    audio_encoder_close( enc );
+    audio_encoder_close( henc );
     free( p_flv->a_flv );
     p_flv->a_flv = NULL;
 
@@ -387,7 +387,8 @@ static int write_audio( flv_hnd_t *p_flv, int64_t video_dts, int finish )
             continue;
         }
 
-        if( !frame ) break;
+        if( !frame )
+            break;
 
         a_flv->lastdts += a_flv->step_num / a_flv->step_den;
 
