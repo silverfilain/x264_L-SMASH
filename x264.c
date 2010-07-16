@@ -32,7 +32,7 @@
 
 #include "common/common.h"
 #include "x264cli.h"
-#include "audio/audio.h"
+#include "audio/encoders.h"
 #include "input/input.h"
 #include "output/output.h"
 #include "filters/filters.h"

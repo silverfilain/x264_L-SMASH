@@ -25,7 +25,6 @@
 #define X264_OUTPUT_H
 
 #include "x264cli.h"
-#include "audio/encoders.h"
 
 typedef struct
 {

@@ -20,6 +20,7 @@
 
 #include "output.h"
 #include "flv_bytestream.h"
+#include "audio/encoders.h"
 
 #define CHECK(x)\
 do {\
