@@ -88,7 +88,7 @@ const audio_encoder_t *select_audio_encoder( char *encoder, char* allowed_list[]
     {
         if( !strcmp( encoder, "auto" ) )
         {
-            audio_encoder_t *enc;
+            const audio_encoder_t *enc;
             for( int i = 0; allowed_list[i] != NULL; i++ )
             {
                 enc = encoder_by_name( allowed_list[i] );
