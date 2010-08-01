@@ -724,6 +724,7 @@ static void Help( x264_param_t *defaults, int longhelp )
     H0( "\n" );
     H0( "Filtering:\n" );
     H0( "\n" );
+    H0( "      Filter options may be specified in the name=value format\n" );
     H0( "--vf, --video-filter <filter0>/<filter1>/... Apply video filtering to the input file\n" );
     H0( "      Available filters:\n" );
     x264_register_vid_filters();
@@ -1840,7 +1841,7 @@ static int  Encode( x264_param_t *param, cli_opt_t *opt )
         af_close( opt->haud );
 #endif
     filter.free( opt->hin );
-    output.close_file( opt->hout, largest_pts, second_largest_pts );
+    output.close_file( opt->hout, largest_pts * dts_compress_multiplier, second_largest_pts * dts_compress_multiplier );
 
     if( i_frame_output > 0 )
     {
