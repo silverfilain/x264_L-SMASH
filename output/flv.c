@@ -369,7 +369,7 @@ static int write_audio( flv_hnd_t *p_flv, int64_t video_dts, int finish )
     assert( a_flv );
 
     int aac = a_flv->codecid == FLV_CODECID_AAC;
-    if( a_flv->lastdts == INT64_MIN )
+    if( a_flv->lastdts == INVALID_DTS )
     {
         if( video_dts > 0 )
             audio_encoder_skip_samples( a_flv->encoder, video_dts * a_flv->info->samplerate / 1000 );

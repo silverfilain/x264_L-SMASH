@@ -120,8 +120,7 @@ static int init( hnd_t *handle, const char *opt_str )
         .framesize      = h->ctx->frame_size * sizeof( float ),
         .chansize       = av_get_bits_per_sample_format( h->samplefmt ) / 8,
         .samplesize     = av_get_bits_per_sample_format( h->samplefmt ) * h->ctx->channels / 8,
-        .time_base_num  = h->ctx->time_base.num,
-        .time_base_den  = h->ctx->time_base.den,
+        .timebase       = { 1, h->ctx->sample_rate },
         .extradata      = h->ctx->extradata,
         .extradata_size = h->ctx->extradata_size
     };
@@ -317,6 +316,7 @@ static struct audio_packet_t *get_samples( hnd_t handle, int64_t first_sample, i
     pkt->channels       = h->info.channels;
     pkt->samplecount    = last_sample - first_sample;
     pkt->size           = pkt->samplecount * h->info.samplesize;
+    pkt->dts            = first_sample;
 
     if( pkt->size + h->surplus > h->bufsize )
     {

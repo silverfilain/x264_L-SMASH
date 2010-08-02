@@ -2,6 +2,7 @@
 #define FILTERS_AUDIO_AUDIO_FILTERS_H_
 
 #include <stdint.h>
+#include <inttypes.h>
 #include "x264cli.h"
 #include "filters/filters.h"
 
@@ -35,6 +36,8 @@ enum AudioFlags
     AUDIO_FLAG_EOF = 1
 };
 
+#define INVALID_DTS (INT64_MIN)
+
 typedef struct audio_packet_t {
     int64_t         dts;
     float         **data;
@@ -59,20 +62,43 @@ typedef struct audio_filter_t
     void (*help_callback)( int longhelp );
 } audio_filter_t;
 
+typedef struct timebase_t
+{
+    int64_t num, den;
+} timebase_t;
+
 typedef struct audio_info_t
 {
-    char    *codec_name;
-    int     samplerate; // Sample Rate in Hz
-    int     channels;   // How many channels
-    int64_t chanlayout; // Channel layout (CH_*)
-    int     framelen;   // Frame length in samples
-    size_t  framesize;  // Frame size in bytes
-    int     chansize;   // Bytes per channel per sample (from the encoded audio)
-    int     samplesize; // Bytes per sample (from the encoded audio)
-    int64_t time_base_num, time_base_den;
-    uint8_t *extradata;
-    int     extradata_size;
+    char       *codec_name;
+    int        samplerate; // Sample Rate in Hz
+    int        channels;   // How many channels
+    int64_t    chanlayout; // Channel layout (CH_*)
+    int        framelen;   // Frame length in samples
+    size_t     framesize;  // Frame size in bytes
+    int        chansize;   // Bytes per channel per sample (from the encoded audio)
+    int        samplesize; // Bytes per sample (from the encoded audio)
+    timebase_t timebase;
+    uint8_t    *extradata;
+    int        extradata_size;
 } audio_info_t;
+
+static inline int64_t x264_timebase_convert( int64_t i, timebase_t from, timebase_t to )
+{
+    double j = i;
+    if( to.num > from.den )
+        return (int64_t)( j * from.num / from.den * to.den / to.num );
+    return (int64_t)( j * to.den / to.num * from.num / from.den );
+}
+
+static inline int64_t x264_to_timebase( int64_t i, int64_t scale, timebase_t to )
+{
+    return timebase_convert( i, (timebase_t){ 1, scale }, to );
+}
+
+static inline int64_t x264_from_timebase( int64_t i, timebase_t from, int64_t scale )
+{
+    return timebase_convert( i, from, (timebase_t){ 1, scale } );
+}
 
 #include "audio/audio.h"
 
