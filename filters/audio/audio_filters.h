@@ -82,7 +82,7 @@ typedef struct audio_info_t
     int        extradata_size;
 } audio_info_t;
 
-static inline int64_t x264_timebase_convert( int64_t i, timebase_t from, timebase_t to )
+static inline int64_t x264_convert_timebase( int64_t i, timebase_t from, timebase_t to )
 {
     double j = i;
     if( to.num > from.den )
@@ -92,12 +92,12 @@ static inline int64_t x264_timebase_convert( int64_t i, timebase_t from, timebas
 
 static inline int64_t x264_to_timebase( int64_t i, int64_t scale, timebase_t to )
 {
-    return timebase_convert( i, (timebase_t){ 1, scale }, to );
+    return x264_convert_timebase( i, (timebase_t){ 1, scale }, to );
 }
 
 static inline int64_t x264_from_timebase( int64_t i, timebase_t from, int64_t scale )
 {
-    return timebase_convert( i, from, (timebase_t){ 1, scale } );
+    return x264_convert_timebase( i, from, (timebase_t){ 1, scale } );
 }
 
 #include "audio/audio.h"
