@@ -141,7 +141,7 @@ static int init( hnd_t *handle, const char *opt_str )
 codecfail:
     AF_LOG_ERR( h, "error opening the %s decoder for track %d\n", h->codec->name, h->track );
 fail:
-    if( h->lavf )
+    if( h && h->lavf )
         av_close_input_file( h->lavf );
     if( h )
         free( h );
