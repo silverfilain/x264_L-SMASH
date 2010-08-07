@@ -125,7 +125,7 @@ static int init( hnd_t *handle, const char *opt_str )
         .extradata      = h->ctx->extradata,
         .extradata_size = h->ctx->extradata_size
     };
-    h->origtb = { h->ctx->time_base.num, h->ctx->time_base.den };
+    h->origtb = (timebase_t) { h->ctx->time_base.num, h->ctx->time_base.den };
 
     h->bufsize = DEFAULT_BUFSIZE;
     h->surplus = h->info.framesize * 3 / 2;
