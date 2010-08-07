@@ -288,11 +288,9 @@ enum slice_type_e
     SLICE_TYPE_P  = 0,
     SLICE_TYPE_B  = 1,
     SLICE_TYPE_I  = 2,
-    SLICE_TYPE_SP = 3,
-    SLICE_TYPE_SI = 4
 };
 
-static const char slice_type_to_char[] = { 'P', 'B', 'I', 'S', 'S' };
+static const char slice_type_to_char[] = { 'P', 'B', 'I' };
 
 enum sei_payload_type_e
 {
@@ -432,7 +430,6 @@ struct x264_t
     int             i_cpb_delay_lookahead;
 
     int             b_queued_intra_refresh;
-    int64_t         i_reference_invalidate_pts;
     int64_t         i_last_idr_pts;
 
     /* We use only one SPS and one PPS */

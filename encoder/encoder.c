@@ -216,7 +216,7 @@ static void x264_slice_header_write( bs_t *s, x264_slice_header_t *sh, int i_nal
     if( sh->i_type == SLICE_TYPE_B )
         bs_write1( s, sh->b_direct_spatial_mv_pred );
 
-    if( sh->i_type == SLICE_TYPE_P || sh->i_type == SLICE_TYPE_SP || sh->i_type == SLICE_TYPE_B )
+    if( sh->i_type == SLICE_TYPE_P || sh->i_type == SLICE_TYPE_B )
     {
         bs_write1( s, sh->b_num_ref_idx_override );
         if( sh->b_num_ref_idx_override )
@@ -255,7 +255,7 @@ static void x264_slice_header_write( bs_t *s, x264_slice_header_t *sh, int i_nal
         }
     }
 
-    if( sh->pps->b_weighted_pred && ( sh->i_type == SLICE_TYPE_P || sh->i_type == SLICE_TYPE_SP ) )
+    if( sh->pps->b_weighted_pred && sh->i_type == SLICE_TYPE_P )
     {
         /* pred_weight_table() */
         bs_write_ue( s, sh->weight[0][0].i_denom );
@@ -1096,9 +1096,6 @@ x264_t *x264_encoder_open( x264_param_t *param )
     for( int i = 1; i < h->param.i_threads + !!h->param.i_sync_lookahead; i++ )
         CHECKED_MALLOC( h->thread[i], sizeof(x264_t) );
 
-    if( x264_lookahead_init( h, i_slicetype_length ) )
-        goto fail;
-
     for( int i = 0; i < h->param.i_threads; i++ )
     {
         int init_nal_count = h->param.i_slice_count + 3;
@@ -1123,6 +1120,9 @@ x264_t *x264_encoder_open( x264_param_t *param )
         if( allocate_threadlocal_data && x264_macroblock_cache_allocate( h->thread[i] ) < 0 )
             goto fail;
     }
+
+    if( x264_lookahead_init( h, i_slicetype_length ) )
+        goto fail;
 
     for( int i = 0; i < h->param.i_threads; i++ )
         if( x264_macroblock_thread_allocate( h->thread[i], 0 ) < 0 )
@@ -1396,13 +1396,21 @@ int x264_encoder_headers( x264_t *h, x264_nal_t **pp_nal, int *pi_nal )
  * from the standard's default. */
 static inline void x264_reference_check_reorder( x264_t *h )
 {
+    /* The reorder check doesn't check for missing frames, so just
+     * force a reorder if one of the reference list is corrupt. */
+    for( int i = 0; h->frames.reference[i]; i++ )
+        if( h->frames.reference[i]->b_corrupt )
+        {
+            h->b_ref_reorder[0] = 1;
+            return;
+        }
     for( int i = 0; i < h->i_ref0 - 1; i++ )
         /* P and B-frames use different default orders. */
         if( h->sh.i_type == SLICE_TYPE_P ? h->fref0[i]->i_frame_num < h->fref0[i+1]->i_frame_num
                                          : h->fref0[i]->i_poc < h->fref0[i+1]->i_poc )
         {
             h->b_ref_reorder[0] = 1;
-            break;
+            return;
         }
 }
 
@@ -2230,7 +2238,14 @@ int x264_encoder_invalidate_reference( x264_t *h, int64_t pts )
         return -1;
     }
     h = h->thread[h->i_thread_phase];
-    h->i_reference_invalidate_pts = pts;
+    if( pts >= h->i_last_idr_pts )
+    {
+        for( int i = 0; h->frames.reference[i]; i++ )
+            if( pts <= h->frames.reference[i]->i_pts )
+                h->frames.reference[i]->b_corrupt = 1;
+        if( pts <= h->fdec->i_pts )
+            h->fdec->b_corrupt = 1;
+    }
     return 0;
 }
 
@@ -2332,7 +2347,7 @@ int     x264_encoder_encode( x264_t *h,
                 return -1;
         }
         else
-            x264_adaptive_quant_frame( h, fenc, pic_in->prop.quant_offsets );
+            x264_stack_align( x264_adaptive_quant_frame, h, fenc, pic_in->prop.quant_offsets );
 
         if( pic_in->prop.quant_offsets_free )
             pic_in->prop.quant_offsets_free( pic_in->prop.quant_offsets );
@@ -2377,15 +2392,6 @@ int     x264_encoder_encode( x264_t *h,
         x264_encoder_reconfig( h, h->fenc->param );
         if( h->fenc->param->param_free )
             h->fenc->param->param_free( h->fenc->param );
-    }
-
-    if( h->i_reference_invalidate_pts )
-    {
-        if( h->i_reference_invalidate_pts >= h->i_last_idr_pts )
-            for( int i = 0; h->frames.reference[i]; i++ )
-                if( h->i_reference_invalidate_pts <= h->frames.reference[i]->i_pts )
-                    h->frames.reference[i]->b_corrupt = 1;
-        h->i_reference_invalidate_pts = 0;
     }
 
     if( !IS_X264_TYPE_I( h->fenc->i_type ) )
@@ -2941,10 +2947,9 @@ void    x264_encoder_close  ( x264_t *h )
     h->i_frame++;
 
     /* Slices used and PSNR */
-    for( int i = 0; i < 5; i++ )
+    for( int i = 0; i < 3; i++ )
     {
-        static const uint8_t slice_order[] = { SLICE_TYPE_I, SLICE_TYPE_SI, SLICE_TYPE_P, SLICE_TYPE_SP, SLICE_TYPE_B };
-        static const char * const slice_name[] = { "P", "B", "I", "SP", "SI" };
+        static const uint8_t slice_order[] = { SLICE_TYPE_I, SLICE_TYPE_P, SLICE_TYPE_B };
         int i_slice = slice_order[i];
 
         if( h->stat.i_frame_count[i_slice] > 0 )
@@ -2953,8 +2958,8 @@ void    x264_encoder_close  ( x264_t *h )
             if( h->param.analyse.b_psnr )
             {
                 x264_log( h, X264_LOG_INFO,
-                          "frame %s:%-5d Avg QP:%5.2f  size:%6.0f  PSNR Mean Y:%5.2f U:%5.2f V:%5.2f Avg:%5.2f Global:%5.2f\n",
-                          slice_name[i_slice],
+                          "frame %c:%-5d Avg QP:%5.2f  size:%6.0f  PSNR Mean Y:%5.2f U:%5.2f V:%5.2f Avg:%5.2f Global:%5.2f\n",
+                          slice_type_to_char[i_slice],
                           i_count,
                           h->stat.f_frame_qp[i_slice] / i_count,
                           (double)h->stat.i_frame_size[i_slice] / i_count,
@@ -2965,8 +2970,8 @@ void    x264_encoder_close  ( x264_t *h )
             else
             {
                 x264_log( h, X264_LOG_INFO,
-                          "frame %s:%-5d Avg QP:%5.2f  size:%6.0f\n",
-                          slice_name[i_slice],
+                          "frame %c:%-5d Avg QP:%5.2f  size:%6.0f\n",
+                          slice_type_to_char[i_slice],
                           i_count,
                           h->stat.f_frame_qp[i_slice] / i_count,
                           (double)h->stat.i_frame_size[i_slice] / i_count );

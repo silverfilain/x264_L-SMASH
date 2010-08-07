@@ -250,8 +250,7 @@ int x264_macroblock_cache_allocate( x264_t *h )
     if( h->param.analyse.i_weighted_pred )
     {
         int i_padv = PADV << h->param.b_interlaced;
-        int align = h->param.cpu&X264_CPU_CACHELINE_64 ? 64 : h->param.cpu&X264_CPU_CACHELINE_32 ? 32 : 16;
-        int i_stride, luma_plane_size = 0;
+        int luma_plane_size = 0;
         int numweightbuf;
 
         if( h->param.analyse.i_weighted_pred == X264_WEIGHTP_FAKE )
@@ -260,8 +259,7 @@ int x264_macroblock_cache_allocate( x264_t *h )
             if( !h->param.i_sync_lookahead || h == h->thread[h->param.i_threads] )
             {
                 // Fake analysis only works on lowres
-                i_stride = ALIGN( h->mb.i_mb_width*8 + 2*PADH, align );
-                luma_plane_size = i_stride * (h->mb.i_mb_height*8+2*i_padv);
+                luma_plane_size = h->fdec->i_stride_lowres * (h->mb.i_mb_height*8+2*i_padv);
                 // Only need 1 buffer for analysis
                 numweightbuf = 1;
             }
@@ -270,8 +268,7 @@ int x264_macroblock_cache_allocate( x264_t *h )
         }
         else
         {
-            i_stride = ALIGN( h->mb.i_mb_width*16 + 2*PADH, align );
-            luma_plane_size = i_stride * (h->mb.i_mb_height*16+2*i_padv);
+            luma_plane_size = h->fdec->i_stride[0] * (h->mb.i_mb_height*16+2*i_padv);
 
             if( h->param.analyse.i_weighted_pred == X264_WEIGHTP_SMART )
                 //SMART can weight one ref and one offset -1
@@ -1160,28 +1157,27 @@ void x264_macroblock_cache_save( x264_t *h )
         h->mb.i_cbp_luma = 0xf;
         h->mb.cbp[i_mb_xy] = 0x72f;   /* all set */
         h->mb.b_transform_8x8 = 0;
-        memset( nnz, 16, sizeof( *h->mb.non_zero_count ) );
         for( int i = 0; i < 24; i++ )
-            h->mb.cache.non_zero_count[x264_scan8[i]] = 16;
+            h->mb.cache.non_zero_count[x264_scan8[i]] = h->param.b_cabac ? 1 : 16;
     }
     else
     {
-        /* save non zero count */
-        CP32( &nnz[0*4], &h->mb.cache.non_zero_count[x264_scan8[0]+0*8] );
-        CP32( &nnz[1*4], &h->mb.cache.non_zero_count[x264_scan8[0]+1*8] );
-        CP32( &nnz[2*4], &h->mb.cache.non_zero_count[x264_scan8[0]+2*8] );
-        CP32( &nnz[3*4], &h->mb.cache.non_zero_count[x264_scan8[0]+3*8] );
-        M16( &nnz[16+0*2] ) = M32( &h->mb.cache.non_zero_count[x264_scan8[16+0*2]-1] ) >> 8;
-        M16( &nnz[16+1*2] ) = M32( &h->mb.cache.non_zero_count[x264_scan8[16+1*2]-1] ) >> 8;
-        M16( &nnz[16+2*2] ) = M32( &h->mb.cache.non_zero_count[x264_scan8[16+2*2]-1] ) >> 8;
-        M16( &nnz[16+3*2] ) = M32( &h->mb.cache.non_zero_count[x264_scan8[16+3*2]-1] ) >> 8;
-
         if( h->mb.i_type != I_16x16 && h->mb.i_cbp_luma == 0 && h->mb.i_cbp_chroma == 0 )
             h->mb.i_qp = h->mb.i_last_qp;
         h->mb.qp[i_mb_xy] = h->mb.i_qp;
         h->mb.i_last_dqp = h->mb.i_qp - h->mb.i_last_qp;
         h->mb.i_last_qp = h->mb.i_qp;
     }
+
+    /* save non zero count */
+    CP32( &nnz[0*4], &h->mb.cache.non_zero_count[x264_scan8[0]+0*8] );
+    CP32( &nnz[1*4], &h->mb.cache.non_zero_count[x264_scan8[0]+1*8] );
+    CP32( &nnz[2*4], &h->mb.cache.non_zero_count[x264_scan8[0]+2*8] );
+    CP32( &nnz[3*4], &h->mb.cache.non_zero_count[x264_scan8[0]+3*8] );
+    M16( &nnz[16+0*2] ) = M32( &h->mb.cache.non_zero_count[x264_scan8[16+0*2]-1] ) >> 8;
+    M16( &nnz[16+1*2] ) = M32( &h->mb.cache.non_zero_count[x264_scan8[16+1*2]-1] ) >> 8;
+    M16( &nnz[16+2*2] ) = M32( &h->mb.cache.non_zero_count[x264_scan8[16+2*2]-1] ) >> 8;
+    M16( &nnz[16+3*2] ) = M32( &h->mb.cache.non_zero_count[x264_scan8[16+3*2]-1] ) >> 8;
 
     if( h->mb.i_cbp_luma == 0 && h->mb.i_type != I_8x8 )
         h->mb.b_transform_8x8 = 0;

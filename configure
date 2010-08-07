@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 if test x"$1" = x"-h" -o x"$1" = x"--help" ; then
 
@@ -556,8 +556,13 @@ if [ "$swscale" = "auto" ] ; then
     error="swscale must be at least version 0.9.0"
     if cc_check "libswscale/swscale.h" "$SWSCALE_CFLAGS $SWSCALE_LIBS" "sws_getContext(0,0,0,0,0,0,0,0,0,0);" ; then
         if cpp_check "libswscale/swscale.h" "$SWSCALE_CFLAGS" "LIBSWSCALE_VERSION_INT >= AV_VERSION_INT(0,9,0)" "$error"; then
-            define HAVE_SWSCALE
-            swscale="yes"
+            # we use colorspaces that were defined in libavutil r19775
+            if cc_check "libavutil/pixfmt.h" "$SWSCALE_CFLAGS" "enum PixelFormat pixfmt = PIX_FMT_YUV422P16LE;" ; then
+                define HAVE_SWSCALE
+                swscale="yes"
+            else
+                echo "Warning: libavutil is too old, update to ffmpeg r19775+"
+            fi
         else
             echo "Warning: ${error}"
         fi
@@ -567,8 +572,8 @@ fi
 if [ "$lavf" = "auto" ] ; then
     lavf="no"
     if ${cross_prefix}pkg-config --exists libavformat libavcodec libswscale 2>$DEVNULL; then
-        LAVF_LIBS="$LAVF_LIBS $(${cross_prefix}pkg-config --libs libavformat libavcodec libswscale)"
-        LAVF_CFLAGS="$LAVF_CFLAGS $(${cross_prefix}pkg-config --cflags libavformat libavcodec libswscale)"
+        LAVF_LIBS="$LAVF_LIBS $(${cross_prefix}pkg-config --libs libavformat libavcodec libavutil libswscale)"
+        LAVF_CFLAGS="$LAVF_CFLAGS $(${cross_prefix}pkg-config --cflags libavformat libavcodec libavutil libswscale)"
     fi
     if [ -z "$LAVF_LIBS" -a -z "$LAVF_CFLAGS" ]; then
         LAVF_LIBS="-lavformat"
@@ -671,12 +676,8 @@ if [ "$gpac" = "yes" ] ; then
 fi
 
 if [ "$avs" = "auto" ] ; then
-    avs=no
-    if [ $SYS = MINGW ] && cc_check avisynth_c.h ; then
-        avs="yes"
-        define HAVE_AVS
-        define HAVE_AVISYNTH_C_H
-    elif [ $SYS = MINGW ] && cc_check extras/avisynth_c.h ; then
+    avs="no"
+    if [ $SYS = MINGW ] && cc_check extras/avisynth_c.h ; then
         avs="yes"
         define HAVE_AVS
     fi

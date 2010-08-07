@@ -78,7 +78,7 @@ struct x264_ratecontrol_t
     double rate_tolerance;
     double qcompress;
     int nmb;                    /* number of macroblocks in a frame */
-    int qp_constant[5];
+    int qp_constant[3];
 
     /* current frame */
     ratecontrol_entry_t *rce;
@@ -123,13 +123,13 @@ struct x264_ratecontrol_t
     int num_entries;            /* number of ratecontrol_entry_ts */
     ratecontrol_entry_t *entry; /* FIXME: copy needed data and free this once init is done */
     double last_qscale;
-    double last_qscale_for[5];  /* last qscale for a specific pict type, used for max_diff & ipb factor stuff  */
+    double last_qscale_for[3];  /* last qscale for a specific pict type, used for max_diff & ipb factor stuff */
     int last_non_b_pict_type;
     double accum_p_qp;          /* for determining I-frame quant */
     double accum_p_norm;
     double last_accum_p_norm;
-    double lmin[5];             /* min qscale by frame type */
-    double lmax[5];
+    double lmin[3];             /* min qscale by frame type */
+    double lmax[3];
     double lstep;               /* max change (multiply) in qscale per frame */
     uint16_t *qp_buffer[2];     /* Global buffers for converting MB-tree quantizer data. */
     int qpbuf_pos;              /* In order to handle pyramid reordering, QP buffer acts as a stack.
@@ -141,9 +141,8 @@ struct x264_ratecontrol_t
     double frame_size_maximum;  /* Maximum frame size due to MinCR */
     double frame_size_planned;
     double slice_size_planned;
-    double max_frame_error;
     predictor_t (*row_pred)[2];
-    predictor_t row_preds[5][2];
+    predictor_t row_preds[3][2];
     predictor_t *pred_b_from_p; /* predict B-frame size from P-frame satd */
     int bframes;                /* # consecutive B-frames before this P-frame */
     int bframe_bits;            /* total cost of those frames */
@@ -386,7 +385,7 @@ int x264_macroblock_tree_read( x264_t *h, x264_frame_t *frame, float *quant_offs
         rc->qpbuf_pos--;
     }
     else
-        x264_adaptive_quant_frame( h, frame, quant_offsets );
+        x264_stack_align( x264_adaptive_quant_frame, h, frame, quant_offsets );
     return 0;
 fail:
     x264_log(h, X264_LOG_ERROR, "Incomplete MB-tree stats file.\n");
@@ -639,7 +638,7 @@ int x264_ratecontrol_new( x264_t *h )
     int num_preds = h->param.b_sliced_threads * h->param.i_threads + 1;
     CHECKED_MALLOC( rc->pred, 5 * sizeof(predictor_t) * num_preds );
     CHECKED_MALLOC( rc->pred_b_from_p, sizeof(predictor_t) );
-    for( int i = 0; i < 5; i++ )
+    for( int i = 0; i < 3; i++ )
     {
         rc->last_qscale_for[i] = qp2qscale( ABR_INIT_QP );
         rc->lmin[i] = qp2qscale( h->param.rc.i_qp_min );
@@ -1360,15 +1359,20 @@ void x264_ratecontrol_mb( x264_t *h, int bits )
 
         float buffer_left_planned = rc->buffer_fill - rc->frame_size_planned;
         float slice_size_planned = h->param.b_sliced_threads ? rc->slice_size_planned : rc->frame_size_planned;
+        float max_frame_error = X264_MAX( 0.05, 1.0 / (h->mb.i_mb_height) );
         float size_of_other_slices = 0;
         if( h->param.b_sliced_threads )
         {
+            float size_of_other_slices_planned = 0;
             for( int i = 0; i < h->param.i_threads; i++ )
                 if( h != h->thread[i] )
+                {
                     size_of_other_slices += h->thread[i]->rc->frame_size_estimated;
+                    size_of_other_slices_planned += h->thread[i]->rc->slice_size_planned;
+                }
+            float weight = rc->slice_size_planned / rc->frame_size_planned;
+            size_of_other_slices = (size_of_other_slices - size_of_other_slices_planned) * weight + size_of_other_slices_planned;
         }
-        else
-            rc->max_frame_error = X264_MAX( 0.05, 1.0 / (h->mb.i_mb_width) );
 
         /* More threads means we have to be more cautious in letting ratecontrol use up extra bits. */
         float rc_tol = buffer_left_planned / h->param.i_threads * rc->rate_tolerance;
@@ -1405,8 +1409,8 @@ void x264_ratecontrol_mb( x264_t *h, int bits )
 
         /* avoid VBV underflow or MinCR violation */
         while( (rc->qpm < qp_absolute_max)
-               && ((rc->buffer_fill - b1 < rc->buffer_rate * rc->max_frame_error) ||
-                   (rc->frame_size_maximum - b1 < rc->frame_size_maximum * rc->max_frame_error)))
+               && ((rc->buffer_fill - b1 < rc->buffer_rate * max_frame_error) ||
+                   (rc->frame_size_maximum - b1 < rc->frame_size_maximum * max_frame_error)))
         {
             rc->qpm += step_size;
             b1 = predict_row_size_sum( h, y, rc->qpm ) + size_of_other_slices;
@@ -2287,8 +2291,8 @@ void x264_threads_distribute_ratecontrol( x264_t *h )
             for( int i = 0; i < h->param.i_threads; i++ )
             {
                 x264_t *t = h->thread[i];
-                t->rc->max_frame_error = X264_MAX( 0.05, 1.0 / (t->i_threadslice_end - t->i_threadslice_start) );
-                t->rc->slice_size_planned += 2 * t->rc->max_frame_error * rc->frame_size_planned;
+                float max_frame_error = X264_MAX( 0.05, 1.0 / (t->i_threadslice_end - t->i_threadslice_start) );
+                t->rc->slice_size_planned += 2 * max_frame_error * rc->frame_size_planned;
             }
             x264_threads_normalize_predictors( h );
         }
