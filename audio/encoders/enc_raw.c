@@ -54,10 +54,10 @@ static audio_packet_t *get_next_packet( hnd_t handle )
 
     audio_packet_t *out = calloc( 1, sizeof( audio_packet_t ) );
     memcpy( out, smp, sizeof( audio_packet_t ) );
-    out->data = NULL;
-    out->size = 0;
+    out->data    = NULL;
+    out->size    = 0;
     out->rawdata = x264_af_interleave2( SMPFMT_S16, smp->data, smp->channels, smp->samplecount );
-    out->size = smp->samplecount * h->info.samplesize;
+    out->size    = smp->samplecount * h->info.samplesize;
     x264_af_free_packet( smp );
 
     return out;
