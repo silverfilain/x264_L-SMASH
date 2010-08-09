@@ -71,6 +71,7 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     h->info.framesize  = h->info.framelen * 2;
     h->info.chansize   = 2;
     h->info.samplesize = 2 * h->info.channels;
+    h->info.samplerate = lame_get_out_samplerate( h->lame );
 
     h->bufsize = 125 * h->info.framelen / 100 + 7200; // from lame.h, largest frame that the encoding functions may return
 
