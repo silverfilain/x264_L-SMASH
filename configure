@@ -311,7 +311,6 @@ case $host_os in
   cygwin*)
     SYS="MINGW"
     EXE=".exe"
-    DEVNULL="NUL"
     if cc_check "" -mno-cygwin; then
         CFLAGS="$CFLAGS -mno-cygwin"
         LDFLAGS="$LDFLAGS -mno-cygwin"
