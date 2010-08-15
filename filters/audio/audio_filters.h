@@ -38,18 +38,39 @@ enum AudioFlags
 
 #define INVALID_DTS (INT64_MIN)
 
+
+typedef struct timebase_t
+{
+    int64_t num, den;
+} timebase_t;
+
+typedef struct audio_info_t
+{
+    const char *codec_name;
+    int         samplerate; // Sample Rate in Hz
+    int         channels;   // How many channels
+    int64_t     chanlayout; // Channel layout (CH_*)
+    int         framelen;   // Frame length in samples
+    size_t      framesize;  // Frame size in bytes
+    int         chansize;   // Bytes per channel per sample (from the encoded audio)
+    int         samplesize; // Bytes per sample (from the encoded audio)
+    timebase_t  timebase;
+    uint8_t    *extradata;
+    int         extradata_size;
+} audio_info_t;
+
 typedef struct audio_packet_t {
     int64_t         dts;
-    float         **data;
-    int             size;
-    unsigned        channels;
+    float         **samples;
+    unsigned        channels; // could be gotten from info, but is here for convenience since samples depends on it
     unsigned        samplecount;
-    uint8_t        *rawdata;
-    int             rawsize;
+    uint8_t        *data;
+    int             size;
     int64_t         pos;
     enum AudioFlags flags;
     hnd_t           priv;
     hnd_t           owner;
+    audio_info_t    info;
 } audio_packet_t;
 
 typedef struct audio_filter_t
@@ -62,32 +83,12 @@ typedef struct audio_filter_t
     void (*help_callback)( int longhelp );
 } audio_filter_t;
 
-typedef struct timebase_t
-{
-    int64_t num, den;
-} timebase_t;
-
-typedef struct audio_info_t
-{
-    char       *codec_name;
-    int        samplerate; // Sample Rate in Hz
-    int        channels;   // How many channels
-    int64_t    chanlayout; // Channel layout (CH_*)
-    int        framelen;   // Frame length in samples
-    size_t     framesize;  // Frame size in bytes
-    int        chansize;   // Bytes per channel per sample (from the encoded audio)
-    int        samplesize; // Bytes per sample (from the encoded audio)
-    timebase_t timebase;
-    uint8_t    *extradata;
-    int        extradata_size;
-} audio_info_t;
-
 static inline int64_t x264_convert_timebase( int64_t i, timebase_t from, timebase_t to )
 {
     double j = i;
-    if( to.num > from.den )
-        return (int64_t)( j * from.num / from.den * to.den / to.num );
-    return (int64_t)( j * to.den / to.num * from.num / from.den );
+    if( from.den > to.num )
+        return (int64_t)( j * from.num * to.den / to.num / from.den );
+    return (int64_t)( j * from.num * to.den / from.den / to.num );
 }
 
 static inline int64_t x264_to_timebase( int64_t i, int64_t scale, timebase_t to )

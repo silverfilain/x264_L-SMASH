@@ -1,3 +1,4 @@
+#include "audio/encoders.h"
 #include "filters/audio/internal.h"
 #undef DECLARE_ALIGNED
 #include "libavformat/avformat.h"
@@ -23,6 +24,7 @@ typedef struct lavf_source_t
 
     timebase_t origtb;
     AVPacket *pkt;
+    int copy;
 } lavf_source_t;
 
 #define DEFAULT_BUFSIZE AVCODEC_MAX_AUDIO_FRAME_SIZE * 2
@@ -114,6 +116,7 @@ static int init( hnd_t *handle, const char *opt_str )
     h->samplefmt  = h->ctx->sample_fmt;
     h->info = (audio_info_t)
     {
+        .codec_name     = h->ctx->codec->name,
         .samplerate     = h->ctx->sample_rate,
         .channels       = h->ctx->channels,
         .chanlayout     = h->ctx->channel_layout,
@@ -121,11 +124,11 @@ static int init( hnd_t *handle, const char *opt_str )
         .framesize      = h->ctx->frame_size * sizeof( float ),
         .chansize       = av_get_bits_per_sample_format( h->samplefmt ) / 8,
         .samplesize     = av_get_bits_per_sample_format( h->samplefmt ) * h->ctx->channels / 8,
-        .timebase       = { 1, h->ctx->sample_rate },
+        .timebase       = /* {1, 1000}, /*/ { 1, h->ctx->sample_rate },
         .extradata      = h->ctx->extradata,
         .extradata_size = h->ctx->extradata_size
     };
-    h->origtb = (timebase_t) { h->ctx->time_base.num, h->ctx->time_base.den };
+    h->origtb = (timebase_t) { h->lavf->streams[track]->time_base.num, h->lavf->streams[track]->time_base.den };
 
     h->bufsize = DEFAULT_BUFSIZE;
     h->surplus = h->info.framesize * 3 / 2;
@@ -163,8 +166,9 @@ static void free_packet( hnd_t handle, audio_packet_t *pkt )
     x264_af_free_packet( pkt );
 }
 
-static struct AVPacket *next_packet( lavf_source_t *h )
+static struct AVPacket *next_packet( hnd_t handle )
 {
+    lavf_source_t *h = handle;
     AVPacket *pkt = calloc( 1, sizeof( AVPacket ) );
 
     int ret;
@@ -184,6 +188,76 @@ static struct AVPacket *next_packet( lavf_source_t *h )
     } while( pkt->stream_index != h->track );
 
     return pkt;
+}
+
+static hnd_t copy_init( hnd_t filter_chain, const char *opts )
+{
+    assert( filter_chain );
+    audio_hnd_t *chain = filter_chain;
+    if( chain->self == &audio_filter_lavf )
+    {
+        lavf_source_t *h = filter_chain;
+        h->copy = 1;
+        return chain;
+    }
+    fprintf( stderr, "lavf [error]: attempted to enter copy mode with a non-empty filter chain!" ); // as far as CLI users see, lavf isn't a filter
+    return NULL;
+}
+
+static const char *get_codec_name( hnd_t handle )
+{
+    audio_hnd_t *h = handle;
+    return h->info.codec_name;
+}
+
+static audio_info_t *get_info( hnd_t handle )
+{
+    audio_hnd_t *h = handle;
+    return &h->info;
+}
+
+static audio_packet_t *get_next_packet( hnd_t handle )
+{
+    lavf_source_t *h = handle;
+
+    AVPacket *pkt = next_packet( h );
+    if( !pkt )
+        return NULL;
+
+    audio_packet_t *out = calloc( 1, sizeof( audio_packet_t ) );
+
+    out->dts = x264_convert_timebase( pkt->dts != AV_NOPTS_VALUE ? pkt->dts :
+                                      pkt->pts != AV_NOPTS_VALUE ? pkt->pts : INVALID_DTS,
+                                      h->origtb, h->info.timebase );
+    out->info        = h->info;
+    out->channels    = h->info.channels;
+    out->samplecount = pkt->size * h->info.samplesize;
+    out->size        = pkt->size;
+    out->data        = malloc( out->size );
+    memcpy( out->data, pkt->data, pkt->size );
+
+    free_avpacket( pkt );
+    return out;
+}
+
+static audio_packet_t *copy_finish( hnd_t handle )
+{
+    return NULL; // Any other sensible thing to do?
+}
+
+static void skip_samples( hnd_t handle, uint64_t samplecount )
+{
+    // WARNING: this cannot be made exact
+    lavf_source_t *h = handle;
+    if( samplecount < h->info.framelen )
+        return; // Nothing to do due to low accuracy
+    audio_packet_t *pkt;
+    uint64_t samples_skipped = 0;
+    while( samples_skipped <= ( samplecount - h->info.framelen ) && ( pkt = get_next_packet( h ) ) )
+    {
+        samples_skipped += pkt->samplecount;
+        free_packet( h, pkt );
+    }
 }
 
 static int low_decode_audio( lavf_source_t *h, uint8_t *buf, intptr_t buflen )
@@ -308,12 +382,14 @@ static int64_t fill_buffer_until( lavf_source_t *h, int64_t lastsample )
 static struct audio_packet_t *get_samples( hnd_t handle, int64_t first_sample, int64_t last_sample )
 {
     lavf_source_t *h = handle;
+    assert( !h->copy );
     assert( first_sample >= 0 && last_sample > first_sample );
 
     if( fill_buffer_until( h, first_sample ) < 0 )
         return NULL;
 
     audio_packet_t *pkt = calloc( 1, sizeof( audio_packet_t ) );
+    pkt->info           = h->info;
     pkt->channels       = h->info.channels;
     pkt->samplecount    = last_sample - first_sample;
     pkt->size           = pkt->samplecount * h->info.samplesize;
@@ -343,8 +419,8 @@ static struct audio_packet_t *get_samples( hnd_t handle, int64_t first_sample, i
             goto fail;
         }
 
-        pkt->data = x264_af_dup_buffer( prev->data, prev->channels, prev->samplecount );
-        x264_af_cat_buffer( pkt->data, pkt->samplecount, next->data, next->samplecount, pkt->channels );
+        pkt->samples = x264_af_dup_buffer( prev->samples, prev->channels, prev->samplecount );
+        x264_af_cat_buffer( pkt->samples, pkt->samplecount, next->samples, next->samplecount, pkt->channels );
 
         pkt->samplecount = prev->samplecount + next->samplecount;
         pkt->size        = prev->size + next->size;
@@ -368,7 +444,7 @@ static struct audio_packet_t *get_samples( hnd_t handle, int64_t first_sample, i
             pkt->flags       = AUDIO_FLAG_EOF;
         }
         assert( start + pkt->size <= h->bufsize );
-        pkt->data = x264_af_deinterleave2( h->buffer + start, h->samplefmt, pkt->channels, pkt->samplecount );
+        pkt->samples = x264_af_deinterleave2( h->buffer + start, h->samplefmt, pkt->channels, pkt->samplecount );
     }
 
     return pkt;
@@ -389,13 +465,30 @@ static void lavf_close( hnd_t handle )
     free( h );
 }
 
+static void copy_close( hnd_t handle )
+{
+    // do nothing or a double-free will happen when the filter chain is freed
+}
+
 const audio_filter_t audio_filter_lavf =
 {
-        .name        = "lavf",
-        .description = "Demuxes and decodes audio files using libavformat + libavcodec",
-        .help        = "Arguments: filename[:track]",
-        .init        = init,
-        .get_samples = get_samples,
-        .free_packet = free_packet,
-        .close       = lavf_close
+    .name        = "lavf",
+    .description = "Demuxes and decodes audio files using libavformat + libavcodec",
+    .help        = "Arguments: filename[:track]",
+    .init        = init,
+    .get_samples = get_samples,
+    .free_packet = free_packet,
+    .close       = lavf_close
+};
+
+const audio_encoder_t audio_copy_lavf =
+{
+    .init            = copy_init,
+    .get_codec_name  = get_codec_name,
+    .get_next_packet = get_next_packet,
+    .get_info        = get_info,
+    .skip_samples    = skip_samples,
+    .finish          = copy_finish,
+    .free_packet     = free_packet,
+    .close           = copy_close,
 };

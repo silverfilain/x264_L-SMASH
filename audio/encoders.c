@@ -21,7 +21,7 @@ hnd_t x264_audio_encoder_open( const audio_encoder_t *encoder, hnd_t filter_chai
     return enc;
 }
 
-char *x264_audio_encoder_codec_name( hnd_t encoder )
+const char *x264_audio_encoder_codec_name( hnd_t encoder )
 {
     assert( encoder );
     struct aenc_t *enc = encoder;
@@ -80,7 +80,7 @@ void x264_audio_encoder_close( hnd_t encoder )
     free( enc );
 }
 
-const audio_encoder_t *x264_encoder_by_name( char *name )
+const audio_encoder_t *x264_encoder_by_name( const char *name )
 {
 #define IFRET( enc ) if( !strcmp( #enc, name ) ) return &audio_encoder_ ## enc;
 #if HAVE_AUDIO
@@ -93,7 +93,7 @@ const audio_encoder_t *x264_encoder_by_name( char *name )
     return NULL;
 }
 
-const audio_encoder_t *x264_select_audio_encoder( char *encoder, char* allowed_list[] )
+const audio_encoder_t *x264_select_audio_encoder( const char *encoder, char* allowed_list[] )
 {
     if( !encoder )
         return NULL;
@@ -124,4 +124,21 @@ const audio_encoder_t *x264_select_audio_encoder( char *encoder, char* allowed_l
         }
     }
     return x264_encoder_by_name( encoder );
+}
+
+#include "filters/audio/internal.h"
+
+hnd_t x264_audio_copy_open( hnd_t handle )
+{
+    assert( handle );
+    audio_hnd_t *h = handle;
+#define IFRET( dec )                                                                \
+        extern const audio_encoder_t audio_copy_ ## dec;                            \
+        if( !strcmp( #dec, h->self->name ) )                                        \
+            return x264_audio_encoder_open( &( audio_copy_ ## dec ), handle, NULL );
+#if HAVE_AUDIO
+    IFRET( lavf );
+#endif // HAVE_AUDIO
+#undef IFRET
+    return NULL;
 }

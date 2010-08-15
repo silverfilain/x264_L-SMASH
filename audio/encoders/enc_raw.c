@@ -22,13 +22,14 @@ static hnd_t init( hnd_t filter_chain, const char *opts )
     h->info.extradata_size = 0;
     h->info.chansize       = 2;
     h->info.samplesize     = 2 * h->info.channels;
+    h->info.timebase       = (timebase_t) { 1, h->info.samplerate };
 
     x264_cli_log( "audio", X264_LOG_INFO, "opened raw encoder (%dbits, %dch, %dhz)\n",
                   h->info.chansize * 8, h->info.channels, h->info.samplerate );
     return h;
 }
 
-static char *get_codec_name( hnd_t handle )
+static const char *get_codec_name( hnd_t handle )
 {
     return "raw";
 }
@@ -50,14 +51,16 @@ static audio_packet_t *get_next_packet( hnd_t handle )
     audio_packet_t *smp = x264_af_get_samples( h->filter_chain, h->last_sample, h->last_sample + h->info.framelen );
     if( !smp )
         return NULL;
-    h->last_sample += h->info.framelen;
 
     audio_packet_t *out = calloc( 1, sizeof( audio_packet_t ) );
     memcpy( out, smp, sizeof( audio_packet_t ) );
-    out->data    = NULL;
-    out->size    = 0;
-    out->rawdata = x264_af_interleave2( SMPFMT_S16, smp->data, smp->channels, smp->samplecount );
-    out->size    = smp->samplecount * h->info.samplesize;
+    out->info        = h->info;
+    out->samples     = NULL;
+    out->samplecount = smp->samplecount;
+    out->data        = x264_af_interleave2( SMPFMT_S16, smp->samples, smp->channels, smp->samplecount );
+    out->size        = smp->samplecount * h->info.samplesize;
+    out->dts         = h->last_sample;
+    h->last_sample  += h->info.framelen;
     x264_af_free_packet( smp );
 
     return out;

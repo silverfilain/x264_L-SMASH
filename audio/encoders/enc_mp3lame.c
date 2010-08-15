@@ -8,6 +8,7 @@ typedef struct enc_lame_t
 {
     audio_info_t info;
     hnd_t filter_chain;
+    int64_t packet_count;
 
     int finishing;
     lame_global_flags *lame;
@@ -71,6 +72,7 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     h->info.framesize  = h->info.framelen * 2;
     h->info.chansize   = 2;
     h->info.samplesize = 2 * h->info.channels;
+    h->info.timebase   = (timebase_t) { 1, h->info.samplerate };
     h->info.samplerate = lame_get_out_samplerate( h->lame );
 
     h->bufsize = 125 * h->info.framelen / 100 + 7200; // from lame.h, largest frame that the encoding functions may return
@@ -82,7 +84,7 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     return h;
 }
 
-static char *get_codec_name( hnd_t handle )
+static const char *get_codec_name( hnd_t handle )
 {
     return "mp3";
 }
@@ -108,7 +110,8 @@ static audio_packet_t *get_next_packet( hnd_t handle )
         return NULL;
 
     audio_packet_t *out = calloc( 1, sizeof( audio_packet_t ) );
-    out->rawdata = malloc( h->bufsize );
+    out->info = h->info;
+    out->data = malloc( h->bufsize );
 
     while( !out->size )
     {
@@ -121,12 +124,12 @@ static audio_packet_t *get_next_packet( hnd_t handle )
 
         if( !( h->in = x264_af_get_samples( h->filter_chain, h->last_sample, h->last_sample + h->info.framelen ) ) )
             goto error;
+        out->dts        = h->last_sample;
         h->last_sample += h->in->samplecount;
 
-        out->size = lame_encode_buffer_float( h->lame, h->in->data[0], h->in->data[1],
-                                              h->in->samplecount, out->rawdata, h->bufsize );
+        out->size = lame_encode_buffer_float( h->lame, h->in->samples[0], h->in->samples[1],
+                                              h->in->samplecount, out->data, h->bufsize );
     }
-
     return out;
 
 error:
@@ -143,11 +146,12 @@ static void skip_samples( hnd_t handle, uint64_t samplecount )
 static audio_packet_t *finish( hnd_t encoder )
 {
     enc_lame_t *h = encoder;
-    h->finishing = 1;
 
     audio_packet_t *out = calloc( 1, sizeof( audio_packet_t ) );
-    out->rawdata = malloc( h->bufsize );
-    out->size = lame_encode_flush( h->lame, out->rawdata, h->bufsize );
+    out->dts  = h->last_sample + h->in->samplecount * ++h->finishing; // HACK
+    out->info = h->info;
+    out->data = malloc( h->bufsize );
+    out->size = lame_encode_flush( h->lame, out->data, h->bufsize );
     if( !out->size )
         goto error;
     return out;
@@ -156,7 +160,6 @@ error:
     x264_af_free_packet( out );
     return NULL;
 }
-
 
 static void mp3_close( hnd_t handle )
 {

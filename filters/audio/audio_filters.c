@@ -46,10 +46,10 @@ void x264_af_free_packet( audio_packet_t *pkt )
     {
         if( pkt->priv )
             free( pkt->priv );
-        if( pkt->rawdata )
-            free( pkt->rawdata );
-        if( pkt->data && pkt->channels )
-            x264_af_free_buffer( pkt->data, pkt->channels );
+        if( pkt->data )
+            free( pkt->data );
+        if( pkt->samples && pkt->channels )
+            x264_af_free_buffer( pkt->samples, pkt->channels );
         free( pkt );
     }
 }

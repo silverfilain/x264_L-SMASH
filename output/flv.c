@@ -37,8 +37,6 @@ typedef struct
     int codecid;
     int stereo;
     int64_t lastdts;
-    int64_t step_num;
-    int64_t step_den;
 } flv_audio_hnd_t;
 #endif
 
@@ -80,10 +78,18 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
         return 0;
 
     // TODO: support adpcm_swf, pcm and aac
-    const audio_encoder_t *encoder = x264_select_audio_encoder( audio_enc, (char*[]){ "mp3", "raw", NULL } );
-    FAIL_IF_ERR( !encoder, "flv", "unable to select audio encoder\n" );
 
-    hnd_t henc = x264_audio_encoder_open( encoder, filters, audio_parameters );
+    hnd_t henc;
+
+    if( !strcmp( audio_enc, "copy" ) )
+        henc = x264_audio_copy_open( filters );
+    else
+    {
+        const audio_encoder_t *encoder = x264_select_audio_encoder( audio_enc, (char*[]){ "mp3", "raw", NULL } );
+        FAIL_IF_ERR( !encoder, "flv", "unable to select audio encoder\n" );
+
+        henc = x264_audio_encoder_open( encoder, filters, audio_parameters );
+    }
     FAIL_IF_ERR( !henc, "flv", "error opening audio encoder" );
     flv_hnd_t *p_flv = handle;
     flv_audio_hnd_t *a_flv = p_flv->a_flv = calloc( 1, sizeof( flv_audio_hnd_t ) );
@@ -91,7 +97,7 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
     audio_info_t *info = a_flv->info = x264_audio_encoder_info( henc );
 
     int header = 0;
-    char *codec = x264_audio_encoder_codec_name( henc );
+    const char *codec = x264_audio_encoder_codec_name( henc );
     if ( !strcmp( codec, "raw" ) )
         a_flv->codecid = FLV_CODECID_RAW;
     else if( !strcmp( codec, "mp3" ) )
@@ -147,10 +153,7 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
     }
 
     a_flv->header   = header;
-    a_flv->step_num = a_flv->info->framelen * 1000;
-    a_flv->step_den = a_flv->info->samplerate;
-
-    a_flv->encoder = henc;
+    a_flv->encoder  = henc;
 
     return 1;
 
@@ -392,7 +395,8 @@ static int write_audio( flv_hnd_t *p_flv, int64_t video_dts, int finish )
         if( !frame )
             break;
 
-        a_flv->lastdts += a_flv->step_num / a_flv->step_den;
+        assert( frame->dts >= 0 ); // Guard against encoders that don't give proper DTS
+        a_flv->lastdts = x264_from_timebase( frame->dts, frame->info.timebase, 1000 );
 
         x264_put_byte( c, FLV_TAG_TYPE_AUDIO );
         x264_put_be24( c, 1 + aac + frame->size );
@@ -403,7 +407,7 @@ static int write_audio( flv_hnd_t *p_flv, int64_t video_dts, int finish )
         x264_put_byte( c, a_flv->header );
         if( aac )
             x264_put_byte( c, 1 );
-        flv_append_data( c, frame->rawdata, frame->size );
+        flv_append_data( c, frame->data, frame->size );
 
         x264_put_be32( c, 11 + 1 + aac + frame->size );
 

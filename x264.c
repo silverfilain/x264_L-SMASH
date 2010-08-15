@@ -1307,10 +1307,12 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
                     audio_enable = 0;
                 else
                 {
-                    FAIL_IF_ERROR( !strcmp( audio_enc, "auto" ) || !x264_encoder_by_name( audio_enc ),
-                                    "audio encoder %s not supported or not compiled in\n" );
+                    FAIL_IF_ERROR( strcmp( audio_enc, "auto" ) && strcmp( audio_enc, "copy" ) && !x264_encoder_by_name( audio_enc ),
+                                   "audio encoder '%s' not supported or not compiled in\n", audio_enc );
 #ifdef HAVE_AUDIO
                     audio_enable = 1;
+#else
+                    x264_cli_log( "x264", X264_LOG_WARNING, "audio not compiled in, --acodec ignored.\n" );
 #endif
                 }
                 break;
