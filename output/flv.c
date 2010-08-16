@@ -85,7 +85,7 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
         henc = x264_audio_copy_open( filters );
     else
     {
-        const audio_encoder_t *encoder = x264_select_audio_encoder( audio_enc, (char*[]){ "mp3", "raw", NULL } );
+        const audio_encoder_t *encoder = x264_select_audio_encoder( audio_enc, (char*[]){ "mp3", "qtaac", "qtaac_he", "raw", NULL } );
         FAIL_IF_ERR( !encoder, "flv", "unable to select audio encoder\n" );
 
         henc = x264_audio_encoder_open( encoder, filters, audio_parameters );
@@ -102,54 +102,66 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
         a_flv->codecid = FLV_CODECID_RAW;
     else if( !strcmp( codec, "mp3" ) )
         a_flv->codecid = FLV_CODECID_MP3;
+    else if( !strcmp( codec, "aac" ) || !strcmp( codec, "aac_he" ) )
+        a_flv->codecid = FLV_CODECID_AAC;
+    else
+    {
+        x264_cli_log( "flv", X264_LOG_ERROR, "unsupported audio codec\n" );
+        goto error;
+    }
 
     header |= a_flv->codecid;
     a_flv->stereo = info->channels == 2;
 
-    switch( info->samplerate )
+    if( a_flv->codecid == FLV_CODECID_AAC )
+        header |= FLV_SAMPLERATE_44100HZ | FLV_SAMPLESSIZE_16BIT | FLV_STEREO;
+    else
     {
-        case 5512:
-        case 8000:
-            header |= FLV_SAMPLERATE_SPECIAL;
-            break;
-        case 11025:
-            header |= FLV_SAMPLERATE_11025HZ;
-            break;
-        case 22050:
-            header |= FLV_SAMPLERATE_22050HZ;
-            break;
-        case 44100:
-            header |= FLV_SAMPLERATE_44100HZ;
-            break;
-        default:
-            x264_cli_log( "flv", X264_LOG_ERROR, "unsupported %dhz sample rate\n", info->samplerate );
-            goto error;
-    }
+        switch( info->samplerate )
+        {
+            case 5512:
+            case 8000:
+                header |= FLV_SAMPLERATE_SPECIAL;
+                break;
+            case 11025:
+                header |= FLV_SAMPLERATE_11025HZ;
+                break;
+            case 22050:
+                header |= FLV_SAMPLERATE_22050HZ;
+                break;
+            case 44100:
+                header |= FLV_SAMPLERATE_44100HZ;
+                break;
+            default:
+                x264_cli_log( "flv", X264_LOG_ERROR, "unsupported %dhz sample rate\n", info->samplerate );
+                goto error;
+        }
 
-    switch( info->chansize )
-    {
-        case 1:
-            header |= FLV_SAMPLESSIZE_8BIT;
-            break;
-        case 2:
-            header |= FLV_SAMPLESSIZE_16BIT;
-            break;
-        default:
-            x264_cli_log( "flv", X264_LOG_ERROR, "%d-bit audio not supported\n", info->chansize * 8 );
-            goto error;
-    }
+        switch( info->chansize )
+        {
+            case 1:
+                header |= FLV_SAMPLESSIZE_8BIT;
+                break;
+            case 2:
+                header |= FLV_SAMPLESSIZE_16BIT;
+                break;
+            default:
+                x264_cli_log( "flv", X264_LOG_ERROR, "%d-bit audio not supported\n", info->chansize * 8 );
+                goto error;
+        }
 
-    switch( info->channels )
-    {
-        case 1:
-            header |= FLV_MONO;
-            break;
-        case 2:
-            header |= FLV_STEREO;
-            break;
-        default:
-            x264_cli_log( "flv", X264_LOG_ERROR, "%d-channel audio not supported\n", info->channels );
-            goto error;
+        switch( info->channels )
+        {
+            case 1:
+                header |= FLV_MONO;
+                break;
+            case 2:
+                header |= FLV_STEREO;
+                break;
+            default:
+                x264_cli_log( "flv", X264_LOG_ERROR, "%d-channel audio not supported\n", info->channels );
+                goto error;
+        }
     }
 
     a_flv->header   = header;
