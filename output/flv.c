@@ -90,10 +90,10 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
 
         henc = x264_audio_encoder_open( encoder, filters, audio_parameters );
     }
-    FAIL_IF_ERR( !henc, "flv", "error opening audio encoder" );
+    FAIL_IF_ERR( !henc, "flv", "error opening audio encoder\n" );
     flv_hnd_t *p_flv = handle;
     flv_audio_hnd_t *a_flv = p_flv->a_flv = calloc( 1, sizeof( flv_audio_hnd_t ) );
-    a_flv->lastdts = INT64_MIN;
+    a_flv->lastdts = INVALID_DTS;
     audio_info_t *info = a_flv->info = x264_audio_encoder_info( henc );
 
     int header = 0;
@@ -261,7 +261,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
         x264_put_amf_string( c, "audiocodecid" );
         x264_put_amf_double( c, a_flv->codecid >> FLV_AUDIO_CODECID_OFFSET );
         x264_put_amf_string( c, "audiosamplesize" );
-        x264_put_amf_double( c, a_flv->info->chansize );
+        x264_put_amf_double( c, a_flv->info->chansize * 8 );
         x264_put_amf_string( c, "audiosamplerate" );
         x264_put_amf_double( c, a_flv->info->samplerate );
         x264_put_amf_string( c, "stereo" );
@@ -449,15 +449,11 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
     p_flv->i_prev_dts = p_picture->i_dts;
     p_flv->i_prev_pts = p_picture->i_pts;
 
-#if HAVE_AUDIO
-    FAIL_IF_ERR( p_flv->a_flv && write_audio( p_flv, dts, 0 ) < 0, "flv", "error writing audio\n" );
-#endif
-
     // A new frame - write packet header
     x264_put_byte( c, FLV_TAG_TYPE_VIDEO );
     x264_put_be24( c, 0 ); // calculated later
-    x264_put_be24( c, dts );
-    x264_put_byte( c, dts >> 24 );
+    x264_put_be24( c, (int32_t) dts );
+    x264_put_byte( c, (int32_t) dts >> 24 );
     x264_put_be24( c, 0 );
 
     p_flv->start = c->d_cur;
@@ -477,6 +473,10 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
     rewrite_amf_be24( c, length, p_flv->start - 10 );
     x264_put_be32( c, 11 + length ); // Last tag size
     CHECK( flv_flush_data( c ) );
+
+#if HAVE_AUDIO
+    FAIL_IF_ERR( p_flv->a_flv && write_audio( p_flv, dts, 0 ) < 0, "flv", "error writing audio\n" );
+#endif
 
     p_flv->i_framenum++;
 
