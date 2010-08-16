@@ -18,7 +18,7 @@ hnd_t x264_audio_encoder_open( const audio_encoder_t *encoder, hnd_t filter_chai
     enc->handle        = encoder->init( filter_chain, opts );
     enc->filters       = filter_chain;
 
-    return enc;
+    return !enc->handle ? NULL : enc;
 }
 
 const char *x264_audio_encoder_codec_name( hnd_t encoder )
