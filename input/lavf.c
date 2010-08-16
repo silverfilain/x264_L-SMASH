@@ -67,20 +67,25 @@ static int read_frame_internal( cli_pic_t *p_pic, lavf_hnd_t *h, int i_frame, vi
     while( i_frame >= h->next_frame )
     {
         int finished = 0;
-        while( !finished && av_read_frame( h->lavf, pkt ) >= 0 )
+        int ret = 0;
+        do
+        {
+            ret = av_read_frame( h->lavf, pkt );
+
             if( pkt->stream_index == h->stream_id )
             {
+                if( ret < 0 )
+                    pkt->size = 0;
+
                 c->reordered_opaque = pkt->pts;
                 if( avcodec_decode_video2( c, &frame, &finished, pkt ) < 0 )
                     x264_cli_log( "lavf", X264_LOG_WARNING, "video decoding failed on frame %d\n", h->next_frame );
             }
+        } while( !finished && ret >= 0 );
+
         if( !finished )
-        {
-            if( avcodec_decode_video2( c, &frame, &finished, pkt ) < 0 )
-                x264_cli_log( "lavf", X264_LOG_WARNING, "video decoding failed on frame %d\n", h->next_frame );
-            if( !finished )
-                return -1;
-        }
+            return -1;
+
         h->next_frame++;
     }
 
@@ -99,7 +104,7 @@ static int read_frame_internal( cli_pic_t *p_pic, lavf_hnd_t *h, int i_frame, vi
     if( h->vfr_input )
     {
         p_pic->pts = p_pic->duration = 0;
-        if( frame.reordered_opaque != AV_NOPTS_VALUE )
+        if( c->has_b_frames && frame.reordered_opaque != AV_NOPTS_VALUE )
             p_pic->pts = frame.reordered_opaque;
         else if( pkt->dts != AV_NOPTS_VALUE )
             p_pic->pts = pkt->dts; // for AVI files
@@ -166,7 +171,7 @@ static int open_file( char *psz_filename, hnd_t *p_handle, video_info_t *info, c
     info->width      = c->width;
     info->height     = c->height;
     info->csp        = h->first_pic->img.csp;
-    info->num_frames = 0; /* FIXME */
+    info->num_frames = h->lavf->streams[i]->nb_frames;
     info->sar_height = c->sample_aspect_ratio.den;
     info->sar_width  = c->sample_aspect_ratio.num;
 
