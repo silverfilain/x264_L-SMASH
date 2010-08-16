@@ -32,21 +32,21 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     h->filter_chain = chain;
     h->info         = chain->info;
 
-    char **opts = x264_split_options( opt_str, (const char*[]){ "bitrate", "vbr", "quality", NULL } );
+    char **opts = x264_split_options( opt_str, (const char*[]){ "is_vbr", "bitrate", "quality", "samplerate", NULL } );
     assert( opts );
 
-    char *cbr   = x264_get_option( "bitrate", opts );
-    char *vbr   = x264_get_option( "vbr", opts );
-    float brval = x264_otof( vbr, 6.0 );
-    brval       = x264_otof( cbr, brval );
-    int quality = x264_otoi( x264_get_option( "quality", opts ), 0 );
+    int is_vbr  = x264_otob( x264_get_option( "is_vbr", opts ), 1 );
+    float brval;
+    if( is_vbr )
+        brval = x264_otof( x264_get_option( "bitrate", opts ), 6.0 );
+    else
+        brval = x264_otof( x264_get_option( "bitrate", opts ), 128 ); // dummy default value, must never be used
+
+    int quality = x264_otof( x264_get_option( "quality", opts ), 0 );
+
+    h->info.samplerate = x264_otof( x264_get_option( "samplerate", opts ), chain->info.samplerate );
 
     x264_free_string_array( opts );
-    if( cbr && vbr )
-    {
-        x264_cli_log( "lame", X264_LOG_ERROR, "both bitrate and quality mode specified" );
-        return 0;
-    }
 
     h->info.extradata      = NULL;
     h->info.extradata_size = 0;
@@ -54,12 +54,13 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     h->lame = lame_init();
     // lame expects floats to be in the same range as shorts, our floats are -1..1 so tell it to scale
     lame_set_scale( h->lame, 32768 );
-    lame_set_in_samplerate( h->lame, h->info.samplerate );
+    lame_set_in_samplerate( h->lame, chain->info.samplerate );
+    lame_set_out_samplerate( h->lame, h->info.samplerate );
     lame_set_num_channels( h->lame, h->info.channels );
     lame_set_quality( h->lame, quality );
     lame_set_VBR( h->lame, vbr_default );
 
-    if( cbr )
+    if( !is_vbr )
     {
         lame_set_VBR( h->lame, vbr_off );
         lame_set_brate( h->lame, (int) brval );
@@ -76,15 +77,14 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     h->info.chansize   = 2;
     h->info.samplesize = 2 * h->info.channels;
     h->info.timebase   = (timebase_t) { 1, h->info.samplerate };
-    h->info.samplerate = lame_get_out_samplerate( h->lame );
 
     h->bufsize = 125 * h->info.framelen / 100 + 7200; // from lame.h, largest frame that the encoding functions may return
     h->buffer = malloc( h->bufsize );
     h->buf_index = 0;
 
-    x264_cli_log( "audio", X264_LOG_INFO, "opened lame mp3 encoder (%s: %g%s)\n",
-                  ( cbr ? "bitrate" : "VBR" ), brval,
-                  ( cbr ? "kbps" : "" ) );
+    x264_cli_log( "audio", X264_LOG_INFO, "opened lame mp3 encoder (%s: %g%s, quality: %d, samplerate: %dhz)\n",
+                  ( !is_vbr ? "bitrate" : "VBR" ), brval,
+                  ( !is_vbr ? "kbps" : "" ), quality, h->info.samplerate );
 
     return h;
 }

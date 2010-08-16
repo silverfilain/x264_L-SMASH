@@ -677,6 +677,8 @@ static void Help( x264_param_t *defaults, int longhelp )
     H0( "\n" );
     H0( "      --abitrate <integer>    Enables bitrate mode and specifies bitrate.\n" );
     H0( "      --aquality <float>      Specifies audio quality [codec-dependent default]\n" );
+    H0( "      --asamplerate <integer>   Specifies audio samplerate [keep source samplerate]\n" );
+    H0( "      --acodec-quality <float>   Specifies audio codec encoding quality [codec specific]\n" );
     H0( "\n" );
     H0( "Input/Output:\n" );
     H0( "\n" );
@@ -763,7 +765,9 @@ enum {
     OPT_AUDIOFILE,
     OPT_AUDIOCODEC,
     OPT_AUDIOBITRATE,
-    OPT_AUDIOQUALITY
+    OPT_AUDIOQUALITY,
+    OPT_AUDIOSAMPLERATE,
+    OPT_AUDIOCODECQUALITY
 } OptionsOPT;
 
 static char short_options[] = "8A:B:b:f:hI:i:m:o:p:q:r:t:Vvw";
@@ -919,6 +923,8 @@ static struct option long_options[] =
     { "acodec",      required_argument, NULL, OPT_AUDIOCODEC },
     { "abitrate",    required_argument, NULL, OPT_AUDIOBITRATE },
     { "aquality",    required_argument, NULL, OPT_AUDIOQUALITY },
+    { "asamplerate", required_argument, NULL, OPT_AUDIOSAMPLERATE },
+    { "acodec-quality",    required_argument, NULL, OPT_AUDIOCODECQUALITY },
     {0, 0, 0, 0}
 };
 
@@ -1135,6 +1141,8 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
     char *audio_filename = NULL;
     int audio_bitrate    = -1;
     float audio_quality  = NAN;
+    float acodec_quality = NAN;
+    int audio_samplerate = -1;
     int audio_enable     = 1;
     hnd_t haud           = NULL;
 
@@ -1328,6 +1336,12 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
             case OPT_AUDIOQUALITY:
                 audio_quality = (float) atof( optarg );
                 break;
+            case OPT_AUDIOCODECQUALITY:
+                acodec_quality = (float) atof( optarg );
+                break;
+            case OPT_AUDIOSAMPLERATE:
+                audio_samplerate = atoi( optarg );
+                break;
             default:
 generic_option:
             {
@@ -1415,13 +1429,26 @@ generic_option:
                   info.height, info.interlaced ? 'i' : 'p', info.sar_width, info.sar_height,
                   info.fps_num, info.fps_den, info.vfr ? 'v' : 'c' );
 
-    char arg[30] = { 0 };
+    char arg[128] = { 0 };
+    int len = 0;
     if( audio_enable )
     {
         if( audio_bitrate > 0 )
-            snprintf( arg, 30, "bitrate=%d", audio_bitrate );
+            len += snprintf( &arg[len], 128, "0,%d", audio_bitrate );
         else if( isfinite( audio_quality ) )
-            snprintf( arg, 30, "vbr=%f", audio_quality );
+            len += snprintf( &arg[len], 128, ",%f", audio_quality );
+        else
+            len += snprintf( &arg[len], 128, "," );
+
+        if( isfinite( acodec_quality ) )
+            len += snprintf( &arg[len], 128, ",%f", acodec_quality );
+        else
+            len += snprintf( &arg[len], 128, "," );
+
+        if( audio_samplerate > 0 )
+            len += snprintf( &arg[len], 128, ",%d", audio_samplerate );
+        else
+            len += snprintf( &arg[len], 128, "," );
     }
 
     FAIL_IF_ERROR( output.open_file( output_filename, &opt->hout, haud, audio_enc, arg ) < 0, "could not open output file `%s'\n", output_filename )
