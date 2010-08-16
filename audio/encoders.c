@@ -87,6 +87,10 @@ const audio_encoder_t *x264_encoder_by_name( const char *name )
 #if HAVE_LAME
     IFRET( mp3 );
 #endif
+#if HAVE_QT_AAC
+    IFRET( qtaac );
+    IFRET( qtaac_he );
+#endif
     IFRET( raw );
 #endif /* HAVE_AUDIO */
 #undef IFRET

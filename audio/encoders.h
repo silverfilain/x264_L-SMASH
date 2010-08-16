@@ -21,6 +21,10 @@ extern const audio_encoder_t audio_encoder_raw;
 #if HAVE_LAME
 extern const audio_encoder_t audio_encoder_mp3;
 #endif
+#if HAVE_QT_AAC
+extern const audio_encoder_t audio_encoder_qtaac;
+extern const audio_encoder_t audio_encoder_qtaac_he;
+#endif
 #endif /* HAVE_AUDIO */
 
 /* the first available encoder on allowed_list is the prefered encoder if encoder is "auto"

@@ -27,6 +27,7 @@ echo "  --extra-ldflags=ELDFLAGS add ELDFLAGS to LDFLAGS"
 echo "  --host=HOST              build programs to run on HOST"
 echo "  --cross-prefix=PREFIX    use PREFIX for compilation tools"
 echo "  --sysroot=SYSROOT        root of cross-build tree"
+echo "  --qtsdk=QTSDKROOT        root of QuickTime SDK (x86 mingw only)"
 echo ""
 exit 1
 fi
@@ -151,6 +152,7 @@ shared="no"
 bit_depth="8"
 
 audio_mp3="auto"
+audio_qtaac="auto"
 
 CFLAGS="$CFLAGS -Wall -I."
 LDFLAGS="$LDFLAGS"
@@ -240,6 +242,10 @@ for opt do
         --sysroot=*)
             CFLAGS="$CFLAGS --sysroot=${opt#--sysroot=}"
             LDFLAGS="$LDFLAGS --sysroot=${opt#--sysroot=}"
+            ;;
+        --qtsdk=*)
+            CFLAGS="$CFLAGS -I${opt#--qtsdk=}/CIncludes"
+            LDFLAGSCLI="$LDFLAGSCLI ${opt#--qtsdk=}/Libraries/QTMLClient.LIB"
             ;;
         --bit-depth=*)
             bit_depth="${opt#--bit-depth=}"
@@ -652,6 +658,16 @@ if [ "$audio" = "auto" ]; then
             audio_encs="$audio_encs, mp3"
         else
             audio_mp3="no"
+        fi
+    fi
+    if [ "$audio_qtaac" = "auto" -a "$SYS" = "MINGW" ]; then
+        if cc_check QTML.h "-D__CFTREE__" "InitializeQTML(0);"; then
+            define HAVE_QT_AAC
+            audio_qtaac="yes"
+            audio_encs="$audio_encs, qtaac"
+            CFLAGS="$CFLAGS -D__CFTREE__ -Wno-multichar -Wno-unknown-pragmas"
+        else
+            audio_qtaac="no"
         fi
     fi
 fi

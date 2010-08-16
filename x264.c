@@ -117,6 +117,10 @@ static const char * const audio_encoders[] =
 #if HAVE_LAME
     "mp3",
 #endif
+#if HAVE_QT_AAC
+    "qtaac",
+    "qtaac_he",
+#endif
 #endif /* HAVE_AUDIO */
     NULL
 };
