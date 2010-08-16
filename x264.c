@@ -1724,8 +1724,8 @@ static int  Encode( x264_param_t *param, cli_opt_t *opt )
     if( output.set_param( opt->hout, param ) )
     {
         x264_cli_log( "x264", X264_LOG_ERROR, "can't set outfile param\n" );
-        filter.free( opt->hin );
         output.close_file( opt->hout, largest_pts, second_largest_pts );
+        filter.free( opt->hin );
         return -1;
     }
 
@@ -1860,8 +1860,8 @@ static int  Encode( x264_param_t *param, cli_opt_t *opt )
         opt->tcfile_out = NULL;
     }
 
-    filter.free( opt->hin );
     output.close_file( opt->hout, largest_pts * dts_compress_multiplier, second_largest_pts * dts_compress_multiplier );
+    filter.free( opt->hin );
 
     if( i_frame_output > 0 )
     {
