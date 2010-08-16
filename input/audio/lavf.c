@@ -110,8 +110,8 @@ static int init( hnd_t *handle, const char *opt_str )
 
     h->ctx = h->lavf->streams[tid]->codec;
     h->codec = avcodec_find_decoder( h->ctx->codec_id );
-    if( avcodec_open( h->ctx, h->codec ) )
-        goto codecfail;
+    if( !h->codec || avcodec_open( h->ctx, h->codec ) < 0 )
+        goto codecnotfound;
 
     h->samplefmt  = h->ctx->sample_fmt;
     h->info = (audio_info_t)
@@ -142,7 +142,9 @@ static int init( hnd_t *handle, const char *opt_str )
     return 0;
 
 codecfail:
-    AF_LOG_ERR( h, "error opening the %s decoder for track %d\n", h->codec->name, h->track );
+    AF_LOG_ERR( h, "error decoding the %s audio for track %d\n", h->codec->name , h->track );
+codecnotfound:
+    AF_LOG_ERR( h, "no decoder found for track %d\n", h->track );
 fail:
     if( h && h->lavf )
         av_close_input_file( h->lavf );
