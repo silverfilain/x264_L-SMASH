@@ -52,6 +52,9 @@ SRCCLI += audio/encoders/enc_raw.c
 ifneq ($(findstring HAVE_LAVF, $(CONFIG)),)
 SRCCLI += input/audio/lavf.c
 endif
+ifneq ($(findstring HAVE_AVS, $(CONFIG)),)
+SRCCLI += input/audio/avs.c
+endif
 endif
 
 ifneq ($(findstring HAVE_LAME, $(CONFIG)),)

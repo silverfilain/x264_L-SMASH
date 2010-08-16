@@ -1410,7 +1410,16 @@ generic_option:
     if( audio_enable )
     {
         if( audio_filename )
-            haud = x264_audio_open_from_file( NULL, audio_filename, TRACK_ANY );
+        {
+#if HAVE_AVS
+            if( !strcmp( get_filename_extension( audio_filename ), "avs" ) )
+            {
+                haud = x264_audio_open_from_file( "avs", audio_filename, TRACK_ANY );
+            }
+#endif
+            else
+                haud = x264_audio_open_from_file( NULL, audio_filename, TRACK_ANY );
+        }
         else if( input.open_audio )
             haud = input.open_audio( opt->hin, TRACK_ANY );
         else

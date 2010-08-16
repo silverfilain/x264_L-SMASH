@@ -17,6 +17,9 @@ audio_filter_t *x264_af_get_filter( char *name )
 #if HAVE_LAVF
     CHECK( lavf );
 #endif
+#if HAVE_AVS
+    CHECK( avs );
+#endif
 #undef CHECKFLT
 #undef CHECK
 #endif /* HAVE_AUDIO */

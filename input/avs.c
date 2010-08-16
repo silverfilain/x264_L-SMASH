@@ -24,6 +24,10 @@
 #include <windows.h>
 #define FAIL_IF_ERROR( cond, ... ) FAIL_IF_ERR( cond, "avs", __VA_ARGS__ )
 
+#if HAVE_AUDIO
+#include "audio/audio.h"
+#endif
+
 #define AVSC_NO_DECLSPEC
 #undef EXTERN_C
 #include "extras/avisynth_c.h"
@@ -49,6 +53,7 @@
 
 typedef struct
 {
+    char *filename;
     AVS_Clip *clip;
     AVS_ScriptEnvironment *env;
     HMODULE library;
@@ -133,6 +138,8 @@ static int open_file( char *psz_filename, hnd_t *p_handle, video_info_t *info, c
     AVS_Value arg = avs_new_value_string( psz_filename );
     AVS_Value res;
     char *filename_ext = get_filename_extension( psz_filename );
+
+    h->filename = strdup( psz_filename );
 
     if( !strcasecmp( filename_ext, "avs" ) )
     {
@@ -296,8 +303,19 @@ static int close_file( hnd_t handle )
     if( h->func.avs_delete_script_environment )
         h->func.avs_delete_script_environment( h->env );
     FreeLibrary( h->library );
+    free( h->filename );
     free( h );
     return 0;
 }
 
+#if HAVE_AUDIO
+static hnd_t open_audio( hnd_t handle, int track )
+{
+    avs_hnd_t *h = handle;
+    return x264_audio_open_from_file( "avs", h->filename, track );
+}
+
+const cli_input_t avs_input = { open_file, picture_alloc, read_frame, release_frame, picture_clean, close_file, open_audio };
+#else
 const cli_input_t avs_input = { open_file, picture_alloc, read_frame, release_frame, picture_clean, close_file };
+#endif
