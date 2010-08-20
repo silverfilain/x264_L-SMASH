@@ -82,19 +82,11 @@ void x264_audio_encoder_close( hnd_t encoder )
 
 const audio_encoder_t *x264_encoder_by_name( const char *name )
 {
-#define ENC( name ) &audio_encoder_ ## name
-#define IFRET( enc ) if( !strcmp( #enc, name ) ) return ENC( enc );
+#define IFRET( enc ) if( !strcmp( #enc, name ) ) return &audio_encoder_ ## enc;
 #if HAVE_AUDIO
 #if HAVE_LAME
     IFRET( mp3 );
 #endif
-    if( !strcmp( "aac", name ) )
-    {
-#if HAVE_QT_AAC
-        return ENC( qtaac );
-#endif
-        return NULL;
-    }
 #if HAVE_QT_AAC
     IFRET( qtaac );
     IFRET( qtaac_he );
@@ -102,7 +94,6 @@ const audio_encoder_t *x264_encoder_by_name( const char *name )
     IFRET( raw );
 #endif /* HAVE_AUDIO */
 #undef IFRET
-#undef ENC
     return NULL;
 }
 

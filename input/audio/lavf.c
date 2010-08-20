@@ -13,6 +13,7 @@ typedef struct lavf_source_t
     AVFormatContext *lavf;
     AVCodecContext *ctx;
     AVCodec *codec;
+    AVBitStreamFilterContext *bsfs;
 
     int samplefmt;
     unsigned track;
@@ -30,6 +31,7 @@ typedef struct lavf_source_t
 #define DEFAULT_BUFSIZE AVCODEC_MAX_AUDIO_FRAME_SIZE * 2
 
 static int buffer_next_frame( lavf_source_t *h );
+static audio_packet_t *get_next_packet( hnd_t handle );
 
 const audio_filter_t audio_filter_lavf;
 
@@ -189,6 +191,13 @@ static struct AVPacket *next_packet( hnd_t handle )
         }
     } while( pkt->stream_index != h->track );
 
+    if( h->bsfs )
+    {
+        AVPacket pkt_tmp = *pkt;
+        av_bitstream_filter_filter( h->bsfs, h->ctx, NULL, &pkt_tmp.data, &pkt_tmp.size, pkt->data, pkt->size, 0 );
+        *pkt = pkt_tmp;
+    }
+
     return pkt;
 }
 
@@ -200,6 +209,23 @@ static hnd_t copy_init( hnd_t filter_chain, const char *opts )
     {
         lavf_source_t *h = filter_chain;
         h->copy = 1;
+
+        if( !strcmp( h->ctx->codec->name, "aac" ) )
+        {
+            if( !h->ctx->extradata )
+            {
+                h->bsfs = av_bitstream_filter_init( "aac_adtstoasc" );
+                if( h->pkt )
+                {
+                    AVPacket pkt_tmp = *h->pkt;
+                    av_bitstream_filter_filter( h->bsfs, h->ctx, NULL, &pkt_tmp.data, &pkt_tmp.size, h->pkt->data, h->pkt->size, 0 );
+                    *h->pkt = pkt_tmp;
+
+                    h->info.extradata = h->ctx->extradata;
+                    h->info.extradata_size = h->ctx->extradata_size;
+                }
+            }
+        }
         return chain;
     }
     fprintf( stderr, "lavf [error]: attempted to enter copy mode with a non-empty filter chain!" ); // as far as CLI users see, lavf isn't a filter
@@ -464,6 +490,8 @@ static void lavf_close( hnd_t handle )
     free_avpacket( h->pkt );
     avcodec_close( h->ctx );
     av_close_input_file( h->lavf );
+    if( h->bsfs )
+        av_bitstream_filter_close( h->bsfs );
     free( h );
 }
 

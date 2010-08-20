@@ -101,9 +101,7 @@ static const char * const muxer_names[] =
     "raw",
     "mkv",
     "flv",
-#if HAVE_GPAC
     "mp4",
-#endif
     0
 };
 
@@ -329,7 +327,7 @@ static void Help( x264_param_t *defaults, int longhelp )
         " .264 -> Raw bytestream\n"
         " .mkv -> Matroska\n"
         " .flv -> Flash Video\n"
-        " .mp4 -> MP4 if compiled with GPAC support (%s)\n"
+        " .mp4 -> MP4\n"
         "Output bit depth: %d (configured at compile time)\n"
         "\n"
         "Options:\n"
@@ -350,11 +348,6 @@ static void Help( x264_param_t *defaults, int longhelp )
         "no",
 #endif
 #if HAVE_FFMS
-        "yes",
-#else
-        "no",
-#endif
-#if HAVE_GPAC
         "yes",
 #else
         "no",
@@ -726,6 +719,9 @@ static void Help( x264_param_t *defaults, int longhelp )
     H2( "      --timebase <int/int>    Specify timebase numerator and denominator\n"
         "                 <integer>    Specify timebase numerator for input timecode file\n"
         "                              or specify timebase denominator for other input\n" );
+    H2( "      --chapter <string>      Set the chapter list from chapter format file\n"
+        "                              Format of each line: hours:minutes:seconds.milliseconds chaptername\n" );
+    H2( "      --language <string>     Set the language by ISO639-2 language codes\n" );
     H0( "\n" );
     H0( "Filtering:\n" );
     H0( "\n" );
@@ -771,7 +767,9 @@ enum {
     OPT_AUDIOBITRATE,
     OPT_AUDIOQUALITY,
     OPT_AUDIOSAMPLERATE,
-    OPT_AUDIOCODECQUALITY
+    OPT_AUDIOCODECQUALITY,
+    OPT_CHAPTER,
+    OPT_LANGUAGE
 } OptionsOPT;
 
 static char short_options[] = "8A:B:b:f:hI:i:m:o:p:q:r:t:Vvw";
@@ -929,6 +927,8 @@ static struct option long_options[] =
     { "aquality",    required_argument, NULL, OPT_AUDIOQUALITY },
     { "asamplerate", required_argument, NULL, OPT_AUDIOSAMPLERATE },
     { "acodec-quality",    required_argument, NULL, OPT_AUDIOCODECQUALITY },
+    { "chapter",     required_argument, NULL, OPT_CHAPTER },
+    { "language",    required_argument, NULL, OPT_LANGUAGE },
     {0, 0, 0, 0}
 };
 
@@ -940,7 +940,6 @@ static int select_output( const char *muxer, char *filename, x264_param_t *param
 
     if( !strcasecmp( ext, "mp4" ) )
     {
-#if HAVE_GPAC
         output = mp4_output;
         param->b_annexb = 0;
         param->b_dts_compress = 0;
@@ -950,10 +949,6 @@ static int select_output( const char *muxer, char *filename, x264_param_t *param
             x264_cli_log( "x264", X264_LOG_WARNING, "cbr nal-hrd is not compatible with mp4\n" );
             param->i_nal_hrd = X264_NAL_HRD_VBR;
         }
-#else
-        x264_cli_log( "x264", X264_LOG_ERROR, "not compiled with MP4 output support\n" );
-        return -1;
-#endif
     }
     else if( !strcasecmp( ext, "mkv" ) )
     {
@@ -1138,6 +1133,7 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
     int b_user_fps = 0;
     int b_user_interlaced = 0;
     cli_input_opt_t input_opt;
+    cli_output_opt_t output_opt;
     char *preset = NULL;
     char *tune = NULL;
 
@@ -1159,6 +1155,7 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
 
     memset( opt, 0, sizeof(cli_opt_t) );
     memset( &input_opt, 0, sizeof(cli_input_opt_t) );
+    memset( &output_opt, 0, sizeof(cli_output_opt_t) );
     opt->b_progress = 1;
 
     /* Presets are applied before all other options. */
@@ -1346,6 +1343,12 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
             case OPT_AUDIOSAMPLERATE:
                 audio_samplerate = atoi( optarg );
                 break;
+            case OPT_CHAPTER:
+                output_opt.chapter = optarg;
+                break;
+            case OPT_LANGUAGE:
+                output_opt.language = optarg;
+                break;
             default:
 generic_option:
             {
@@ -1464,7 +1467,7 @@ generic_option:
             len += snprintf( &arg[len], 128, "," );
     }
 
-    FAIL_IF_ERROR( output.open_file( output_filename, &opt->hout, haud, audio_enc, arg ) < 0, "could not open output file `%s'\n", output_filename )
+    FAIL_IF_ERROR( output.open_file( output_filename, &opt->hout, haud, audio_enc, arg, &output_opt ) < 0, "could not open output file `%s'\n", output_filename )
 
     if( tcfile_name )
     {

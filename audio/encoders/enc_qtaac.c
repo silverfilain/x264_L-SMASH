@@ -754,6 +754,7 @@ eof_reached:
     h->finishing = 1;
     if( h->in )
         x264_af_free_packet( h->in );
+    h->in = NULL;
     ioData->mNumberBuffers = 0;
     ioData->mBuffers[0].mData = NULL;
     ioData->mBuffers[0].mDataByteSize = 0;

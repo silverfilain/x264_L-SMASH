@@ -189,7 +189,7 @@ static int write_header( flv_buffer *c, int audio )
     return flv_flush_data( c );
 }
 
-static int open_file( char *psz_filename, hnd_t *p_handle, hnd_t audio_filters, char *audio_enc, char *audio_params )
+static int open_file( char *psz_filename, hnd_t *p_handle, hnd_t audio_filters, char *audio_enc, char *audio_params, cli_output_opt_t *opt )
 {
     flv_hnd_t *p_flv = malloc( sizeof(*p_flv) );
 

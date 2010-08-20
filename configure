@@ -10,7 +10,6 @@ echo "  --help                   print this message"
 echo "  --disable-avs            disables avisynth support (windows only)"
 echo "  --disable-lavf           disables libavformat support"
 echo "  --disable-ffms           disables ffmpegsource support"
-echo "  --disable-gpac           disables gpac support"
 echo "  --disable-audio          disables audio support (requires lavf support)"
 echo "  --disable-pthread        disables multithreaded encoding"
 echo "  --disable-swscale        disables swscale support"
@@ -139,7 +138,6 @@ DEVNULL='/dev/null'
 avs="auto"
 lavf="auto"
 ffms="auto"
-gpac="auto"
 audio="auto"
 pthread="auto"
 swscale="auto"
@@ -194,9 +192,6 @@ for opt do
             ;;
         --disable-ffms)
             ffms="no"
-            ;;
-        --disable-gpac)
-            gpac="no"
             ;;
         --disable-audio)
             audio="no"
@@ -672,28 +667,6 @@ if [ "$audio" = "auto" ]; then
     fi
 fi
 
-GPAC_LIBS="-lgpac_static"
-if [ $SYS = MINGW ]; then
-    GPAC_LIBS="$GPAC_LIBS -lwinmm"
-fi
-if [ "$gpac" = "auto" ] ; then
-    gpac="no"
-    if cc_check gpac/isomedia.h "$GPAC_LIBS" ; then
-        if cc_check gpac/isomedia.h "$GPAC_LIBS" "gf_isom_set_pixel_aspect_ratio(0,0,0,0,0);" ; then
-            gpac="yes"
-        else
-            echo "Warning: gpac is too old, update to 2007-06-21 UTC or later"
-        fi
-    fi
-fi
-if [ "$gpac" = "yes" ] ; then
-    define HAVE_GPAC
-    if cc_check gpac/isomedia.h "-Werror $GPAC_LIBS" "gf_malloc(1); gf_free(NULL);" ; then
-        define HAVE_GF_MALLOC
-    fi
-    LDFLAGSCLI="$GPAC_LIBS $LDFLAGSCLI"
-fi
-
 if [ "$avs" = "auto" ] ; then
     avs="no"
     if [ $SYS = MINGW ] && cc_check extras/avisynth_c.h ; then
@@ -823,7 +796,6 @@ avs:        $avs
 lavf:       $lavf
 ffms:       $ffms
 audio:      $audio$(test $audio = "yes" && echo " ($audio_encs)")
-gpac:       $gpac
 pthread:    $pthread
 filters:    $filters
 debug:      $debug

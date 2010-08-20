@@ -15,7 +15,8 @@ SRCS = common/mc.c common/predict.c common/pixel.c common/macroblock.c \
 
 SRCCLI = x264.c input/input.c input/timecode.c input/raw.c input/y4m.c \
          output/raw.c output/matroska.c output/matroska_ebml.c \
-         output/flv.c output/flv_bytestream.c filters/filters.c \
+         output/flv.c output/flv_bytestream.c \
+         output/mp4.c output/isom.c output/isom_util.c output/mp4sys.c filters/filters.c \
          filters/video/video.c filters/video/source.c filters/video/internal.c \
          filters/video/resize.c filters/video/cache.c filters/video/fix_vfr_pts.c \
          filters/video/select_every.c filters/video/crop.c \
@@ -41,10 +42,6 @@ endif
 
 ifneq ($(findstring HAVE_FFMS, $(CONFIG)),)
 SRCCLI += input/ffms.c
-endif
-
-ifneq ($(findstring HAVE_GPAC, $(CONFIG)),)
-SRCCLI += output/mp4.c
 endif
 
 ifneq ($(findstring HAVE_AUDIO, $(CONFIG)),)
