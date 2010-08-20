@@ -51,6 +51,7 @@ ifneq ($(findstring HAVE_AUDIO, $(CONFIG)),)
 SRCCLI += audio/encoders/enc_raw.c
 ifneq ($(findstring HAVE_LAVF, $(CONFIG)),)
 SRCCLI += input/audio/lavf.c
+SRCCLI += audio/encoders/enc_lavc.c
 endif
 ifneq ($(findstring HAVE_AVS, $(CONFIG)),)
 SRCCLI += input/audio/avs.c

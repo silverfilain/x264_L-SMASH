@@ -111,7 +111,6 @@ static const char * const muxer_names[] =
 static const char * const audio_encoders[] =
 {
     "auto",
-    "none",
 #if HAVE_AUDIO
     "raw",
 #if HAVE_LAME
@@ -121,7 +120,11 @@ static const char * const audio_encoders[] =
     "qtaac",
     "qtaac_he",
 #endif
+#if HAVE_LAVF
+    "lavc",
+#endif
 #endif /* HAVE_AUDIO */
+    "none",
     NULL
 };
 
@@ -677,12 +680,11 @@ static void Help( x264_param_t *defaults, int longhelp )
     H0( "      --audiofile <filename>  Uses audio from the specified file.\n" );
     H0( "      --acodec <string>       Specifies the audio codec [auto].\n");
     H1( "                              Supported and compiled in codecs:\n" );
-    H1( "                                  - %s", stringify_names( buf, audio_encoders ) );
-    H0( "\n" );
+    H1( "                                  - %s\n", stringify_names( buf, audio_encoders ) );
     H0( "      --abitrate <integer>    Enables bitrate mode and specifies bitrate.\n" );
     H0( "      --aquality <float>      Specifies audio quality [codec-dependent default]\n" );
-    H0( "      --asamplerate <integer>   Specifies audio samplerate [keep source samplerate]\n" );
-    H0( "      --acodec-quality <float>   Specifies audio codec encoding quality [codec specific]\n" );
+    H0( "      --asamplerate <integer> Specifies audio samplerate [keep source samplerate]\n" );
+    H0( "      --acodec-quality <float> Specifies audio codec encoding quality [codec specific]\n" );
     H0( "\n" );
     H0( "Input/Output:\n" );
     H0( "\n" );
@@ -1143,7 +1145,7 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
 
     char *audio_enc      = "auto";
     char *audio_filename = NULL;
-    int audio_bitrate    = -1;
+    float audio_bitrate  = -1;
     float audio_quality  = NAN;
     float acodec_quality = NAN;
     int audio_samplerate = -1;
@@ -1447,21 +1449,17 @@ generic_option:
     if( audio_enable )
     {
         if( audio_bitrate > 0 )
-            len += snprintf( &arg[len], 128, "0,%d", audio_bitrate );
+            len += snprintf( &arg[len], 128, "is_vbr=0,bitrate=%f", audio_bitrate );
         else if( isfinite( audio_quality ) )
-            len += snprintf( &arg[len], 128, ",%f", audio_quality );
-        else
-            len += snprintf( &arg[len], 128, "," );
+            len += snprintf( &arg[len], 128, "is_vbr=1,bitrate=%f", audio_quality );
 
         if( isfinite( acodec_quality ) )
-            len += snprintf( &arg[len], 128, ",%f", acodec_quality );
-        else
-            len += snprintf( &arg[len], 128, "," );
+            len += snprintf( &arg[len], 128 - len, "%squality=%f", len ? "," : "", acodec_quality );
 
         if( audio_samplerate > 0 )
-            len += snprintf( &arg[len], 128, ",%d", audio_samplerate );
-        else
-            len += snprintf( &arg[len], 128, "," );
+            len += snprintf( &arg[len], 128 - len, "%ssamplerate=%d", len ? "," : "", audio_samplerate );
+        
+        len += snprintf( &arg[len], 128 - len, "%scodec=%s", len ? "," : "", audio_enc );
     }
 
     FAIL_IF_ERROR( output.open_file( output_filename, &opt->hout, haud, audio_enc, arg ) < 0, "could not open output file `%s'\n", output_filename )

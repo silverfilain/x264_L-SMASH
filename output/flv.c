@@ -85,7 +85,7 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
         henc = x264_audio_copy_open( filters );
     else
     {
-        const audio_encoder_t *encoder = x264_select_audio_encoder( audio_enc, (char*[]){ "mp3", "qtaac", "qtaac_he", "raw", NULL } );
+        const audio_encoder_t *encoder = x264_select_audio_encoder( audio_enc, (char*[]){ "mp3", "aac", "raw", NULL } );
         FAIL_IF_ERR( !encoder, "flv", "unable to select audio encoder\n" );
 
         henc = x264_audio_encoder_open( encoder, filters, audio_parameters );
@@ -97,12 +97,11 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
     audio_info_t *info = a_flv->info = x264_audio_encoder_info( henc );
 
     int header = 0;
-    const char *codec = x264_audio_encoder_codec_name( henc );
-    if ( !strcmp( codec, "raw" ) )
+    if ( !strcmp( info->codec_name, "raw" ) )
         a_flv->codecid = FLV_CODECID_RAW;
-    else if( !strcmp( codec, "mp3" ) )
+    else if( !strcmp( info->codec_name, "mp3" ) )
         a_flv->codecid = FLV_CODECID_MP3;
-    else if( !strcmp( codec, "aac" ) || !strcmp( codec, "aac_he" ) )
+    else if( !strcmp( info->codec_name, "aac" ) || !strcmp( info->codec_name, "aac_he" ) )
         a_flv->codecid = FLV_CODECID_AAC;
     else
     {

@@ -153,6 +153,7 @@ bit_depth="8"
 
 audio_mp3="auto"
 audio_qtaac="auto"
+audio_lavc="auto"
 
 CFLAGS="$CFLAGS -Wall -I."
 LDFLAGS="$LDFLAGS"
@@ -669,6 +670,12 @@ if [ "$audio" = "auto" ]; then
         else
             audio_qtaac="no"
         fi
+    fi
+    if [ "$audio_lavc" = "auto" -a "$lavf" = "yes" ]; then
+        audio_lavc="yes"
+        audio_encs="$audio_encs, lavc"
+    else
+        audio_lavc = "no";
     fi
 fi
 
