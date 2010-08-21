@@ -25,6 +25,18 @@
 #include "output.h"
 #include "isom.h"
 
+/*******************/
+
+#define USE_LSMASH_IMPORTER 0
+
+#if ( defined(HAVE_AUDIO) && HAVE_AUDIO ) || ( defined(USE_LSMASH_IMPORTER) && USE_LSMASH_IMPORTER )
+#define HAVE_ANY_AUDIO 1
+#else
+#define HAVE_ANY_AUDIO 0
+#endif
+
+/*******************/
+
 #define MP4_LOG_ERROR( ... )                x264_cli_log( "mp4", X264_LOG_ERROR, __VA_ARGS__ )
 #define MP4_LOG_WARNING( ... )              x264_cli_log( "mp4", X264_LOG_WARNING, __VA_ARGS__ )
 #define MP4_LOG_INFO( ... )                 x264_cli_log( "mp4", X264_LOG_INFO, __VA_ARGS__ )
@@ -42,20 +54,16 @@ if( cond )\
 #define MP4_FAIL_IF_ERR_EX( cond, ... )\
 if( cond )\
 {\
-    destruct_mp4_hnd( p_mp4 );\
-    free( p_mp4 );\
+    remove_mp4_hnd( p_mp4 );\
     MP4_LOG_ERROR( __VA_ARGS__ );\
     return -1;\
 }
 
-/* 0: use L-SMASH's ADTS importer, 1: use x264-audio framework and qteecenc. */
-#if !defined(HAVE_QT_AAC) || !HAVE_QT_AAC
-#define HAVE_AUDIO 1
-#endif
+/*******************/
+
+#if HAVE_ANY_AUDIO
 
 #if HAVE_AUDIO
-
-#if HAVE_QT_AAC
 #include "audio/encoders.h"
 #endif
 
@@ -66,7 +74,7 @@ typedef struct
     mp4sys_audio_summary_t *summary;
     uint64_t i_video_timescale;    /* For interleaving. */
     int i_numframe;
-#if HAVE_QT_AAC
+#if HAVE_AUDIO
     audio_info_t *info;
     hnd_t encoder;
     int has_sbr;
@@ -74,7 +82,7 @@ typedef struct
     mp4sys_importer_t* p_importer;
 #endif
 } mp4_audio_hnd_t;
-#endif /* #if HAVE_AUDIO */
+#endif /* #if HAVE_ANY_AUDIO */
 
 typedef struct
 {
@@ -90,24 +98,36 @@ typedef struct
     uint32_t i_sei_size;
     uint8_t *p_sei_buffer;
     int i_numframe;
-#if HAVE_AUDIO
+#if HAVE_ANY_AUDIO
     mp4_audio_hnd_t *audio_hnd;
 #endif
 } mp4_hnd_t;
 
-static void destruct_mp4_hnd( hnd_t handle )
+/*******************/
+
+static void remove_mp4_hnd( hnd_t handle )
 {
     mp4_hnd_t *p_mp4 = handle;
+    if( !p_mp4 )
+        return;
+    if( p_mp4->p_sei_buffer )
+    {
+        free( p_mp4->p_sei_buffer );
+        p_mp4->p_sei_buffer = NULL;
+    }
     if( p_mp4->p_root )
     {
         isom_destroy_root( p_mp4->p_root );
         p_mp4->p_root = NULL;
     }
-#if HAVE_AUDIO
+#if HAVE_ANY_AUDIO
     mp4_audio_hnd_t *p_audio = p_mp4->audio_hnd;
     if( !p_audio )
+    {
+        free( p_mp4 );
         return;
-#if HAVE_QT_AAC
+    }
+#if HAVE_AUDIO
     if( p_audio->summary )
     {
         if( p_audio->summary->exdata )
@@ -138,10 +158,11 @@ static void destruct_mp4_hnd( hnd_t handle )
 #endif
     free( p_audio );
     p_mp4->audio_hnd = NULL;
-#endif /* #if HAVE_AUDIO */
+#endif /* #if HAVE_ANY_AUDIO */
+    free( p_mp4 );
 }
 
-#if HAVE_AUDIO && HAVE_QT_AAC
+#if HAVE_AUDIO
 static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio_parameters )
 {
     if( !strcmp( audio_enc, "none" ) || !filters )
@@ -153,12 +174,16 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
     if( !strcmp( audio_enc, "copy" ) )
         henc = x264_audio_copy_open( filters );
     else
+#if HAVE_QT_AAC
     {
         const audio_encoder_t *encoder = x264_select_audio_encoder( audio_enc, (char*[]){ "qtaac", "qtaac_he", NULL } );
         MP4_FAIL_IF_ERR( !encoder, "unable to select audio encoder.\n" );
 
         henc = x264_audio_encoder_open( encoder, filters, audio_parameters );
     }
+#else
+        return -1;
+#endif
     MP4_FAIL_IF_ERR( !henc, "error opening audio encoder.\n" );
     mp4_hnd_t *p_mp4 = handle;
     mp4_audio_hnd_t *p_audio = p_mp4->audio_hnd = calloc( 1, sizeof( mp4_audio_hnd_t ) );
@@ -190,15 +215,15 @@ error:
 
     return -1;
 }
-#endif /* #if HAVE_AUDIO && HAVE_QT_AAC */
+#endif /* #if HAVE_AUDIO */
 
-#if HAVE_AUDIO
+#if HAVE_ANY_AUDIO
 static int write_audio_frames( mp4_hnd_t *p_mp4, double video_cts, int finish )
 {
     mp4_audio_hnd_t *p_audio = p_mp4->audio_hnd;
     assert( p_audio );
 
-#if HAVE_QT_AAC
+#if HAVE_AUDIO
     audio_packet_t *frame;
 #endif
 
@@ -214,7 +239,7 @@ static int write_audio_frames( mp4_hnd_t *p_mp4, double video_cts, int finish )
             break;
 
         /* read a audio frame */
-#if HAVE_QT_AAC
+#if HAVE_AUDIO
         if( finish )
             frame = x264_audio_encoder_finish( p_audio->encoder );
         else if( !(frame = x264_audio_encode_frame( p_audio->encoder )) )
@@ -253,7 +278,9 @@ static int write_audio_frames( mp4_hnd_t *p_mp4, double video_cts, int finish )
     }
     return 0;
 }
-#endif /* #if HAVE_AUDIO */
+#endif /* #if HAVE_ANY_AUDIO */
+
+/*******************/
 
 static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest_pts )
 {
@@ -294,7 +321,7 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
 
         MP4_LOG_IF_ERR( isom_update_bitrate_info( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry ),
                         "failed to update bitrate information for video.\n" );
-#if HAVE_AUDIO
+#if HAVE_ANY_AUDIO
         mp4_audio_hnd_t *p_audio = p_mp4->audio_hnd;
         if( p_audio )
         {
@@ -317,8 +344,7 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
         MP4_LOG_IF_ERR( isom_write_mdat_size( p_mp4->p_root ), "failed to write mdat size.\n" );
     }
 
-    destruct_mp4_hnd( p_mp4 ); /* including isom_destroy_root( p_mp4->p_root ); */
-    free( p_mp4 );
+    remove_mp4_hnd( p_mp4 ); /* including isom_destroy_root( p_mp4->p_root ); */
 
     return 0;
 }
@@ -373,8 +399,8 @@ static int open_file(
     /* FIXME: I think this does not make sense at all. track number must be retrieved in some other way.  */
     p_mp4->i_track = 1 + isom_add_mandatory_boxes( p_mp4->p_root, ISOM_HDLR_TYPE_VISUAL );
     MP4_FAIL_IF_ERR_EX( !p_mp4->i_track, "failed to add_mandatory_boxes.\n" );
+#if HAVE_ANY_AUDIO
 #if HAVE_AUDIO
-#if HAVE_QT_AAC
     MP4_FAIL_IF_ERR_EX( audio_init( p_mp4, audio_filters, audio_enc, audio_params ) < 0, "unable to init audio output.\n" );
     if( p_mp4->audio_hnd )
     {
@@ -460,11 +486,11 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
                          "failed to set language for video.\n");
 #endif
 
-#if HAVE_AUDIO
+#if HAVE_ANY_AUDIO
     mp4_audio_hnd_t *p_audio = p_mp4->audio_hnd;
     if( p_audio )
     {
-#if HAVE_QT_AAC
+#if HAVE_AUDIO
         p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_Audio_ISO_14496_3;
         p_audio->summary->stream_type            = MP4SYS_STREAM_TYPE_AudioStream;
         p_audio->summary->max_au_length          = ( 1 << 13 ) - 1;
@@ -492,7 +518,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
          * Otherwise you may cause bugs which you hardly call to mind.
          */
         p_audio->summary = mp4sys_duplicate_audio_summary( p_audio->p_importer, 1 );
-#endif /* #if HAVE_QT_AAC #else */
+#endif /* #if HAVE_AUDIO #else */
         p_audio->i_video_timescale = p_param->i_timebase_den;
         MP4_FAIL_IF_ERR( isom_set_media_timescale( p_mp4->p_root, p_audio->i_track, p_audio->summary->frequency ),
                          "failed to set media timescale for audio.\n");
@@ -539,14 +565,19 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
     /* SEI */
     p_mp4->p_sei_buffer = malloc( sei_size );
     MP4_FAIL_IF_ERR( !p_mp4->p_sei_buffer,
-                     "failed to add sei.\n" );
+                     "failed to allocate sei transition buffer.\n" );
     memcpy( p_mp4->p_sei_buffer, sei, sei_size );
     p_mp4->i_sei_size = sei_size;
 
     /* Write ftyp. */
     uint32_t brands[3] = { ISOM_BRAND_TYPE_ISOM, ISOM_BRAND_TYPE_AVC1, ISOM_BRAND_TYPE_MP42 };
+#if HAVE_ANY_AUDIO
     MP4_FAIL_IF_ERR( isom_set_brands( p_mp4->p_root, brands[1], 1, brands, 2 + !!p_mp4->audio_hnd ) || isom_write_ftyp( p_mp4->p_root ),
                      "failed to set brands / ftyp.\n" );
+#else
+    MP4_FAIL_IF_ERR( isom_set_brands( p_mp4->p_root, brands[1], 1, brands, 2 ) || isom_write_ftyp( p_mp4->p_root ),
+                     "failed to set brands / ftyp.\n" );
+#endif
 
     /* Write mdat header. */
     MP4_FAIL_IF_ERR( isom_add_mdat( p_mp4->p_root ), "failed to add mdat.\n" );
@@ -586,7 +617,7 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
 
     p_mp4->i_numframe++;
 
-#if HAVE_AUDIO
+#if HAVE_ANY_AUDIO
     mp4_audio_hnd_t *p_audio = p_mp4->audio_hnd;
     if( p_audio )
     {
