@@ -1422,8 +1422,8 @@ generic_option:
             {
                 haud = x264_audio_open_from_file( "avs", audio_filename, TRACK_ANY );
             }
-#endif
             else
+#endif
                 haud = x264_audio_open_from_file( NULL, audio_filename, TRACK_ANY );
         }
         else if( input.open_audio )
