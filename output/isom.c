@@ -420,7 +420,7 @@ static int isom_add_mp4a_entry( isom_entry_list_t *list, mp4sys_audio_summary_t*
     /* WARNING: This field cannot retain frequency above 65535Hz.
        This is not "FIXME", I just honestly implemented what the spec says.
        BTW, who ever expects sampling frequency takes fixed-point decimal??? */
-    mp4a->samplerate = summary->frequency << 16;
+    mp4a->samplerate = summary->frequency <= UINT16_MAX ? summary->frequency << 16 : 0;
     mp4a->esds = esds;
     mp4a->pli = mp4sys_get_audioProfileLevelIndication( summary );
     if( isom_add_entry( list, mp4a ) )
@@ -474,7 +474,7 @@ static int isom_add_visual_entry( isom_entry_list_t *list, uint32_t sample_type 
     return 0;
 }
 
-static int isom_add_audio_entry( isom_entry_list_t *list, uint32_t sample_type )
+static int isom_add_audio_entry( isom_entry_list_t *list, uint32_t sample_type, mp4sys_audio_summary_t *summary )
 {
     if( !list )
         return -1;
@@ -486,9 +486,24 @@ static int isom_add_audio_entry( isom_entry_list_t *list, uint32_t sample_type )
     audio->data_reference_index = 1;
     audio->channelcount = 2;
     audio->samplesize = 16;
-    audio->samplerate = 48000U<<16;
+    audio->samplerate = summary->frequency <= UINT16_MAX ? summary->frequency << 16 : 0;
+    if( summary->exdata )
+    {
+        audio->exdata_length = summary->exdata_length;
+        audio->exdata = malloc( audio->exdata_length );
+        if( !audio->exdata )
+        {
+            free( audio );
+            return -1;
+        }
+        memcpy( audio->exdata, summary->exdata, audio->exdata_length );
+    }
+    else
+        audio->exdata = NULL;
     if( isom_add_entry( list, audio ) )
     {
+        if( audio->exdata )
+            free( audio->exdata );
         free( audio );
         return -1;
     }
@@ -506,30 +521,37 @@ int isom_add_sample_entry( isom_root_t *root, uint32_t trak_number, uint32_t sam
     switch( sample_type )
     {
         case ISOM_CODEC_TYPE_AVC1_VIDEO :
+#if 0
         case ISOM_CODEC_TYPE_AVC2_VIDEO :
         case ISOM_CODEC_TYPE_AVCP_VIDEO :
+        case ISOM_CODEC_TYPE_SVC1_VIDEO :
+        case ISOM_CODEC_TYPE_MVC1_VIDEO :
+        case ISOM_CODEC_TYPE_MVC2_VIDEO :
+#endif
             ret = isom_add_avc_entry( list, sample_type );
             break;
+#if 0
         case ISOM_CODEC_TYPE_MP4V_VIDEO :
             ret = isom_add_mp4v_entry( list );
             break;
+#endif
         case ISOM_CODEC_TYPE_MP4A_AUDIO :
             ret = isom_add_mp4a_entry( list, (mp4sys_audio_summary_t*)summary );
             break;
+#if 0
         case ISOM_CODEC_TYPE_MP4S_SYSTEM :
             ret = isom_add_mp4s_entry( list );
             break;
         case ISOM_CODEC_TYPE_DRAC_VIDEO :
         case ISOM_CODEC_TYPE_ENCV_VIDEO :
         case ISOM_CODEC_TYPE_MJP2_VIDEO :
-        case ISOM_CODEC_TYPE_MVC1_VIDEO :
-        case ISOM_CODEC_TYPE_MVC2_VIDEO :
         case ISOM_CODEC_TYPE_S263_VIDEO :
-        case ISOM_CODEC_TYPE_SVC1_VIDEO :
         case ISOM_CODEC_TYPE_VC_1_VIDEO :
             ret = isom_add_visual_entry( list, sample_type );
             break;
+#endif
         case ISOM_CODEC_TYPE_AC_3_AUDIO :
+#if 0
         case ISOM_CODEC_TYPE_ALAC_AUDIO :
         case ISOM_CODEC_TYPE_DRA1_AUDIO :
         case ISOM_CODEC_TYPE_DTSC_AUDIO :
@@ -549,9 +571,9 @@ int isom_add_sample_entry( isom_root_t *root, uint32_t trak_number, uint32_t sam
         case ISOM_CODEC_TYPE_SQCP_AUDIO :
         case ISOM_CODEC_TYPE_SSMV_AUDIO :
         case ISOM_CODEC_TYPE_TWOS_AUDIO :
-            ret = isom_add_audio_entry( list, sample_type );
+#endif
+            ret = isom_add_audio_entry( list, sample_type, (mp4sys_audio_summary_t *)summary );
             break;
-        /* Under Construction */
         default :
             return 0;
     }
@@ -900,8 +922,13 @@ static int isom_scan_trak_profileLevelIndication( isom_trak_entry_t* trak, mp4sy
         switch( sample_entry->base_header.type )
         {
             case ISOM_CODEC_TYPE_AVC1_VIDEO :
+#if 0
             case ISOM_CODEC_TYPE_AVC2_VIDEO :
             case ISOM_CODEC_TYPE_AVCP_VIDEO :
+            case ISOM_CODEC_TYPE_SVC1_VIDEO :
+            case ISOM_CODEC_TYPE_MVC1_VIDEO :
+            case ISOM_CODEC_TYPE_MVC2_VIDEO :
+#endif
                 /* FIXME: Do we have to arbitrate like audio? */
                 if( *visual_pli == MP4SYS_VISUAL_PLI_NONE_REQUIRED )
                     *visual_pli = MP4SYS_VISUAL_PLI_H264_AVC;
@@ -909,19 +936,19 @@ static int isom_scan_trak_profileLevelIndication( isom_trak_entry_t* trak, mp4sy
             case ISOM_CODEC_TYPE_MP4A_AUDIO :
                 *audio_pli = mp4sys_max_audioProfileLevelIndication( *audio_pli, ((isom_mp4a_entry_t*)sample_entry)->pli );
                 break;
+#if 0
             case ISOM_CODEC_TYPE_DRAC_VIDEO :
             case ISOM_CODEC_TYPE_ENCV_VIDEO :
             case ISOM_CODEC_TYPE_MJP2_VIDEO :
-            case ISOM_CODEC_TYPE_MVC1_VIDEO :
-            case ISOM_CODEC_TYPE_MVC2_VIDEO :
             case ISOM_CODEC_TYPE_S263_VIDEO :
-            case ISOM_CODEC_TYPE_SVC1_VIDEO :
             case ISOM_CODEC_TYPE_VC_1_VIDEO :
                 /* FIXME: Do we have to arbitrate like audio? */
                 if( *visual_pli == MP4SYS_VISUAL_PLI_NONE_REQUIRED )
                     *visual_pli = MP4SYS_VISUAL_PLI_NOT_SPECIFIED;
                 break;
+#endif
             case ISOM_CODEC_TYPE_AC_3_AUDIO :
+#if 0
             case ISOM_CODEC_TYPE_ALAC_AUDIO :
             case ISOM_CODEC_TYPE_DRA1_AUDIO :
             case ISOM_CODEC_TYPE_DTSC_AUDIO :
@@ -941,9 +968,11 @@ static int isom_scan_trak_profileLevelIndication( isom_trak_entry_t* trak, mp4sy
             case ISOM_CODEC_TYPE_SQCP_AUDIO :
             case ISOM_CODEC_TYPE_SSMV_AUDIO :
             case ISOM_CODEC_TYPE_TWOS_AUDIO :
+#endif
                 /* NOTE: These audio codecs other than mp4a does not have appropriate pli. */
-                *visual_pli = MP4SYS_VISUAL_PLI_NOT_SPECIFIED;
+                *audio_pli = MP4SYS_AUDIO_PLI_NOT_SPECIFIED;
                 break;
+#if 0
             case ISOM_CODEC_TYPE_FDP_HINT :
             case ISOM_CODEC_TYPE_M2TS_HINT :
             case ISOM_CODEC_TYPE_PM2T_HINT :
@@ -967,6 +996,7 @@ static int isom_scan_trak_profileLevelIndication( isom_trak_entry_t* trak, mp4sy
             case ISOM_CODEC_TYPE_XML_META  :
                 /* FIXME: Do we have to set OD_profileLevelIndication? */
                 break;
+#endif
         }
     }
     return 0;
@@ -1641,8 +1671,13 @@ static void isom_remove_stsd( isom_stsd_t *stsd )
         switch( sample->base_header.type )
         {
             case ISOM_CODEC_TYPE_AVC1_VIDEO :
+#if 0
             case ISOM_CODEC_TYPE_AVC2_VIDEO :
             case ISOM_CODEC_TYPE_AVCP_VIDEO :
+            case ISOM_CODEC_TYPE_SVC1_VIDEO :
+            case ISOM_CODEC_TYPE_MVC1_VIDEO :
+            case ISOM_CODEC_TYPE_MVC2_VIDEO :
+#endif
             {
                 isom_avc_entry_t *avc = (isom_avc_entry_t *)entry->data;
                 if( avc->pasp )
@@ -1656,6 +1691,7 @@ static void isom_remove_stsd( isom_stsd_t *stsd )
                 free( avc );
                 break;
             }
+#if 0
             case ISOM_CODEC_TYPE_MP4V_VIDEO :
             {
                 isom_mp4v_entry_t *mp4v = (isom_mp4v_entry_t *)entry->data;
@@ -1668,6 +1704,7 @@ static void isom_remove_stsd( isom_stsd_t *stsd )
                 free( mp4v );
                 break;
             }
+#endif
             case ISOM_CODEC_TYPE_MP4A_AUDIO :
             {
                 isom_mp4a_entry_t *mp4a = (isom_mp4a_entry_t *)entry->data;
@@ -1679,6 +1716,7 @@ static void isom_remove_stsd( isom_stsd_t *stsd )
                 free( mp4a );
                 break;
             }
+#if 0
             case ISOM_CODEC_TYPE_MP4S_SYSTEM :
             {
                 isom_mp4s_entry_t *mp4s = (isom_mp4s_entry_t *)entry->data;
@@ -1690,10 +1728,7 @@ static void isom_remove_stsd( isom_stsd_t *stsd )
             case ISOM_CODEC_TYPE_DRAC_VIDEO :
             case ISOM_CODEC_TYPE_ENCV_VIDEO :
             case ISOM_CODEC_TYPE_MJP2_VIDEO :
-            case ISOM_CODEC_TYPE_MVC1_VIDEO :
-            case ISOM_CODEC_TYPE_MVC2_VIDEO :
             case ISOM_CODEC_TYPE_S263_VIDEO :
-            case ISOM_CODEC_TYPE_SVC1_VIDEO :
             case ISOM_CODEC_TYPE_VC_1_VIDEO :
             {
                 isom_visual_entry_t *visual = (isom_visual_entry_t *)entry->data;
@@ -1704,7 +1739,9 @@ static void isom_remove_stsd( isom_stsd_t *stsd )
                 free( visual );
                 break;
             }
+#endif
             case ISOM_CODEC_TYPE_AC_3_AUDIO :
+#if 0
             case ISOM_CODEC_TYPE_ALAC_AUDIO :
             case ISOM_CODEC_TYPE_DRA1_AUDIO :
             case ISOM_CODEC_TYPE_DTSC_AUDIO :
@@ -1724,11 +1761,15 @@ static void isom_remove_stsd( isom_stsd_t *stsd )
             case ISOM_CODEC_TYPE_SQCP_AUDIO :
             case ISOM_CODEC_TYPE_SSMV_AUDIO :
             case ISOM_CODEC_TYPE_TWOS_AUDIO :
+#endif
             {
                 isom_audio_entry_t *audio = (isom_audio_entry_t *)entry->data;
+                if( audio->exdata )
+                    free( audio->exdata );
                 free( audio );
                 break;
             }
+#if 0
             case ISOM_CODEC_TYPE_FDP_HINT :
             case ISOM_CODEC_TYPE_M2TS_HINT :
             case ISOM_CODEC_TYPE_PM2T_HINT :
@@ -1760,6 +1801,7 @@ static void isom_remove_stsd( isom_stsd_t *stsd )
                 free( metadata );
                 break;
             }
+#endif
             default :
                 break;
         }
@@ -2411,6 +2453,7 @@ static int isom_write_audio_entry( isom_bs_t *bs, isom_stsd_t *stsd )
         isom_bs_put_be16( bs, data->pre_defined );
         isom_bs_put_be16( bs, data->reserved2 );
         isom_bs_put_be32( bs, data->samplerate );
+        isom_bs_put_bytes( bs, data->exdata, data->exdata_length );
         if( isom_bs_write_data( bs ) )
             return -1;
     }
@@ -2466,24 +2509,29 @@ static int isom_write_stsd( isom_bs_t *bs, isom_trak_entry_t *trak )
         switch( sample->base_header.type )
         {
             case ISOM_CODEC_TYPE_AVC1_VIDEO :
+#if 0
             case ISOM_CODEC_TYPE_AVC2_VIDEO :
             case ISOM_CODEC_TYPE_AVCP_VIDEO :
+            case ISOM_CODEC_TYPE_SVC1_VIDEO :
+            case ISOM_CODEC_TYPE_MVC1_VIDEO :
+            case ISOM_CODEC_TYPE_MVC2_VIDEO :
+#endif
                 isom_write_avc_entry( bs, stsd );
                 break;
             case ISOM_CODEC_TYPE_MP4A_AUDIO :
                 isom_write_mp4a_entry( bs, stsd );
                 break;
+#if 0
             case ISOM_CODEC_TYPE_DRAC_VIDEO :
             case ISOM_CODEC_TYPE_ENCV_VIDEO :
             case ISOM_CODEC_TYPE_MJP2_VIDEO :
-            case ISOM_CODEC_TYPE_MVC1_VIDEO :
-            case ISOM_CODEC_TYPE_MVC2_VIDEO :
             case ISOM_CODEC_TYPE_S263_VIDEO :
-            case ISOM_CODEC_TYPE_SVC1_VIDEO :
             case ISOM_CODEC_TYPE_VC_1_VIDEO :
                 isom_write_visual_entry( bs, stsd );
                 break;
+#endif
             case ISOM_CODEC_TYPE_AC_3_AUDIO :
+#if 0
             case ISOM_CODEC_TYPE_ALAC_AUDIO :
             case ISOM_CODEC_TYPE_DRA1_AUDIO :
             case ISOM_CODEC_TYPE_DTSC_AUDIO :
@@ -2503,8 +2551,10 @@ static int isom_write_stsd( isom_bs_t *bs, isom_trak_entry_t *trak )
             case ISOM_CODEC_TYPE_SQCP_AUDIO :
             case ISOM_CODEC_TYPE_SSMV_AUDIO :
             case ISOM_CODEC_TYPE_TWOS_AUDIO :
+#endif
                 isom_write_audio_entry( bs, stsd );
                 break;
+#if 0
             case ISOM_CODEC_TYPE_FDP_HINT :
             case ISOM_CODEC_TYPE_M2TS_HINT :
             case ISOM_CODEC_TYPE_PM2T_HINT :
@@ -2527,6 +2577,9 @@ static int isom_write_stsd( isom_bs_t *bs, isom_trak_entry_t *trak )
             case ISOM_CODEC_TYPE_URIM_META :
             case ISOM_CODEC_TYPE_XML_META  :
                 isom_write_metadata_entry( bs, stsd );
+                break;
+#endif
+            default :
                 break;
         }
     }
@@ -4050,7 +4103,8 @@ int isom_update_media_modification_time( isom_root_t *root, uint32_t trak_number
         return -1;
     isom_mdhd_t *mdhd = trak->mdia->mdhd;
     mdhd->modification_time = isom_get_current_mp4time();
-    if( mdhd->creation_time < mdhd->modification_time )
+    /* overwrite strange creation_time */
+    if( mdhd->creation_time > mdhd->modification_time )
         mdhd->creation_time = mdhd->modification_time;
     return 0;
 }
@@ -4062,7 +4116,8 @@ int isom_update_track_modification_time( isom_root_t *root, uint32_t trak_number
         return -1;
     isom_tkhd_t *tkhd = trak->tkhd;
     tkhd->modification_time = isom_get_current_mp4time();
-    if( tkhd->creation_time < tkhd->modification_time )
+    /* overwrite strange creation_time */
+    if( tkhd->creation_time > tkhd->modification_time )
         tkhd->creation_time = tkhd->modification_time;
     return 0;
 }
@@ -4073,7 +4128,8 @@ int isom_update_movie_modification_time( isom_root_t *root )
         return -1;
     isom_mvhd_t *mvhd = root->moov->mvhd;
     mvhd->modification_time = isom_get_current_mp4time();
-    if( mvhd->creation_time < mvhd->modification_time )
+    /* overwrite strange creation_time */
+    if( mvhd->creation_time > mvhd->modification_time )
         mvhd->creation_time = mvhd->modification_time;
     return 0;
 }
@@ -4357,6 +4413,15 @@ static uint64_t isom_update_mp4s_entry_size( isom_mp4s_entry_t *mp4s )
     return mp4s->base_header.size;
 }
 
+static uint64_t isom_update_audio_entry_size( isom_audio_entry_t *audio )
+{
+    if( !audio )
+        return 0;
+    audio->base_header.size = ISOM_DEFAULT_BOX_HEADER_SIZE + 28U + audio->exdata_length;
+    CHECK_LARGESIZE( audio->base_header.size );
+    return audio->base_header.size;
+}
+
 static uint64_t isom_update_stsd_size( isom_trak_entry_t *trak )
 {
     if( !trak || !trak->mdia || !trak->mdia->minf || !trak->mdia->minf->stbl || !trak->mdia->minf->stbl->stsd || !trak->mdia->minf->stbl->stsd->list )
@@ -4368,18 +4433,58 @@ static uint64_t isom_update_stsd_size( isom_trak_entry_t *trak )
         switch( data->base_header.type )
         {
             case ISOM_CODEC_TYPE_AVC1_VIDEO :
+#if 0
             case ISOM_CODEC_TYPE_AVC2_VIDEO :
             case ISOM_CODEC_TYPE_AVCP_VIDEO :
+            case ISOM_CODEC_TYPE_SVC1_VIDEO :
+            case ISOM_CODEC_TYPE_MVC1_VIDEO :
+            case ISOM_CODEC_TYPE_MVC2_VIDEO :
+#endif
                 size += isom_update_avc_entry_size( (isom_avc_entry_t *)data );
                 break;
+#if 0
             case ISOM_CODEC_TYPE_MP4V_VIDEO :
                 size += isom_update_mp4v_entry_size( (isom_mp4v_entry_t *)data );
                 break;
+#endif
             case ISOM_CODEC_TYPE_MP4A_AUDIO :
                 size += isom_update_mp4a_entry_size( (isom_mp4a_entry_t *)data );
                 break;
+#if 0
             case ISOM_CODEC_TYPE_MP4S_SYSTEM :
                 size += isom_update_mp4s_entry_size( (isom_mp4s_entry_t *)data );
+                break;
+            case ISOM_CODEC_TYPE_DRAC_VIDEO :
+            case ISOM_CODEC_TYPE_ENCV_VIDEO :
+            case ISOM_CODEC_TYPE_MJP2_VIDEO :
+            case ISOM_CODEC_TYPE_S263_VIDEO :
+            case ISOM_CODEC_TYPE_VC_1_VIDEO :
+                size += isom_update_visual_entry_size( (isom_visual_entry_t *)data );
+                break;
+#endif
+            case ISOM_CODEC_TYPE_AC_3_AUDIO :
+#if 0
+            case ISOM_CODEC_TYPE_ALAC_AUDIO :
+            case ISOM_CODEC_TYPE_DRA1_AUDIO :
+            case ISOM_CODEC_TYPE_DTSC_AUDIO :
+            case ISOM_CODEC_TYPE_DTSH_AUDIO :
+            case ISOM_CODEC_TYPE_DTSL_AUDIO :
+            case ISOM_CODEC_TYPE_EC_3_AUDIO :
+            case ISOM_CODEC_TYPE_ENCA_AUDIO :
+            case ISOM_CODEC_TYPE_G719_AUDIO :
+            case ISOM_CODEC_TYPE_G726_AUDIO :
+            case ISOM_CODEC_TYPE_M4AE_AUDIO :
+            case ISOM_CODEC_TYPE_MLPA_AUDIO :
+            case ISOM_CODEC_TYPE_RAW_AUDIO :
+            case ISOM_CODEC_TYPE_SAMR_AUDIO :
+            case ISOM_CODEC_TYPE_SAWB_AUDIO :
+            case ISOM_CODEC_TYPE_SAWP_AUDIO :
+            case ISOM_CODEC_TYPE_SEVC_AUDIO :
+            case ISOM_CODEC_TYPE_SQCP_AUDIO :
+            case ISOM_CODEC_TYPE_SSMV_AUDIO :
+            case ISOM_CODEC_TYPE_TWOS_AUDIO :
+#endif
+                size += isom_update_audio_entry_size( (isom_audio_entry_t *)data );
                 break;
             default :
                 break;
@@ -4632,5 +4737,63 @@ int isom_finish_movie( isom_root_t *root )
         isom_update_moov_size( root ) ||
         isom_write_moov( root ) )
         return -1;
+    return 0;
+}
+
+/* data_length must be size of data that is available. */
+int isom_create_dac3_from_syncframe( mp4sys_audio_summary_t *summary, uint8_t *data, uint32_t data_length )
+{
+    /* Requires the following 7 bytes.
+     * syncword                                         : 16
+     * crc1                                             : 16
+     * fscod                                            : 2
+     * frmsizecod                                       : 6
+     * bsid                                             : 5
+     * bsmod                                            : 3
+     * acmod                                            : 3
+     * if((acmod & 0x01) && (acmod != 0x01)) cmixlev    : 2
+     * if(acmod & 0x04) surmixlev                       : 2
+     * if(acmod == 0x02) dsurmod                        : 2
+     * lfeon                                            : 1
+     */
+    if( data_length < 7 )
+        return -1;
+    /* check syncword */
+    if( data[0] != 0x0b || data[1] != 0x77 )
+        return -1;
+    /* get necessary data for AC3SpecificBox */
+    uint32_t fscod, bsid, bsmod, acmod, lfeon, frmsizecod;
+    fscod      = data[4] >> 6;
+    frmsizecod = data[4] & 0x3f;
+    bsid       = data[5] >> 3;
+    bsmod      = data[5] & 0x07;
+    acmod      = data[6] >> 5;
+    if( acmod == 0x02 )
+        lfeon  = data[6] >> 2;      /* skip dsurmod */
+    else
+    {
+        if( (acmod & 0x01) && acmod != 0x01 && (acmod & 0x04) )
+            lfeon = data[6];        /* skip cmixlev and surmixlev */
+        else if( ((acmod & 0x01) && acmod != 0x01) || (acmod & 0x04) )
+            lfeon = data[6] >> 2;   /* skip cmixlev or surmixlev */
+        else
+            lfeon = data[6] >> 4;
+    }
+    lfeon &= 0x01;
+    /* create AC3SpecificBox */
+    mp4sys_bits_t *bits = mp4sys_adhoc_bits_create();
+    mp4sys_bits_put( bits, 11, 32 );
+    mp4sys_bits_put( bits, ISOM_BOX_TYPE_DAC3, 32 );
+    mp4sys_bits_put( bits, fscod, 2 );
+    mp4sys_bits_put( bits, bsid, 5 );
+    mp4sys_bits_put( bits, bsmod, 3 );
+    mp4sys_bits_put( bits, acmod, 3 );
+    mp4sys_bits_put( bits, lfeon, 1 );
+    mp4sys_bits_put( bits, frmsizecod >> 1, 5 );
+    mp4sys_bits_put( bits, 0, 5 );
+    if( summary->exdata )
+        free( summary->exdata );
+    summary->exdata = mp4sys_bs_export_data( bits, &summary->exdata_length );
+    mp4sys_adhoc_bits_cleanup( bits );
     return 0;
 }
