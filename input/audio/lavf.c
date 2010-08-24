@@ -232,12 +232,6 @@ static hnd_t copy_init( hnd_t filter_chain, const char *opts )
     return NULL;
 }
 
-static const char *get_codec_name( hnd_t handle )
-{
-    audio_hnd_t *h = handle;
-    return h->info.codec_name;
-}
-
 static audio_info_t *get_info( hnd_t handle )
 {
     audio_hnd_t *h = handle;
@@ -514,7 +508,6 @@ const audio_filter_t audio_filter_lavf =
 const audio_encoder_t audio_copy_lavf =
 {
     .init            = copy_init,
-    .get_codec_name  = get_codec_name,
     .get_next_packet = get_next_packet,
     .get_info        = get_info,
     .skip_samples    = skip_samples,

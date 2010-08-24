@@ -21,14 +21,6 @@ hnd_t x264_audio_encoder_open( const audio_encoder_t *encoder, hnd_t filter_chai
     return !enc->handle ? NULL : enc;
 }
 
-const char *x264_audio_encoder_codec_name( hnd_t encoder )
-{
-    assert( encoder );
-    struct aenc_t *enc = encoder;
-
-    return enc->enc->get_codec_name( enc->handle );
-}
-
 audio_info_t *x264_audio_encoder_info( hnd_t encoder )
 {
     assert( encoder );
@@ -87,6 +79,16 @@ const audio_encoder_t *x264_encoder_by_name( const char *name )
 #if HAVE_LAME
     IFRET( mp3 );
 #endif
+    if( !strcmp( "aac", name ) )
+    {
+#if HAVE_QT_AAC
+        return ENC( qtaac );
+#endif
+#if HAVE_LAVF
+        return ENC( lavc ); // automatically tries faac and ffaac, in this order
+#endif
+        return NULL;
+    }
 #if HAVE_QT_AAC
     IFRET( qtaac );
     IFRET( qtaac_he );
@@ -94,7 +96,12 @@ const audio_encoder_t *x264_encoder_by_name( const char *name )
     IFRET( raw );
 #endif /* HAVE_AUDIO */
 #undef IFRET
+#undef ENC
+#ifdef HAVE_LAVF
+    return &audio_encoder_lavc; // fallback to libavcodec
+#else
     return NULL;
+#endif
 }
 
 const audio_encoder_t *x264_select_audio_encoder( const char *encoder, char* allowed_list[] )
@@ -118,11 +125,34 @@ const audio_encoder_t *x264_select_audio_encoder( const char *encoder, char* all
         {
             int valid = 0;
             for( int i = 0; allowed_list[i] != NULL; i++ )
+            {
                 if( !strcmp( encoder, allowed_list[i] ) )
                 {
                     valid = 1;
                     break;
                 }
+                if( !strcmp( allowed_list[i], "mp3" ) )
+                {
+                    if( !strcmp( encoder, "mp3" ) ||
+                        !strcmp( encoder, "libmp3lame" ) )
+                    {
+                        valid = 1;
+                        break;
+                    }
+                }
+                if( !strcmp( allowed_list[i], "aac" ) )
+                {
+                    if( !strcmp( encoder, "aac" )      ||
+                        !strcmp( encoder, "qtaac" )    ||
+                        !strcmp( encoder, "qtaac_he" ) ||
+                        !strcmp( encoder, "libfaac" )  ||
+                        !strcmp( encoder, "ffaac" ) )
+                    {
+                        valid = 1;
+                        break;
+                    }
+                }
+            }
             if( !valid )
                 return NULL;
         }
