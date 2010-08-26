@@ -31,6 +31,7 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     enc_lame_t *h   = calloc( 1, sizeof( enc_lame_t ) );
     h->filter_chain = chain;
     h->info         = chain->info;
+    h->info.codec_name = "mp3";
 
     char **opts = x264_split_options( opt_str, (const char*[]){ AUDIO_CODEC_COMMON_OPTIONS, "samplerate", NULL } );
     assert( opts );
