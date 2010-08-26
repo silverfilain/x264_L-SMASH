@@ -25,13 +25,14 @@ typedef struct lavf_source_t
 
     timebase_t origtb;
     AVPacket *pkt;
+    audio_packet_t *out;
     int copy;
 } lavf_source_t;
 
 #define DEFAULT_BUFSIZE AVCODEC_MAX_AUDIO_FRAME_SIZE * 2
 
 static int buffer_next_frame( lavf_source_t *h );
-static audio_packet_t *get_next_packet( hnd_t handle );
+static audio_packet_t *convert_to_audio_packet( hnd_t handle, AVPacket *pkt );
 
 const audio_filter_t audio_filter_lavf;
 
@@ -191,13 +192,6 @@ static struct AVPacket *next_packet( hnd_t handle )
         }
     } while( pkt->stream_index != h->track );
 
-    if( h->bsfs )
-    {
-        AVPacket pkt_tmp = *pkt;
-        av_bitstream_filter_filter( h->bsfs, h->ctx, NULL, &pkt_tmp.data, &pkt_tmp.size, pkt->data, pkt->size, 0 );
-        *pkt = pkt_tmp;
-    }
-
     return pkt;
 }
 
@@ -210,22 +204,26 @@ static hnd_t copy_init( hnd_t filter_chain, const char *opts )
         lavf_source_t *h = filter_chain;
         h->copy = 1;
 
-        if( !strcmp( h->ctx->codec->name, "aac" ) )
+        if( !h->pkt )
         {
-            if( !h->ctx->extradata )
-            {
-                h->bsfs = av_bitstream_filter_init( "aac_adtstoasc" );
-                if( h->pkt )
-                {
-                    AVPacket pkt_tmp = *h->pkt;
-                    av_bitstream_filter_filter( h->bsfs, h->ctx, NULL, &pkt_tmp.data, &pkt_tmp.size, h->pkt->data, h->pkt->size, 0 );
-                    *h->pkt = pkt_tmp;
-
-                    h->info.extradata = h->ctx->extradata;
-                    h->info.extradata_size = h->ctx->extradata_size;
-                }
-            }
+            fprintf( stderr, "lavf [error]: demuxing error occured!\n" );
+            return NULL;
         }
+
+        if( !strcmp( h->ctx->codec->name, "aac" ) && !h->ctx->extradata )
+        {
+            if( !( h->bsfs = av_bitstream_filter_init( "aac_adtstoasc" ) ) )
+            {
+                fprintf( stderr, "lavf [error]: failed to init aac_adtstoasc bitstream filter!\n" );
+                return NULL;
+            }
+            h->out = convert_to_audio_packet( h, h->pkt );
+            h->info.extradata = h->ctx->extradata;
+            h->info.extradata_size = h->ctx->extradata_size;
+        }
+        else
+            h->out = convert_to_audio_packet( h, h->pkt );
+
         return chain;
     }
     fprintf( stderr, "lavf [error]: attempted to enter copy mode with a non-empty filter chain!" ); // as far as CLI users see, lavf isn't a filter
@@ -238,14 +236,9 @@ static audio_info_t *get_info( hnd_t handle )
     return &h->info;
 }
 
-static audio_packet_t *get_next_packet( hnd_t handle )
+static audio_packet_t *convert_to_audio_packet( hnd_t handle, AVPacket *pkt )
 {
     lavf_source_t *h = handle;
-
-    AVPacket *pkt = next_packet( h );
-    if( !pkt )
-        return NULL;
-
     audio_packet_t *out = calloc( 1, sizeof( audio_packet_t ) );
 
     out->dts = x264_convert_timebase( pkt->dts != AV_NOPTS_VALUE ? pkt->dts :
@@ -253,13 +246,43 @@ static audio_packet_t *get_next_packet( hnd_t handle )
                                       h->origtb, h->info.timebase );
     out->info        = h->info;
     out->channels    = h->info.channels;
-    out->samplecount = pkt->size * h->info.samplesize;
-    out->size        = pkt->size;
-    out->data        = malloc( out->size );
-    memcpy( out->data, pkt->data, pkt->size );
 
+    if( h->bsfs )
+    {
+        uint8_t *buf;
+        int size;
+        av_bitstream_filter_filter( h->bsfs, h->ctx, NULL, &buf, &size, pkt->data, pkt->size, 0 );
+        out->samplecount = size * h->info.samplesize;
+        out->size = size;
+        out->data = malloc( out->size );
+        memcpy( out->data, buf, size );
+    }
+    else
+    {
+        out->samplecount = pkt->size * h->info.samplesize;
+        out->size        = pkt->size;
+        out->data        = malloc( out->size );
+        memcpy( out->data, pkt->data, pkt->size );
+    }
     free_avpacket( pkt );
     return out;
+}
+
+static audio_packet_t *get_next_packet( hnd_t handle )
+{
+    lavf_source_t *h = handle;
+
+    if( h->out )
+    {
+        audio_packet_t *out = h->out;
+        h->out = NULL;
+        return out;
+    }
+
+    AVPacket *pkt = next_packet( h );
+    if( !pkt )
+        return NULL;
+    return convert_to_audio_packet( h, pkt );
 }
 
 static audio_packet_t *copy_finish( hnd_t handle )
