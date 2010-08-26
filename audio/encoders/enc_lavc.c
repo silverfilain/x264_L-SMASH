@@ -1,5 +1,6 @@
 #include "audio/encoders.h"
 #include "filters/audio/internal.h"
+#undef DECLARE_ALIGNED
 #include "libavcodec/avcodec.h"
 
 #include <assert.h>
