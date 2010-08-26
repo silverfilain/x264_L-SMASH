@@ -675,7 +675,7 @@ if [ "$audio" = "auto" ]; then
         audio_lavc="yes"
         audio_encs="$audio_encs, lavc"
     else
-        audio_lavc = "no";
+        audio_lavc="no"
     fi
 fi
 
