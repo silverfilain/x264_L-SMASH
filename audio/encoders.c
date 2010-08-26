@@ -170,9 +170,9 @@ hnd_t x264_audio_copy_open( hnd_t handle )
         extern const audio_encoder_t audio_copy_ ## dec;                            \
         if( !strcmp( #dec, h->self->name ) )                                        \
             return x264_audio_encoder_open( &( audio_copy_ ## dec ), handle, NULL );
-#if HAVE_AUDIO
+#if HAVE_AUDIO && HAVE_LAVF
     IFRET( lavf );
-#endif // HAVE_AUDIO
+#endif // HAVE_AUDIO && HAVE_LAVF
 #undef IFRET
     return NULL;
 }

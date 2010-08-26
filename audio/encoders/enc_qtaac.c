@@ -500,7 +500,7 @@ static int init_common( enc_qtaac_t *h, const char *opt_str )
         return -1;
     }
 
-    char **opts     = x264_split_options( opt_str, (const char*[]){ "is_vbr", "bitrate", "quality", "samplerate", NULL } );
+    char **opts     = x264_split_options( opt_str, (const char*[]){ AUDIO_CODEC_COMMON_OPTIONS, "samplerate", NULL } );
     assert( opts );
 
     if( !h->config.he_flag )
@@ -603,6 +603,8 @@ static void cleanup_common( enc_qtaac_t *h )
         free( h->buffer );
     if( h->samplebuffer )
         free( h->samplebuffer );
+    if( h->info.extradata )
+        free( h->info.extradata );
     if( h->in )
         x264_af_free_packet( h->in );
     free( h );
@@ -616,6 +618,7 @@ static hnd_t qtaac_init( hnd_t filter_chain, const char *opt_str )
     enc_qtaac_t *h = calloc( 1, sizeof( enc_qtaac_t ) );
     h->filter_chain = chain;
     h->info = chain->info;
+    h->info.codec_name = "aac";
 
     if( get_channel_configuration_index( chain->info.channels, 0 ) < 0 ||
         get_samplerate_index( chain->info.samplerate, 0 ) < 0 )
@@ -639,11 +642,6 @@ fail:
     return NULL;
 }
 
-static const char *qtaac_get_codec_name( hnd_t handle )
-{
-    return "aac";
-}
-
 static hnd_t qtaac_he_init( hnd_t filter_chain, const char *opt_str )
 {
     assert( filter_chain );
@@ -652,6 +650,7 @@ static hnd_t qtaac_he_init( hnd_t filter_chain, const char *opt_str )
     enc_qtaac_t *h = calloc( 1, sizeof( enc_qtaac_t ) );
     h->filter_chain = chain;
     h->info = chain->info;
+    h->info.codec_name = "aac_he";
 
     if( get_channel_configuration_index( chain->info.channels, 1 ) < 0 ||
         get_samplerate_index( chain->info.samplerate, 1 ) < 0 )
@@ -673,11 +672,6 @@ static hnd_t qtaac_he_init( hnd_t filter_chain, const char *opt_str )
 fail:
     cleanup_common( h );
     return NULL;
-}
-
-static const char *qtaac_he_get_codec_name( hnd_t handle )
-{
-    return "aac_he";
 }
 
 static audio_info_t *get_info( hnd_t handle )
@@ -843,7 +837,6 @@ static void qtaac_close( hnd_t handle )
 const audio_encoder_t audio_encoder_qtaac =
 {
     .init            = qtaac_init,
-    .get_codec_name  = qtaac_get_codec_name,
     .get_info        = get_info,
     .get_next_packet = get_next_packet,
     .skip_samples    = skip_samples,
@@ -855,7 +848,6 @@ const audio_encoder_t audio_encoder_qtaac =
 const audio_encoder_t audio_encoder_qtaac_he =
 {
     .init            = qtaac_he_init,
-    .get_codec_name  = qtaac_he_get_codec_name,
     .get_info        = get_info,
     .get_next_packet = get_next_packet,
     .skip_samples    = skip_samples,

@@ -571,8 +571,8 @@ static int x264_validate_parameters( x264_t *h )
             h->param.i_slice_count = 0;
     }
 
-    h->param.i_frame_reference = x264_clip3( h->param.i_frame_reference, 1, 16 );
-    h->param.i_dpb_size = x264_clip3( h->param.i_dpb_size, 1, 16 );
+    h->param.i_frame_reference = x264_clip3( h->param.i_frame_reference, 1, X264_REF_MAX );
+    h->param.i_dpb_size = x264_clip3( h->param.i_dpb_size, 1, X264_REF_MAX );
     h->param.i_keyint_max = x264_clip3( h->param.i_keyint_max, 1, X264_KEYINT_MAX_INFINITE );
     if( h->param.i_scenecut_threshold < 0 )
         h->param.i_scenecut_threshold = 0;
@@ -683,8 +683,6 @@ static int x264_validate_parameters( x264_t *h )
         h->param.analyse.intra &= ~X264_ANALYSE_I8x8;
     }
     h->param.analyse.i_chroma_qp_offset = x264_clip3(h->param.analyse.i_chroma_qp_offset, -12, 12);
-    if( !h->param.b_cabac )
-        h->param.analyse.i_trellis = 0;
     h->param.analyse.i_trellis = x264_clip3( h->param.analyse.i_trellis, 0, 2 );
     if( !h->param.analyse.b_psy )
     {
@@ -1005,7 +1003,7 @@ x264_t *x264_encoder_open( x264_param_t *param )
 
     CHECKED_MALLOCZERO( h->frames.unused[0], (h->frames.i_delay + 3) * sizeof(x264_frame_t *) );
     /* Allocate room for max refs plus a few extra just in case. */
-    CHECKED_MALLOCZERO( h->frames.unused[1], (h->i_thread_frames + 20) * sizeof(x264_frame_t *) );
+    CHECKED_MALLOCZERO( h->frames.unused[1], (h->i_thread_frames + X264_REF_MAX + 4) * sizeof(x264_frame_t *) );
     CHECKED_MALLOCZERO( h->frames.current, (h->param.i_sync_lookahead + h->param.i_bframe
                         + h->i_thread_frames + 3) * sizeof(x264_frame_t *) );
     if( h->param.analyse.i_weighted_pred > 0 )
@@ -1434,9 +1432,9 @@ int x264_weighted_reference_duplicate( x264_t *h, int i_ref, const x264_weight_t
 
     /* shift the frames to make space for the dupe. */
     h->b_ref_reorder[0] = 1;
-    if( h->i_ref0 < 16 )
+    if( h->i_ref0 < X264_REF_MAX )
         ++h->i_ref0;
-    h->fref0[15] = NULL;
+    h->fref0[X264_REF_MAX-1] = NULL;
     x264_frame_unshift( &h->fref0[j], newframe );
 
     return j;
@@ -1616,7 +1614,7 @@ static inline void x264_reference_build_list( x264_t *h, int i_poc )
         h->mb.ref_blind_dupe = idx;
     }
 
-    assert( h->i_ref0 + h->i_ref1 <= 16 );
+    assert( h->i_ref0 + h->i_ref1 <= X264_REF_MAX );
     h->mb.pic.i_fref[0] = h->i_ref0;
     h->mb.pic.i_fref[1] = h->i_ref1;
 }
@@ -1827,6 +1825,8 @@ static int x264_slice_write( x264_t *h )
     bs_t bs_bak;
     x264_cabac_t cabac_bak;
     uint8_t cabac_prevbyte_bak = 0; /* Shut up GCC. */
+    int mv_bits_bak = 0;
+    int tex_bits_bak = 0;
     /* Assume no more than 3 bytes of NALU escaping.
      * NALUs other than the first use a 3-byte startcode. */
     int overhead_guess = (NALU_OVERHEAD - (h->param.b_annexb && h->out.i_nal)) + 3;
@@ -1873,8 +1873,14 @@ static int x264_slice_write( x264_t *h )
     while( (mb_xy = i_mb_x + i_mb_y * h->mb.i_mb_width) <= h->sh.i_last_mb )
     {
         int mb_spos = bs_pos(&h->out.bs) + x264_cabac_pos(&h->cabac);
+
+        if( x264_bitstream_check_buffer( h ) )
+            return -1;
+
         if( h->param.i_slice_max_size > 0 )
         {
+            mv_bits_bak = h->stat.frame.i_mv_bits;
+            tex_bits_bak = h->stat.frame.i_tex_bits;
             /* We don't need the contexts because flushing the CABAC encoder has no context
              * dependency and macroblocks are only re-encoded in the case where a slice is
              * ended (and thus the content of all contexts are thrown away). */
@@ -1902,9 +1908,6 @@ static int x264_slice_write( x264_t *h )
 
         /* encode this macroblock -> be careful it can change the mb type to P_SKIP if needed */
         x264_macroblock_encode( h );
-
-        if( x264_bitstream_check_buffer( h ) )
-            return -1;
 
         if( h->param.b_cabac )
         {
@@ -1943,6 +1946,8 @@ static int x264_slice_write( x264_t *h )
         {
             if( mb_xy != h->sh.i_first_mb )
             {
+                h->stat.frame.i_mv_bits = mv_bits_bak;
+                h->stat.frame.i_tex_bits = tex_bits_bak;
                 if( h->param.b_cabac )
                 {
                     memcpy( &h->cabac, &cabac_bak, offsetof(x264_cabac_t, f8_bits_encoded) );
@@ -2031,7 +2036,7 @@ static int x264_slice_write( x264_t *h )
         if( b_deblock )
         {
             int mvy_limit = 4 >> h->sh.b_mbaff;
-            uint8_t (*bs)[4][4] = h->deblock_strength[h->mb.i_mb_y&h->sh.b_mbaff][h->mb.i_mb_x];
+            uint8_t (*bs)[4][4] = h->deblock_strength[h->mb.i_mb_y&1][h->mb.i_mb_x];
             x264_macroblock_cache_load_deblock( h );
             if( IS_INTRA( h->mb.type[h->mb.i_mb_xy] ) )
                 memset( bs, 3, 2*4*4*sizeof(uint8_t) );
@@ -2794,7 +2799,7 @@ static int x264_encoder_frame_end( x264_t *h, x264_t *thread_current,
             h->stat.i_mb_pred_mode[i][j] += h->stat.frame.i_mb_pred_mode[i][j];
     if( h->sh.i_type != SLICE_TYPE_I )
         for( int i_list = 0; i_list < 2; i_list++ )
-            for( int i = 0; i < 32; i++ )
+            for( int i = 0; i < X264_REF_MAX*2; i++ )
                 h->stat.i_mb_count_ref[h->sh.i_type][i_list][i] += h->stat.frame.i_mb_count_ref[i_list][i];
     if( h->sh.i_type == SLICE_TYPE_P )
     {
@@ -3162,7 +3167,7 @@ void    x264_encoder_close  ( x264_t *h )
                 char *p = buf;
                 int64_t i_den = 0;
                 int i_max = 0;
-                for( int i = 0; i < 32; i++ )
+                for( int i = 0; i < X264_REF_MAX*2; i++ )
                     if( h->stat.i_mb_count_ref[i_slice][i_list][i] )
                     {
                         i_den += h->stat.i_mb_count_ref[i_slice][i_list][i];
