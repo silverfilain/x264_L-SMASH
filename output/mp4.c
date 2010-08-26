@@ -174,25 +174,21 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
     if( !strcmp( audio_enc, "copy" ) )
         henc = x264_audio_copy_open( filters );
     else
-#if HAVE_QT_AAC
     {
-        const audio_encoder_t *encoder = x264_select_audio_encoder( audio_enc, (char*[]){ "qtaac", "qtaac_he", NULL } );
+        const audio_encoder_t *encoder = x264_select_audio_encoder( audio_enc, (char*[]){ "aac", NULL } );
         MP4_FAIL_IF_ERR( !encoder, "unable to select audio encoder.\n" );
 
         henc = x264_audio_encoder_open( encoder, filters, audio_parameters );
     }
-#else
-        return -1;
-#endif
+
     MP4_FAIL_IF_ERR( !henc, "error opening audio encoder.\n" );
     mp4_hnd_t *p_mp4 = handle;
     mp4_audio_hnd_t *p_audio = p_mp4->audio_hnd = calloc( 1, sizeof( mp4_audio_hnd_t ) );
-    p_audio->info = x264_audio_encoder_info( henc );
+    audio_info_t *info = p_audio->info = x264_audio_encoder_info( henc );
 
-    const char *codec = x264_audio_encoder_codec_name( henc );
-    if( !strcmp( codec, "aac" ) )
+    if( !strcmp( info->codec_name, "aac" ) )
         p_audio->has_sbr = 0;
-    else if( !strcmp( codec, "aac_he" ) )
+    else if( !strcmp( info->codec_name, "aac_he" ) )
         p_audio->has_sbr = 1;
     else
     {
@@ -248,7 +244,8 @@ static int write_audio_frames( mp4_hnd_t *p_mp4, double video_cts, int finish )
             continue;
         }
 
-        if( !frame ) break;
+        if( !frame )
+            break;
 
         isom_sample_t *p_sample = isom_create_sample( frame->size );
         MP4_FAIL_IF_ERR( !p_sample,
