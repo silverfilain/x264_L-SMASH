@@ -99,6 +99,7 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     h->ctx->sample_fmt  = h->smpfmt;
     h->ctx->sample_rate = h->info.samplerate;
     h->ctx->channels    = h->info.channels;
+    h->ctx->channel_layout  = h->info.chanlayout;
     h->ctx->flags2     |= CODEC_FLAG2_BIT_RESERVOIR; // mp3
     h->ctx->flags      |= CODEC_FLAG_GLOBAL_HEADER; // aac
 
