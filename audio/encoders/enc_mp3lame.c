@@ -13,6 +13,7 @@ typedef struct enc_lame_t
     int finishing;
     lame_global_flags *lame;
     int64_t last_sample;
+    int64_t last_dts;
     uint8_t *buffer;
     size_t buf_index;
     size_t bufsize;
@@ -82,6 +83,7 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     h->bufsize = 125 * h->info.framelen / 100 + 7200; // from lame.h, largest frame that the encoding functions may return
     h->buffer = malloc( h->bufsize );
     h->buf_index = 0;
+    h->last_dts = INVALID_DTS;
 
     x264_cli_log( "audio", X264_LOG_INFO, "opened lame mp3 encoder (%s: %g%s, quality: %d, samplerate: %dhz)\n",
                   ( !is_vbr ? "bitrate" : "VBR" ), brval,
@@ -199,7 +201,8 @@ static audio_packet_t *get_next_packet( hnd_t handle )
 
         if( !( h->in = x264_af_get_samples( h->filter_chain, h->last_sample, h->last_sample + h->info.framelen ) ) )
             goto error;
-        out->dts        = h->last_sample;
+        if( h->last_dts == INVALID_DTS )
+            h->last_dts = h->last_sample;
         h->last_sample += h->in->samplecount;
 
         len = lame_encode_buffer_float( h->lame, h->in->samples[0], h->in->samples[1],
@@ -212,6 +215,9 @@ static audio_packet_t *get_next_packet( hnd_t handle )
 
         out->size = get_next_mp3frame( h, out->data );
     } while( !out->size );
+
+    out->dts = h->last_dts;
+    h->last_dts += h->info.framelen;
     return out;
 
 error:
@@ -231,7 +237,6 @@ static audio_packet_t *finish( hnd_t encoder )
     int len;
 
     audio_packet_t *out = calloc( 1, sizeof( audio_packet_t ) );
-    out->dts  = h->last_sample + h->in->samplecount * ++h->finishing; // HACK
     out->info = h->info;
     out->data = malloc( h->bufsize );
 
@@ -242,6 +247,9 @@ static audio_packet_t *finish( hnd_t encoder )
     out->size = get_next_mp3frame( h, out->data );
     if( !out->size )
         goto error;
+
+    out->dts = h->last_dts;
+    h->last_dts += h->info.framelen;
     return out;
 
 error:
