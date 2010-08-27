@@ -95,13 +95,13 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
         else if( h->smpfmt < codec->sample_fmts[i] ) // or the best possible sample format (is this really The Right Thing?)
             h->smpfmt = codec->sample_fmts[i];
     }
-    h->ctx              = avcodec_alloc_context();
-    h->ctx->sample_fmt  = h->smpfmt;
-    h->ctx->sample_rate = h->info.samplerate;
-    h->ctx->channels    = h->info.channels;
+    h->ctx                  = avcodec_alloc_context();
+    h->ctx->sample_fmt      = h->smpfmt;
+    h->ctx->sample_rate     = h->info.samplerate;
+    h->ctx->channels        = h->info.channels;
     h->ctx->channel_layout  = h->info.chanlayout;
-    h->ctx->flags2     |= CODEC_FLAG2_BIT_RESERVOIR; // mp3
-    h->ctx->flags      |= CODEC_FLAG_GLOBAL_HEADER; // aac
+    h->ctx->flags2         |= CODEC_FLAG2_BIT_RESERVOIR; // mp3
+    h->ctx->flags          |= CODEC_FLAG_GLOBAL_HEADER; // aac
 
     if( ISCODEC( aac ) )
         h->ctx->profile = FF_PROFILE_AAC_LOW; // TODO: decide by bitrate / quality
