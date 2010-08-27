@@ -515,7 +515,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
             case ISOM_CODEC_TYPE_AC_3_AUDIO :
                 p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_AC_3_AUDIO;
                 MP4_FAIL_IF_ERR( isom_create_dac3_from_syncframe( p_audio->summary, p_audio->info->extradata, p_audio->info->extradata_size ),
-                                 "faile to create AC-3 specific info.\n" );
+                                 "failed to create AC-3 specific info.\n" );
                 break;
             default :
                 p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_NONE;
