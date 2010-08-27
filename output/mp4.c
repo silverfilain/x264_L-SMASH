@@ -77,6 +77,7 @@ typedef struct
 #if HAVE_AUDIO
     audio_info_t *info;
     hnd_t encoder;
+    enum isom_codec_code codec_type;
     int has_sbr;
 #else
     mp4sys_importer_t* p_importer;
@@ -187,9 +188,17 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
     audio_info_t *info = p_audio->info = x264_audio_encoder_info( henc );
 
     if( !strcmp( info->codec_name, "aac" ) )
+    {
+        p_audio->codec_type = ISOM_CODEC_TYPE_MP4A_AUDIO;
         p_audio->has_sbr = 0;
+    }
     else if( !strcmp( info->codec_name, "aac_he" ) )
+    {
+        p_audio->codec_type = ISOM_CODEC_TYPE_MP4A_AUDIO;
         p_audio->has_sbr = 1;
+    }
+    else if( !strcmp( info->codec_name, "alac" ) )
+        p_audio->codec_type = ISOM_CODEC_TYPE_ALAC_AUDIO;
     else
     {
         MP4_LOG_ERROR( "unsupported audio codec.\n" );
@@ -485,18 +494,29 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     if( p_audio )
     {
 #if HAVE_AUDIO
-        p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_Audio_ISO_14496_3;
-        p_audio->summary->stream_type            = MP4SYS_STREAM_TYPE_AudioStream;
-        p_audio->summary->max_au_length          = ( 1 << 13 ) - 1;
-        p_audio->summary->frequency              = p_audio->info->samplerate;
-        p_audio->summary->channels               = p_audio->info->channels;
-        p_audio->summary->bit_depth              = 16;
-        p_audio->summary->samples_in_frame       = p_audio->info->framelen;
-        p_audio->summary->aot                    = MP4A_AUDIO_OBJECT_TYPE_AAC_LC;
-        p_audio->summary->sbr_mode               = p_audio->has_sbr ? MP4A_AAC_SBR_BACKWARD_COMPATIBLE : MP4A_AAC_SBR_NOT_SPECIFIED;
-        p_audio->summary->exdata_length          = p_audio->info->extradata_size;
-        p_audio->summary->exdata                 = malloc( p_audio->info->extradata_size );
-        memcpy( p_audio->summary->exdata, p_audio->info->extradata, p_audio->info->extradata_size );
+        p_audio->summary->stream_type      = MP4SYS_STREAM_TYPE_AudioStream;
+        p_audio->summary->max_au_length    = ( 1 << 13 ) - 1;
+        p_audio->summary->frequency        = p_audio->info->samplerate;
+        p_audio->summary->channels         = p_audio->info->channels;
+        p_audio->summary->bit_depth        = 16;
+        p_audio->summary->samples_in_frame = p_audio->info->framelen;
+        switch( p_audio->codec_type )
+        {
+            case ISOM_CODEC_TYPE_MP4A_AUDIO :
+                p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_Audio_ISO_14496_3;
+                p_audio->summary->aot                    = MP4A_AUDIO_OBJECT_TYPE_AAC_LC;
+                p_audio->summary->sbr_mode               = p_audio->has_sbr ? MP4A_AAC_SBR_BACKWARD_COMPATIBLE : MP4A_AAC_SBR_NOT_SPECIFIED;
+                p_audio->summary->exdata_length          = p_audio->info->extradata_size;
+                p_audio->summary->exdata                 = malloc( p_audio->info->extradata_size );
+                memcpy( p_audio->summary->exdata, p_audio->info->extradata, p_audio->info->extradata_size );
+                break;
+            default :
+                p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_NONE;
+                p_audio->summary->exdata_length          = p_audio->info->extradata_size;
+                p_audio->summary->exdata                 = malloc( p_audio->info->extradata_size );
+                memcpy( p_audio->summary->exdata, p_audio->info->extradata, p_audio->info->extradata_size );
+                break;
+        }
 #else
         /*
          * NOTE: Retrieve audio summary, which will be used for isom_add_sample_entry() as audio parameters.
@@ -512,22 +532,21 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
          * Otherwise you may cause bugs which you hardly call to mind.
          */
         p_audio->summary = mp4sys_duplicate_audio_summary( p_audio->p_importer, 1 );
-#endif /* #if HAVE_AUDIO #else */
-        enum isom_codec_code codec_code;
         switch( p_audio->summary->object_type_indication )
         {
         case MP4SYS_OBJECT_TYPE_Audio_ISO_14496_3:
-            codec_code = ISOM_CODEC_TYPE_MP4A_AUDIO; break;
+            p_audio->codec_type = ISOM_CODEC_TYPE_MP4A_AUDIO; break;
         default:
             MP4_FAIL_IF_ERR( 1, "Unknown object_type_indication.\n" );
         }
+#endif /* #if HAVE_AUDIO #else */
         p_audio->i_video_timescale = p_param->i_timebase_den;
         MP4_FAIL_IF_ERR( isom_set_media_timescale( p_mp4->p_root, p_audio->i_track, p_audio->summary->frequency ),
                          "failed to set media timescale for audio.\n");
         char audio_hdlr_name[24] = "X264 ISOM Audio Handler";
         MP4_FAIL_IF_ERR( isom_set_handler_name( p_mp4->p_root, p_audio->i_track, audio_hdlr_name ),
                          "failed to set handler name for audio.\n" );
-        p_audio->i_sample_entry = isom_add_sample_entry( p_mp4->p_root, p_audio->i_track, codec_code, p_audio->summary );
+        p_audio->i_sample_entry = isom_add_sample_entry( p_mp4->p_root, p_audio->i_track, p_audio->codec_type, p_audio->summary );
         MP4_FAIL_IF_ERR( !p_audio->i_sample_entry,
                          "failed to add sample_entry for audio.\n" );
         /* MP4AudioSampleEntry does not have btrt */
