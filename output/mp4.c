@@ -176,7 +176,7 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
         henc = x264_audio_copy_open( filters );
     else
     {
-        const audio_encoder_t *encoder = x264_select_audio_encoder( audio_enc, (char*[]){ "aac", NULL } );
+        const audio_encoder_t *encoder = x264_select_audio_encoder( audio_enc, (char*[]){ "aac", "ac3", NULL } );
         MP4_FAIL_IF_ERR( !encoder, "unable to select audio encoder.\n" );
 
         henc = x264_audio_encoder_open( encoder, filters, audio_parameters );
