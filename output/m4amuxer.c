@@ -178,7 +178,10 @@ int main( int argc, char* argv[] )
             return M4AMUX_ERR( "Failed to get a frame from input file. Maybe corrupted.\n" );
         }
         if( sample->length == 0 )
+        {
+            isom_remove_sample( sample );
             break; /* end of stream */
+        }
 
         sample->dts = numframe * structs.summary->samples_in_frame;
         sample->cts = sample->dts;
