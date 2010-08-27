@@ -347,10 +347,7 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
 }
 
 static int open_file(
-    char *psz_filename, hnd_t *p_handle
-#if HAVE_AUDIO
-    , hnd_t audio_filters, char *audio_enc, char *audio_params
-#endif
+    char *psz_filename, hnd_t *p_handle, hnd_t audio_filters, char *audio_enc, char *audio_params
 #if HAVE_MUXER_OPT
     , cli_output_opt_t *opt
 #endif
@@ -408,7 +405,7 @@ static int open_file(
     mp4_audio_hnd_t* p_audio = p_mp4->audio_hnd = (mp4_audio_hnd_t*)malloc( sizeof(mp4_audio_hnd_t) );
     MP4_FAIL_IF_ERR_EX( !p_audio, "failed to allocate memory for audio muxing information.\n" );
     memset( p_audio, 0, sizeof(mp4_audio_hnd_t) );
-    p_audio->p_importer = mp4sys_importer_open( "x264_audio_test.adts" );
+    p_audio->p_importer = mp4sys_importer_open( "x264_audio_test.adts", "auto" );
     if( p_audio->p_importer )
     {
         /*
@@ -515,6 +512,14 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
          * Otherwise you may cause bugs which you hardly call to mind.
          */
         p_audio->summary = mp4sys_duplicate_audio_summary( p_audio->p_importer, 1 );
+        enum isom_codec_code codec_code;
+        switch( p_audio->summary->object_type_indication )
+        {
+        case MP4SYS_OBJECT_TYPE_Audio_ISO_14496_3:
+            codec_code = ISOM_CODEC_TYPE_MP4A_AUDIO; break;
+        default:
+            MP4_FAIL_IF_ERR( 1, "Unknown object_type_indication.\n" );
+        }
 #endif /* #if HAVE_AUDIO #else */
         p_audio->i_video_timescale = p_param->i_timebase_den;
         MP4_FAIL_IF_ERR( isom_set_media_timescale( p_mp4->p_root, p_audio->i_track, p_audio->summary->frequency ),
@@ -522,7 +527,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
         char audio_hdlr_name[24] = "X264 ISOM Audio Handler";
         MP4_FAIL_IF_ERR( isom_set_handler_name( p_mp4->p_root, p_audio->i_track, audio_hdlr_name ),
                          "failed to set handler name for audio.\n" );
-        p_audio->i_sample_entry = isom_add_sample_entry( p_mp4->p_root, p_audio->i_track, ISOM_CODEC_TYPE_MP4A_AUDIO, p_audio->summary );
+        p_audio->i_sample_entry = isom_add_sample_entry( p_mp4->p_root, p_audio->i_track, codec_code, p_audio->summary );
         MP4_FAIL_IF_ERR( !p_audio->i_sample_entry,
                          "failed to add sample_entry for audio.\n" );
         /* MP4AudioSampleEntry does not have btrt */

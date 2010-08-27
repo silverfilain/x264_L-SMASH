@@ -1335,6 +1335,8 @@ typedef int ( *mp4sys_importer_probe )( struct mp4sys_importer_tag* importer );
 
 typedef struct
 {
+    const char*                    name;
+    int                            detectable;
     mp4sys_importer_probe          probe;
     mp4sys_importer_get_accessunit get_accessunit;
     mp4sys_importer_cleanup        cleanup;
@@ -1342,10 +1344,11 @@ typedef struct
 
 typedef struct mp4sys_importer_tag
 {
-    FILE* stream;
-    void* info; /* importer internal status information. */
+    FILE*                     stream;
+    int                       is_stdin;
+    void*                     info; /* importer internal status information. */
     mp4sys_importer_functions funcs;
-    isom_entry_list_t* summaries;
+    isom_entry_list_t*        summaries;
 } mp4sys_importer_t;
 
 /***************************************************************************
@@ -1514,14 +1517,14 @@ static mp4sys_audio_summary_t* mp4sys_adts_create_summary( mp4sys_adts_fixed_hea
     summary->samples_in_frame       = 1024;
     summary->aot                    = header->profile_ObjectType + MP4A_AUDIO_OBJECT_TYPE_AAC_MAIN;
     summary->sbr_mode               = MP4A_AAC_SBR_NOT_SPECIFIED;
-#if 0 /* FIXME: This is very unstable. So many players crash with this. */
+#if 0 /* FIXME: This is very unstable. Many players crash with this. */
     if( header->ID != 0 )
     {
         /*
          * NOTE: This ADTS seems of ISO/IEC 13818-7 (MPEG-2 AAC).
-         * It has special object_type_indications, depending on it's profile.
-         * It shall not have decoder specific information, so AudioObjectType neither.
-         * see ISO/IEC 14496-1, 8.6.7 DecoderSpecificInfo.
+         * It has special object_type_indications, depending on it's profile (Legacy Interface).
+         * If ADIF header is not available, it should not have decoder specific information, so AudioObjectType neither.
+         * see ISO/IEC 14496-1, 8.6.7 DecoderSpecificInfo and 14496-3 Subpart 9: MPEG-1/2 Audio in MPEG-4.
          */
         summary->object_type_indication = header->profile_ObjectType + MP4SYS_OBJECT_TYPE_Audio_ISO_13818_7_Main_Profile;
         summary->aot                    = MP4A_AUDIO_OBJECT_TYPE_NULL;
@@ -1704,6 +1707,7 @@ static void mp4sys_adts_cleanup( mp4sys_importer_t* importer )
         free( importer->info );
 }
 
+/* returns 0 if it seems adts. */
 static int mp4sys_adts_probe( mp4sys_importer_t* importer )
 {
     uint8_t buf[MP4SYS_ADTS_MAX_FRAME_LENGTH];
@@ -1735,7 +1739,6 @@ static int mp4sys_adts_probe( mp4sys_importer_t* importer )
     info->variable_header = variable_header;
 
     if( isom_add_entry( importer->summaries, summary ) )
-    if( !info )
     {
         free( info );
         mp4sys_cleanup_audio_summary( summary );
@@ -1747,6 +1750,8 @@ static int mp4sys_adts_probe( mp4sys_importer_t* importer )
 }
 
 const static mp4sys_importer_functions mp4sys_adts_importer = {
+    "adts",
+    1,
     mp4sys_adts_probe,
     mp4sys_adts_get_accessunit,
     mp4sys_adts_cleanup
@@ -1767,7 +1772,7 @@ void mp4sys_importer_close( mp4sys_importer_t* importer )
 {
     if( !importer )
         return;
-    if( importer->stream )
+    if( !importer->is_stdin && importer->stream )
         fclose( importer->stream );
     if( importer->funcs.cleanup )
         importer->funcs.cleanup( importer );
@@ -1776,15 +1781,31 @@ void mp4sys_importer_close( mp4sys_importer_t* importer )
     free( importer );
 }
 
-mp4sys_importer_t* mp4sys_importer_open( char* identifier )
+mp4sys_importer_t* mp4sys_importer_open( const char* identifier, const char* format )
 {
+    if( identifier == NULL )
+        return NULL;
+
+    int auto_detect = ( format == NULL || !strcmp( format, "auto" ) );
     mp4sys_importer_t* importer = (mp4sys_importer_t*)malloc( sizeof(mp4sys_importer_t) );
     if( !importer )
         return NULL;
     memset( importer, 0, sizeof(mp4sys_importer_t) );
-    if( (importer->stream = fopen( identifier, "rb" )) == NULL )
+
+    if( !strcmp( identifier, "-" ) )
     {
-        free( importer );
+        /* special treatment for stdin */
+        if( auto_detect )
+        {
+            free( importer );
+            return NULL;
+        }
+        importer->stream = stdin;
+        importer->is_stdin = 1;
+    }
+    else if( (importer->stream = fopen( identifier, "rb" )) == NULL )
+    {
+        mp4sys_importer_close( importer );
         return NULL;
     }
     importer->summaries = isom_create_entry_list();
@@ -1793,9 +1814,31 @@ mp4sys_importer_t* mp4sys_importer_open( char* identifier )
         mp4sys_importer_close( importer );
         return NULL;
     }
+    /* find importer */
     const mp4sys_importer_functions* funcs;
-    for( int i = 0; (funcs = mp4sys_importer_tbl[i]) && funcs->probe && funcs->probe( importer ); i++ )
-        mp4sys_fseek( importer->stream, 0, SEEK_SET );
+    if( auto_detect )
+    {
+        /* just rely on detector. */
+        for( int i = 0; (funcs = mp4sys_importer_tbl[i]) != NULL; i++ )
+        {
+            if( !funcs->detectable )
+                continue;
+            if( !funcs->probe( importer ) || mp4sys_fseek( importer->stream, 0, SEEK_SET ) )
+                break;
+        }
+    }
+    else
+    {
+        /* needs name matching. */
+        for( int i = 0; (funcs = mp4sys_importer_tbl[i]) != NULL; i++ )
+        {
+            if( strcmp( funcs->name, format ) )
+                continue;
+            if( funcs->probe( importer ) )
+                funcs = NULL;
+            break;
+        }
+    }
     if( !funcs )
     {
         mp4sys_importer_close( importer );
