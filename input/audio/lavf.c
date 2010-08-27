@@ -224,6 +224,7 @@ static hnd_t copy_init( hnd_t filter_chain, const char *opts )
         else
             h->out = convert_to_audio_packet( h, h->pkt );
 
+        h->pkt = NULL;
         return chain;
     }
     fprintf( stderr, "lavf [error]: attempted to enter copy mode with a non-empty filter chain!" ); // as far as CLI users see, lavf isn't a filter
@@ -504,7 +505,8 @@ static void lavf_close( hnd_t handle )
     assert( handle );
     lavf_source_t *h = handle;
     av_free( h->buffer );
-    free_avpacket( h->pkt );
+    if( h->pkt )
+        free_avpacket( h->pkt );
     avcodec_close( h->ctx );
     av_close_input_file( h->lavf );
     if( h->bsfs )
