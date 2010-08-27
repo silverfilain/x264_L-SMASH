@@ -221,6 +221,24 @@ static hnd_t copy_init( hnd_t filter_chain, const char *opts )
             h->info.extradata = h->ctx->extradata;
             h->info.extradata_size = h->ctx->extradata_size;
         }
+        else if( !strcmp( h->ctx->codec->name, "ac3" ) && !h->ctx->extradata )
+        {
+            if( !h->pkt )
+            {
+                fprintf( stderr, "lavf [error]: demuxing error occured!" );
+                return NULL;
+            }
+            h->ctx->extradata_size = h->pkt->size;
+            h->ctx->extradata = av_malloc( h->ctx->extradata_size );
+            if( !h->ctx->extradata )
+            {
+                fprintf( stderr, "lavf [error]: malloc failed!\n" );
+                return NULL;
+            }
+            memcpy( h->ctx->extradata, h->pkt->data, h->ctx->extradata_size );
+            h->info.extradata = h->ctx->extradata;
+            h->info.extradata_size = h->ctx->extradata_size;
+        }
         else
             h->out = convert_to_audio_packet( h, h->pkt );
 
