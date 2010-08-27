@@ -153,6 +153,15 @@ const audio_encoder_t *x264_select_audio_encoder( const char *encoder, char* all
                         break;
                     }
                 }
+                if( !strcmp( allowed_list[i], "ac3" ) )
+                {
+                    if( !strcmp( encoder, "ac3" ) ||
+                        !strcmp( encoder, "ffac3" ) )
+                    {
+                        valid = 1;
+                        break;
+                    }
+                }
             }
             if( !valid )
                 return NULL;

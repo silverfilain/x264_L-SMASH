@@ -59,6 +59,13 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
         free( (void*) h->info.codec_name );
         codecname = h->info.codec_name = strdup( "aac" );
     }
+    if( ISCODEC( ac3 ) )
+        codecname = "ac3";
+    else if( ISCODEC( ffac3 ) )
+    {
+        free( (void*) h->info.codec_name );
+        codecname = h->info.codec_name = strdup( "ac3" );
+    }
     else // Check if the codec was prefixed with an 'ff' to "force" a libavcodec codec
     {    // TODO: figure out how to make x264_select_audio_encoder like this
         codecname = malloc( 32 );
@@ -127,6 +134,24 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
         h->ctx->bit_rate = brval * 1000.0f;
 
     RETURN_IF_ERR( avcodec_open( h->ctx, codec ), "lavc", NULL, "could not open the %s encoder\n", h->info.codec_name );
+
+    if( ISCODEC( ac3 ) )
+    {
+        audio_packet_t *pkt = x264_af_get_samples( h->filter_chain, 0, h->ctx->frame_size );
+        RETURN_IF_ERR( !pkt, "lavc", NULL, "could not get a audio frame\n" );
+
+        pkt->data = malloc( FF_MIN_BUFFER_SIZE * 3 / 2 );
+
+        void *indata = x264_af_interleave2( h->smpfmt, pkt->samples, pkt->channels, pkt->samplecount );
+        pkt->size = avcodec_encode_audio( h->ctx, pkt->data, pkt->channels * pkt->samplecount, indata );
+
+        h->ctx->extradata_size = pkt->size;
+        h->ctx->extradata = av_malloc( h->ctx->extradata_size );
+        RETURN_IF_ERR( !h->ctx->extradata, "lavc", NULL, "malloc failed!\n" );
+        memcpy( h->ctx->extradata, pkt->data, h->ctx->extradata_size );
+
+        x264_af_free_packet( pkt );
+    }
 
     h->info.extradata      = h->ctx->extradata;
     h->info.extradata_size = h->ctx->extradata_size;
