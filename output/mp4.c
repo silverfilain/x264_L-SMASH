@@ -512,6 +512,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
          * Otherwise you may cause bugs which you hardly call to mind.
          */
         p_audio->summary = mp4sys_duplicate_audio_summary( p_audio->p_importer, 1 );
+#endif /* #if HAVE_AUDIO #else */
         enum isom_codec_code codec_code;
         switch( p_audio->summary->object_type_indication )
         {
@@ -520,7 +521,6 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
         default:
             MP4_FAIL_IF_ERR( 1, "Unknown object_type_indication.\n" );
         }
-#endif /* #if HAVE_AUDIO #else */
         p_audio->i_video_timescale = p_param->i_timebase_den;
         MP4_FAIL_IF_ERR( isom_set_media_timescale( p_mp4->p_root, p_audio->i_track, p_audio->summary->frequency ),
                          "failed to set media timescale for audio.\n");
