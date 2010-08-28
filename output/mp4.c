@@ -607,14 +607,9 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
     p_mp4->i_sei_size = sei_size;
 
     /* Write ftyp. */
-    uint32_t brands[3] = { ISOM_BRAND_TYPE_ISOM, ISOM_BRAND_TYPE_AVC1, ISOM_BRAND_TYPE_MP42 };
-#if HAVE_ANY_AUDIO
-    MP4_FAIL_IF_ERR( isom_set_brands( p_mp4->p_root, brands[1], 1, brands, 2 + !!p_mp4->audio_hnd ) || isom_write_ftyp( p_mp4->p_root ),
+    uint32_t brands[2] = { ISOM_BRAND_TYPE_MP42, ISOM_BRAND_TYPE_ISOM };
+    MP4_FAIL_IF_ERR( isom_set_brands( p_mp4->p_root, brands[0], 0, brands, 2 ) || isom_write_ftyp( p_mp4->p_root ),
                      "failed to set brands / ftyp.\n" );
-#else
-    MP4_FAIL_IF_ERR( isom_set_brands( p_mp4->p_root, brands[1], 1, brands, 2 ) || isom_write_ftyp( p_mp4->p_root ),
-                     "failed to set brands / ftyp.\n" );
-#endif
 
     /* Write mdat header. */
     MP4_FAIL_IF_ERR( isom_add_mdat( p_mp4->p_root ), "failed to add mdat.\n" );
