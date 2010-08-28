@@ -98,7 +98,7 @@ const audio_encoder_t *x264_encoder_by_name( const char *name )
 #endif /* HAVE_AUDIO */
 #undef IFRET
 #undef ENC
-#ifdef HAVE_LAVF
+#if HAVE_AUDIO && HAVE_LAVF
     return &audio_encoder_lavc; // fallback to libavcodec
 #else
     return NULL;
@@ -184,12 +184,12 @@ const audio_encoder_t *x264_select_audio_encoder( const char *encoder, char* all
 hnd_t x264_audio_copy_open( hnd_t handle )
 {
     assert( handle );
-    audio_hnd_t *h = handle;
 #define IFRET( dec )                                                                \
         extern const audio_encoder_t audio_copy_ ## dec;                            \
         if( !strcmp( #dec, h->self->name ) )                                        \
             return x264_audio_encoder_open( &( audio_copy_ ## dec ), handle, NULL );
 #if HAVE_AUDIO && HAVE_LAVF
+    audio_hnd_t *h = handle;
     IFRET( lavf );
 #endif // HAVE_AUDIO && HAVE_LAVF
 #undef IFRET
