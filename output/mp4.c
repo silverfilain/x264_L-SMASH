@@ -74,10 +74,10 @@ typedef struct
     mp4sys_audio_summary_t *summary;
     uint64_t i_video_timescale;    /* For interleaving. */
     int i_numframe;
+    enum isom_codec_code codec_type;
 #if HAVE_AUDIO
     audio_info_t *info;
     hnd_t encoder;
-    enum isom_codec_code codec_type;
     int has_sbr;
 #else
     mp4sys_importer_t* p_importer;
@@ -543,6 +543,8 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
         {
         case MP4SYS_OBJECT_TYPE_Audio_ISO_14496_3:
             p_audio->codec_type = ISOM_CODEC_TYPE_MP4A_AUDIO; break;
+        case MP4SYS_OBJECT_TYPE_PRIV_SAMR_AUDIO:
+            p_audio->codec_type = ISOM_CODEC_TYPE_SAMR_AUDIO; break;
         default:
             MP4_FAIL_IF_ERR( 1, "Unknown object_type_indication.\n" );
         }
