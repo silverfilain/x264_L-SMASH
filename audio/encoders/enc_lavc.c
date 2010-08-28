@@ -66,6 +66,13 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
         free( (void*) h->info.codec_name );
         codecname = h->info.codec_name = strdup( "ac3" );
     }
+    if( ISCODEC( alac ) )
+        codecname = "alac";
+    else if( ISCODEC( ffalac ) )
+    {
+        free( (void*) h->info.codec_name );
+        codecname = h->info.codec_name = strdup( "alac" );
+    }
     else // Check if the codec was prefixed with an 'ff' to "force" a libavcodec codec
     {    // TODO: figure out how to make x264_select_audio_encoder like this
         codecname = malloc( 32 );
@@ -153,10 +160,11 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
         x264_af_free_packet( pkt );
     }
 
-    h->info.extradata      = h->ctx->extradata;
-    h->info.extradata_size = h->ctx->extradata_size;
-    h->info.framelen       = h->ctx->frame_size;
-    h->info.timebase       = (timebase_t) { 1, h->ctx->sample_rate };
+    h->info.extradata       = h->ctx->extradata;
+    h->info.extradata_size  = h->ctx->extradata_size;
+    h->info.framelen        = h->ctx->frame_size;
+    h->info.bits_per_sample = h->ctx->bits_per_coded_sample;
+    h->info.timebase        = (timebase_t) { 1, h->ctx->sample_rate };
 
     x264_cli_log( "audio", X264_LOG_INFO, "opened libavcodec's %s encoder (%s%.1f%s, %dbits, %dch, %dhz)\n", codecname,
                   is_vbr ? "V" : "", brval, is_vbr ? "" : "kbps", h->info.chansize * 8, h->info.channels, h->info.samplerate );
@@ -192,8 +200,12 @@ static audio_packet_t *get_next_packet( hnd_t handle )
         out->samplecount = smp->samplecount;
         out->channels    = smp->channels;
 
+        int buf_size = !ISCODEC( alac )
+                     ? smp->channels * smp->samplecount
+                     : 2 * (8 + (h->info.framesize * smp->channels * h->info.bits_per_sample >> 3));
+
         void *indata   = x264_af_interleave2( h->smpfmt, smp->samples, smp->channels, smp->samplecount );
-        out->size       = avcodec_encode_audio( h->ctx, out->data, smp->channels * smp->samplecount, indata );
+        out->size       = avcodec_encode_audio( h->ctx, out->data, buf_size, indata );
         h->last_sample += h->info.framelen;
 
         x264_af_free_packet( smp );

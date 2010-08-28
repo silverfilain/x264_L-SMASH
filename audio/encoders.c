@@ -162,6 +162,15 @@ const audio_encoder_t *x264_select_audio_encoder( const char *encoder, char* all
                         break;
                     }
                 }
+                if( !strcmp( allowed_list[i], "alac" ) )
+                {
+                    if( !strcmp( encoder, "alac" ) ||
+                        !strcmp( encoder, "ffalac" ) )
+                    {
+                        valid = 1;
+                        break;
+                    }
+                }
             }
             if( !valid )
                 return NULL;
