@@ -201,6 +201,8 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
         p_audio->codec_type = ISOM_CODEC_TYPE_AC_3_AUDIO;
     else if( !strcmp( info->codec_name, "alac" ) )
         p_audio->codec_type = ISOM_CODEC_TYPE_ALAC_AUDIO;
+    else if( !strcmp( info->codec_name, "amrnb" ) )
+        p_audio->codec_type = ISOM_CODEC_TYPE_SAMR_AUDIO;
     else
     {
         MP4_LOG_ERROR( "unsupported audio codec.\n" );
@@ -516,6 +518,11 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
                 p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_AC_3_AUDIO;
                 MP4_FAIL_IF_ERR( isom_create_dac3_from_syncframe( p_audio->summary, p_audio->info->extradata, p_audio->info->extradata_size ),
                                  "failed to create AC-3 specific info.\n" );
+                break;
+            case ISOM_CODEC_TYPE_SAMR_AUDIO :
+                p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_PRIV_SAMR_AUDIO;
+                MP4_FAIL_IF_ERR( mp4sys_amrnb_create_damr( p_audio->summary ),
+                                 "failed to create Narrowband AMR specific info.\n" );
                 break;
             default :
                 p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_NONE;
