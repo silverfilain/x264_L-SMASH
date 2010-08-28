@@ -94,6 +94,17 @@ int main( int argc, char* argv[] )
     if( !structs.importer || !(structs.summary = mp4sys_duplicate_audio_summary( structs.importer, 1 )) )
         return M4AMUX_ERR( "Failed to open input file.\n" );
 
+    /* check codec type. */
+    enum isom_codec_code codec_code;
+    switch( structs.summary->object_type_indication )
+    {
+    case MP4SYS_OBJECT_TYPE_Audio_ISO_14496_3:
+        codec_code = ISOM_CODEC_TYPE_MP4A_AUDIO; break;
+    case MP4SYS_OBJECT_TYPE_PRIV_SAMR_AUDIO:
+        codec_code = ISOM_CODEC_TYPE_SAMR_AUDIO; break;
+    default:
+        M4AMUX_ERR( "Unknown object_type_indication.\n" );
+    }
     /* user defined sbr mode. */
     if( sbr )
     {
@@ -103,6 +114,7 @@ int main( int argc, char* argv[] )
         if( mp4sys_setup_AudioSpecificConfig( structs.summary ) )
             return M4AMUX_ERR( "Failed to set SBR mode.\n" );
     }
+    /* user defined brand mode. */
     if( brand_3gx )
     {
         if( structs.summary->frequency > 48000
@@ -133,14 +145,6 @@ int main( int argc, char* argv[] )
     if( isom_set_handler_name( structs.root, track, handler_name ) )
         return M4AMUX_ERR( "Failed to set handler name.\n" );
 
-    enum isom_codec_code codec_code;
-    switch( structs.summary->object_type_indication )
-    {
-    case MP4SYS_OBJECT_TYPE_Audio_ISO_14496_3:
-        codec_code = ISOM_CODEC_TYPE_MP4A_AUDIO; break;
-    default:
-        M4AMUX_ERR( "Unknown object_type_indication.\n" );
-    }
     uint32_t sample_entry = isom_add_sample_entry( structs.root, track, ISOM_CODEC_TYPE_MP4A_AUDIO, structs.summary );
     if( !sample_entry )
         return M4AMUX_ERR( "Failed to add sample_entry.\n" );
