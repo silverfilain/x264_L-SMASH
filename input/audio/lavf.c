@@ -223,11 +223,6 @@ static hnd_t copy_init( hnd_t filter_chain, const char *opts )
         }
         else if( !strcmp( h->ctx->codec->name, "ac3" ) && !h->ctx->extradata )
         {
-            if( !h->pkt )
-            {
-                fprintf( stderr, "lavf [error]: demuxing error occured!" );
-                return NULL;
-            }
             h->ctx->extradata_size = h->pkt->size;
             h->ctx->extradata = av_malloc( h->ctx->extradata_size );
             if( !h->ctx->extradata )
