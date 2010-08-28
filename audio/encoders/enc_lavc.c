@@ -152,6 +152,7 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
         void *indata = x264_af_interleave2( h->smpfmt, pkt->samples, pkt->channels, pkt->samplecount );
         pkt->size = avcodec_encode_audio( h->ctx, pkt->data, pkt->channels * pkt->samplecount, indata );
 
+        h->ctx->frame_number = 0;
         h->ctx->extradata_size = pkt->size;
         h->ctx->extradata = av_malloc( h->ctx->extradata_size );
         RETURN_IF_ERR( !h->ctx->extradata, "lavc", NULL, "malloc failed!\n" );
