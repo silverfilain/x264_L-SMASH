@@ -549,6 +549,8 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
         switch( p_audio->summary->object_type_indication )
         {
         case MP4SYS_OBJECT_TYPE_Audio_ISO_14496_3:
+        case MP4SYS_OBJECT_TYPE_Audio_ISO_13818_3: /* Legacy Interface */
+        case MP4SYS_OBJECT_TYPE_Audio_ISO_11172_3: /* Legacy Interface */
             p_audio->codec_type = ISOM_CODEC_TYPE_MP4A_AUDIO; break;
         case MP4SYS_OBJECT_TYPE_PRIV_SAMR_AUDIO:
             p_audio->codec_type = ISOM_CODEC_TYPE_SAMR_AUDIO; break;

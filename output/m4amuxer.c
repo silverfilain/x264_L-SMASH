@@ -99,11 +99,13 @@ int main( int argc, char* argv[] )
     switch( structs.summary->object_type_indication )
     {
     case MP4SYS_OBJECT_TYPE_Audio_ISO_14496_3:
+    case MP4SYS_OBJECT_TYPE_Audio_ISO_13818_3: /* Legacy Interface */
+    case MP4SYS_OBJECT_TYPE_Audio_ISO_11172_3: /* Legacy Interface */
         codec_code = ISOM_CODEC_TYPE_MP4A_AUDIO; break;
     case MP4SYS_OBJECT_TYPE_PRIV_SAMR_AUDIO:
         codec_code = ISOM_CODEC_TYPE_SAMR_AUDIO; break;
     default:
-        M4AMUX_ERR( "Unknown object_type_indication.\n" );
+        return M4AMUX_ERR( "Unknown object_type_indication.\n" );
     }
     /* user defined sbr mode. */
     if( sbr )
