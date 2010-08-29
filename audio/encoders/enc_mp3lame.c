@@ -271,18 +271,20 @@ static void lame_encoder_close( hnd_t handle )
 
 static void lame_encoder_help( const char * const codec_name, int longhelp )
 {
-    printf( "      * for lame %s encoder (--acodec mp3)\n", codec_name );
-    printf( "            --aquality        means VBR quality, takes 9 (lowest) to 0 (highest). [6]\n" );
-    printf( "            --abitrate        turns on CBR mode, the value should be one of the below (all in kbits/s).\n" );
-    printf( "                               - for 32000Hz or 44100Hz or 48000Hz:\n" );
-    printf( "                                    32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320\n" );
-    printf( "                               - for 16000Hz or 22050Hz or 24000Hz:\n" );
-    printf( "                                    8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160\n" );
-    printf( "                               - for 8000Hz or 11025Hz or 12000Hz:\n" );
-    printf( "                                    8, 16, 24, 32, 40, 48, 56, 64\n" );
-    printf( "            --asamplerate     means output samplerate in Hz, should be one of the below:\n" );
-    printf( "                               - 8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000\n" );
-    printf( "            --acodec-quality  means lame's internal encoder complexity, takes 9 (lowest) to 0 (highest). [0]\n" );
+    printf( "      * for %s encoder (--acodec lame)\n", codec_name );
+    printf( "        --aquality        VBR quality. [6]\n" );
+    printf( "                            - 9 (lowest) to 0 (highest)\n" );
+    printf( "        --abitrate        Enables CBR mode. Bitrate should be one of the values below.\n" );
+    printf( "                            - for 32000Hz or 44100Hz or 48000Hz:\n" );
+    printf( "                              32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320\n" );
+    printf( "                            - for 16000Hz or 22050Hz or 24000Hz:\n" );
+    printf( "                              8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160\n" );
+    printf( "                            - for 8000Hz or 11025Hz or 12000Hz:\n" );
+    printf( "                              8, 16, 24, 32, 40, 48, 56, 64\n" );
+    printf( "        --asamplerate     Output samplerate. Should be one of the values below.\n" );
+    printf( "                            - 8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000\n" );
+    printf( "        --acodec-quality  Lame's internal encoder complexity. [0]\n" );
+    printf( "                            - 9 (poor quality) to 0 (best quality)\n" );
 }
 
 const audio_encoder_t audio_encoder_lame =

@@ -249,28 +249,28 @@ static void lavc_help( const char * const codec_name, int longhelp )
     int num = 0;
 
     printf( "      * for %s encoder\n", codec_name );
-    printf( "            Note that --asamplerate is not supported for this encoder.\n" );
+    printf( "        --asamplerate is not supported for this encoder.\n" );
     printf( "\n" );
-    printf( "            Here is the list of audio codecs compiled in libavcodec:\n" );
+    printf( "        The list of audio codecs compiled in libavcodec are:\n" );
     while( (enc = av_codec_next( enc )) )
     {
         if( enc->type == CODEC_TYPE_AUDIO && enc->encode )
         {
-            printf( "              * %s\n", enc->name );
+            printf( "            - %s\n", enc->name );
             num++;
         }
     }
     if( !num )
     {
-        printf( "              No audio encoder support is compiled in!\n" );
+        printf( "            No audio encoder support is compiled in!\n" );
     }
     else
     {
-        printf( "            These are available by passing the above name to --acodec option.\n" );
-        printf( "            User can also override internal encoder selection and force to use\n" );
-        printf( "            lavc version by putting 'ff' prefix before the codec name.\n" );
-        printf( "            Currently, there is no detailed help for each encoders,\n" );
-        printf( "            so refer to the implementations of ffmpeg and individual encoder library.\n" );
+        printf( "        These are available by passing the name to --acodec option.\n" );
+        printf( "        Also, internal codec selection can be overriden by putting\n" );
+        printf( "        'ff' prefix before the name and force to use lavc version.\n" );
+        printf( "        Currently, there is no help for each encoders, so refer to\n" );
+        printf( "        the implementations of ffmpeg and individual encoder library.\n" );
     }
 }
 
