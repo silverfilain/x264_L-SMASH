@@ -78,7 +78,7 @@ const audio_encoder_t *x264_encoder_by_name( const char *name )
 #define IFRET( enc ) if( !strcmp( #enc, name ) ) return ENC( enc );
 #if HAVE_AUDIO
 #if HAVE_LAME
-    IFRET( mp3 );
+    IFRET( lame );
 #endif
     if( !strcmp( "aac", name ) )
     {
@@ -134,7 +134,8 @@ const audio_encoder_t *x264_select_audio_encoder( const char *encoder, char* all
                 }
                 if( !strcmp( allowed_list[i], "mp3" ) )
                 {
-                    if( !strcmp( encoder, "mp3" ) ||
+                    if( !strcmp( encoder, "lame" ) ||
+                        !strcmp( encoder, "mp3" ) ||
                         !strcmp( encoder, "libmp3lame" ) )
                     {
                         valid = 1;
@@ -193,7 +194,7 @@ void x264_audio_encoder_show_help( const char * const encoder_list[], int longhe
     if( !longhelp )
     {
         printf( "      Available options and their value ranges are depend on audio codec.\n" );
-        printf( "      For the help for each audio codec, see --longhelp or --fullhelp.\n" );
+        printf( "      For the codec dependent helps, see --longhelp or --fullhelp.\n" );
         return;
     }
 
