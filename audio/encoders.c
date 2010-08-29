@@ -188,6 +188,38 @@ const audio_encoder_t *x264_select_audio_encoder( const char *encoder, char* all
     return x264_encoder_by_name( encoder );
 }
 
+void x264_audio_encoder_show_help( const char * const encoder_list[], int longhelp )
+{
+    if( !longhelp )
+    {
+        printf( "      Available options and their value ranges are depend on audio codec.\n" );
+        printf( "      For the help for each audio codec, see --longhelp or --fullhelp.\n" );
+        return;
+    }
+
+    printf( "      Codec specific notes for audio options:\n" );
+#if !HAVE_AUDIO
+    printf( "            There is no available audio codec in this x264 build.\n" );
+    return;
+#endif
+    for( int i=0; encoder_list[i]; i++ )
+    {
+        const audio_encoder_t *enc;
+
+        if( !strcmp( encoder_list[i], "auto" ) || !strcmp( encoder_list[i], "none" ) )
+            continue;
+
+        enc = x264_encoder_by_name( encoder_list[i] );
+
+        if( !enc || !enc->show_help )
+            continue;
+        enc->show_help( encoder_list[i], longhelp );
+        printf( "\n" );
+    }
+
+    return;
+}
+
 #include "filters/audio/internal.h"
 
 hnd_t x264_audio_copy_open( hnd_t handle )

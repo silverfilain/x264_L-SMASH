@@ -83,6 +83,13 @@ static void raw_close( hnd_t handle )
     free( handle );
 }
 
+static void raw_help( const char * const codec_name, int longhelp )
+{
+    printf( "      * for %s encoder (--acodec raw)\n", codec_name );
+    printf( "            Currently, all audio options except for --acodec and --audiofile are\n" );
+    printf( "            ignored for this codec.\n" );
+}
+
 const audio_encoder_t audio_encoder_raw =
 {
     .init            = init,
@@ -91,5 +98,6 @@ const audio_encoder_t audio_encoder_raw =
     .skip_samples    = skip_samples,
     .finish          = finish,
     .free_packet     = free_packet,
-    .close           = raw_close
+    .close           = raw_close,
+    .show_help       = raw_help
 };
