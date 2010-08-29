@@ -12,6 +12,7 @@ typedef struct enc_lavc_t
     hnd_t filter_chain;
     int finishing;
     int64_t last_sample;
+    int buf_size;
 
     AVCodecContext *ctx;
     enum SampleFormat smpfmt;
@@ -151,8 +152,14 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     h->info.extradata       = h->ctx->extradata;
     h->info.extradata_size  = h->ctx->extradata_size;
     h->info.framelen        = h->ctx->frame_size;
-    h->info.bits_per_sample = h->ctx->bits_per_coded_sample;
+    h->info.chansize        = av_get_bits_per_sample_format( h->ctx->sample_fmt ) / 8;
+    h->info.samplesize      = h->info.chansize * h->info.channels;
+    h->info.framesize       = h->info.framelen * h->info.samplesize;
     h->info.timebase        = (timebase_t) { 1, h->ctx->sample_rate };
+
+    h->buf_size = !ISCODEC( alac )
+                      ? FF_MIN_BUFFER_SIZE * 3 / 2
+                      : 2 * (8 + h->info.framesize);
 
     x264_cli_log( "audio", X264_LOG_INFO, "opened libavcodec's %s encoder (%s%.1f%s, %dbits, %dch, %dhz)\n", codecname,
                   is_vbr ? "V" : "", brval, is_vbr ? "" : "kbps", h->info.chansize * 8, h->info.channels, h->info.samplerate );
@@ -177,8 +184,8 @@ static audio_packet_t *get_next_packet( hnd_t handle )
 
     audio_packet_t *out = calloc( 1, sizeof( audio_packet_t ) );
     out->info = h->info;
-    out->data = malloc( FF_MIN_BUFFER_SIZE * 3 / 2 );
     out->dts  = h->last_sample;
+    out->data = malloc( h->buf_size );
     while( out->size == 0 )
     {
         audio_packet_t *smp = x264_af_get_samples( h->filter_chain, h->last_sample, h->last_sample + h->info.framelen );
@@ -188,12 +195,8 @@ static audio_packet_t *get_next_packet( hnd_t handle )
         out->samplecount = smp->samplecount;
         out->channels    = smp->channels;
 
-        int buf_size = !ISCODEC( alac )
-                     ? smp->channels * smp->samplecount
-                     : 2 * (8 + (h->info.framesize * smp->channels * h->info.bits_per_sample >> 3));
-
         void *indata   = x264_af_interleave2( h->smpfmt, smp->samples, smp->channels, smp->samplecount );
-        out->size       = avcodec_encode_audio( h->ctx, out->data, buf_size, indata );
+        out->size       = avcodec_encode_audio( h->ctx, out->data, h->buf_size, indata );
         h->last_sample += h->info.framelen;
 
         x264_af_free_packet( smp );
