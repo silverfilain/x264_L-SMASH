@@ -1827,7 +1827,7 @@ static mp4sys_audio_summary_t* mp4sys_mp3_create_summary( mp4sys_mp3_header_t* h
     if( !summary )
         return NULL;
     memset( summary, 0, sizeof(mp4sys_audio_summary_t) );
-    summary->object_type_indication = header->ID ? MP4SYS_OBJECT_TYPE_Audio_ISO_13818_3 : MP4SYS_OBJECT_TYPE_Audio_ISO_11172_3;
+    summary->object_type_indication = header->ID ? MP4SYS_OBJECT_TYPE_Audio_ISO_11172_3 : MP4SYS_OBJECT_TYPE_Audio_ISO_13818_3;
     summary->stream_type            = MP4SYS_STREAM_TYPE_AudioStream;
     summary->max_au_length          = MP4SYS_MP3_MAX_FRAME_LENGTH;
     summary->frequency              = mp4sys_mp3_frequency_tbl[header->ID][header->sampling_frequency];
