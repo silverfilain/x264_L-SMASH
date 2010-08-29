@@ -78,7 +78,7 @@ const audio_encoder_t *x264_encoder_by_name( const char *name )
 #define IFRET( enc ) if( !strcmp( #enc, name ) ) return ENC( enc );
 #if HAVE_AUDIO
 #if HAVE_LAME
-    IFRET( mp3 );
+    IFRET( lame );
 #endif
     if( !strcmp( "aac", name ) )
     {
@@ -98,7 +98,7 @@ const audio_encoder_t *x264_encoder_by_name( const char *name )
 #endif /* HAVE_AUDIO */
 #undef IFRET
 #undef ENC
-#ifdef HAVE_LAVF
+#if HAVE_AUDIO && HAVE_LAVF
     return &audio_encoder_lavc; // fallback to libavcodec
 #else
     return NULL;
@@ -134,7 +134,8 @@ const audio_encoder_t *x264_select_audio_encoder( const char *encoder, char* all
                 }
                 if( !strcmp( allowed_list[i], "mp3" ) )
                 {
-                    if( !strcmp( encoder, "mp3" ) ||
+                    if( !strcmp( encoder, "lame" ) ||
+                        !strcmp( encoder, "mp3" ) ||
                         !strcmp( encoder, "libmp3lame" ) )
                     {
                         valid = 1;
@@ -153,6 +154,33 @@ const audio_encoder_t *x264_select_audio_encoder( const char *encoder, char* all
                         break;
                     }
                 }
+                if( !strcmp( allowed_list[i], "ac3" ) )
+                {
+                    if( !strcmp( encoder, "ac3" ) ||
+                        !strcmp( encoder, "ffac3" ) )
+                    {
+                        valid = 1;
+                        break;
+                    }
+                }
+                if( !strcmp( allowed_list[i], "alac" ) )
+                {
+                    if( !strcmp( encoder, "alac" ) ||
+                        !strcmp( encoder, "ffalac" ) )
+                    {
+                        valid = 1;
+                        break;
+                    }
+                }
+                if( !strcmp( allowed_list[i], "amrnb" ) )
+                {
+                    if( !strcmp( encoder, "amrnb" ) ||
+                        !strcmp( encoder, "libopencore_amrnb" ) )
+                    {
+                        valid = 1;
+                        break;
+                    }
+                }
             }
             if( !valid )
                 return NULL;
@@ -161,19 +189,51 @@ const audio_encoder_t *x264_select_audio_encoder( const char *encoder, char* all
     return x264_encoder_by_name( encoder );
 }
 
+void x264_audio_encoder_show_help( const char * const encoder_list[], int longhelp )
+{
+    if( !longhelp )
+    {
+        printf( "      Available options and their value ranges are depend on audio codec.\n" );
+        printf( "      For the codec dependent helps, see --longhelp or --fullhelp.\n" );
+        return;
+    }
+
+    printf( "      Codec specific notes for audio options:\n" );
+#if !HAVE_AUDIO
+    printf( "            There is no available audio codec in this x264 build.\n" );
+    return;
+#endif
+    for( int i=0; encoder_list[i]; i++ )
+    {
+        const audio_encoder_t *enc;
+
+        if( !strcmp( encoder_list[i], "auto" ) || !strcmp( encoder_list[i], "none" ) )
+            continue;
+
+        enc = x264_encoder_by_name( encoder_list[i] );
+
+        if( !enc || !enc->show_help )
+            continue;
+        enc->show_help( encoder_list[i], longhelp );
+        printf( "\n" );
+    }
+
+    return;
+}
+
 #include "filters/audio/internal.h"
 
 hnd_t x264_audio_copy_open( hnd_t handle )
 {
     assert( handle );
-    audio_hnd_t *h = handle;
 #define IFRET( dec )                                                                \
         extern const audio_encoder_t audio_copy_ ## dec;                            \
         if( !strcmp( #dec, h->self->name ) )                                        \
             return x264_audio_encoder_open( &( audio_copy_ ## dec ), handle, NULL );
-#if HAVE_AUDIO
+#if HAVE_AUDIO && HAVE_LAVF
+    audio_hnd_t *h = handle;
     IFRET( lavf );
-#endif // HAVE_AUDIO
+#endif // HAVE_AUDIO && HAVE_LAVF
 #undef IFRET
     return NULL;
 }

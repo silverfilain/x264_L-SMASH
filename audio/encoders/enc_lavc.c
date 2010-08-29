@@ -1,5 +1,6 @@
 #include "audio/encoders.h"
 #include "filters/audio/internal.h"
+#undef DECLARE_ALIGNED
 #include "libavcodec/avcodec.h"
 
 #include <assert.h>
@@ -11,6 +12,7 @@ typedef struct enc_lavc_t
     hnd_t filter_chain;
     int finishing;
     int64_t last_sample;
+    int buf_size;
 
     AVCodecContext *ctx;
     enum SampleFormat smpfmt;
@@ -53,10 +55,15 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
         h->info.codec_name = strdup( "aac" );
         codecname = "libfaac";
     }
-    else if( ISCODEC( ffaac ) )
+    else if( ISCODEC( ac3 ) )
+        codecname = "ac3";
+    else if( ISCODEC( alac ) )
+        codecname = "alac";
+    else if( ISCODEC( amrnb ) || ISCODEC( libopencore_amrnb ) )
     {
         free( (void*) h->info.codec_name );
-        codecname = h->info.codec_name = strdup( "aac" );
+        h->info.codec_name = strdup( "amrnb" );
+        codecname = "libopencore_amrnb";
     }
     else // Check if the codec was prefixed with an 'ff' to "force" a libavcodec codec
     {    // TODO: figure out how to make x264_select_audio_encoder like this
@@ -94,12 +101,13 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
         else if( h->smpfmt < codec->sample_fmts[i] ) // or the best possible sample format (is this really The Right Thing?)
             h->smpfmt = codec->sample_fmts[i];
     }
-    h->ctx              = avcodec_alloc_context();
-    h->ctx->sample_fmt  = h->smpfmt;
-    h->ctx->sample_rate = h->info.samplerate;
-    h->ctx->channels    = h->info.channels;
-    h->ctx->flags2     |= CODEC_FLAG2_BIT_RESERVOIR; // mp3
-    h->ctx->flags      |= CODEC_FLAG_GLOBAL_HEADER; // aac
+    h->ctx                  = avcodec_alloc_context();
+    h->ctx->sample_fmt      = h->smpfmt;
+    h->ctx->sample_rate     = h->info.samplerate;
+    h->ctx->channels        = h->info.channels;
+    h->ctx->channel_layout  = h->info.chanlayout;
+    h->ctx->flags2         |= CODEC_FLAG2_BIT_RESERVOIR; // mp3
+    h->ctx->flags          |= CODEC_FLAG_GLOBAL_HEADER; // aac
 
     if( ISCODEC( aac ) )
         h->ctx->profile = FF_PROFILE_AAC_LOW; // TODO: decide by bitrate / quality
@@ -112,7 +120,7 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     else
         brval = x264_otof( x264_get_option( "bitrate", opts ), 128 ); // dummy default value, must never be used
 
-    x264_otof( x264_get_option( "quality", opts ), 0 ); // where do I use this?
+    h->ctx->compression_level = x264_otof( x264_get_option( "quality", opts ), FF_COMPRESSION_DEFAULT );
 
     x264_free_string_array( opts );
 
@@ -122,14 +130,40 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
         h->ctx->global_quality = FF_QP2LAMBDA * brval;
     }
     else
-        h->ctx->bit_rate = brval * 1000.0f;
+        h->ctx->bit_rate = lrintf( brval * 1000.0f );
 
     RETURN_IF_ERR( avcodec_open( h->ctx, codec ), "lavc", NULL, "could not open the %s encoder\n", h->info.codec_name );
 
-    h->info.extradata      = h->ctx->extradata;
-    h->info.extradata_size = h->ctx->extradata_size;
-    h->info.framelen       = h->ctx->frame_size;
-    h->info.timebase       = (timebase_t) { 1, h->ctx->sample_rate };
+    if( ISCODEC( ac3 ) )
+    {
+        audio_packet_t *pkt = x264_af_get_samples( h->filter_chain, 0, h->ctx->frame_size );
+        RETURN_IF_ERR( !pkt, "lavc", NULL, "could not get a audio frame\n" );
+
+        pkt->data = malloc( FF_MIN_BUFFER_SIZE * 3 / 2 );
+
+        void *indata = x264_af_interleave2( h->smpfmt, pkt->samples, pkt->channels, pkt->samplecount );
+        pkt->size = avcodec_encode_audio( h->ctx, pkt->data, pkt->channels * pkt->samplecount, indata );
+
+        h->ctx->frame_number = 0;
+        h->ctx->extradata_size = pkt->size;
+        h->ctx->extradata = av_malloc( h->ctx->extradata_size );
+        RETURN_IF_ERR( !h->ctx->extradata, "lavc", NULL, "malloc failed!\n" );
+        memcpy( h->ctx->extradata, pkt->data, h->ctx->extradata_size );
+
+        x264_af_free_packet( pkt );
+    }
+
+    h->info.extradata       = h->ctx->extradata;
+    h->info.extradata_size  = h->ctx->extradata_size;
+    h->info.framelen        = h->ctx->frame_size;
+    h->info.chansize        = av_get_bits_per_sample_format( h->ctx->sample_fmt ) / 8;
+    h->info.samplesize      = h->info.chansize * h->info.channels;
+    h->info.framesize       = h->info.framelen * h->info.samplesize;
+    h->info.timebase        = (timebase_t) { 1, h->ctx->sample_rate };
+
+    h->buf_size = !ISCODEC( alac )
+                      ? FF_MIN_BUFFER_SIZE * 3 / 2
+                      : 2 * (8 + h->info.framesize);
 
     x264_cli_log( "audio", X264_LOG_INFO, "opened libavcodec's %s encoder (%s%.1f%s, %dbits, %dch, %dhz)\n", codecname,
                   is_vbr ? "V" : "", brval, is_vbr ? "" : "kbps", h->info.chansize * 8, h->info.channels, h->info.samplerate );
@@ -154,8 +188,8 @@ static audio_packet_t *get_next_packet( hnd_t handle )
 
     audio_packet_t *out = calloc( 1, sizeof( audio_packet_t ) );
     out->info = h->info;
-    out->data = malloc( FF_MIN_BUFFER_SIZE * 3 / 2 );
     out->dts  = h->last_sample;
+    out->data = malloc( h->buf_size );
     while( out->size == 0 )
     {
         audio_packet_t *smp = x264_af_get_samples( h->filter_chain, h->last_sample, h->last_sample + h->info.framelen );
@@ -166,7 +200,7 @@ static audio_packet_t *get_next_packet( hnd_t handle )
         out->channels    = smp->channels;
 
         void *indata   = x264_af_interleave2( h->smpfmt, smp->samples, smp->channels, smp->samplecount );
-        out->size       = avcodec_encode_audio( h->ctx, out->data, smp->channels * smp->samplecount, indata );
+        out->size       = avcodec_encode_audio( h->ctx, out->data, h->buf_size, indata );
         h->last_sample += h->info.framelen;
 
         x264_af_free_packet( smp );
@@ -208,6 +242,38 @@ static void lavc_close( hnd_t handle )
     free( h );
 }
 
+static void lavc_help( const char * const codec_name, int longhelp )
+{
+    avcodec_register_all();
+    AVCodec *enc = NULL;
+    int num = 0;
+
+    printf( "      * for %s encoder\n", codec_name );
+    printf( "        --asamplerate is not supported for this encoder.\n" );
+    printf( "\n" );
+    printf( "        The list of audio codecs compiled in libavcodec are:\n" );
+    while( (enc = av_codec_next( enc )) )
+    {
+        if( enc->type == CODEC_TYPE_AUDIO && enc->encode )
+        {
+            printf( "            - %s\n", enc->name );
+            num++;
+        }
+    }
+    if( !num )
+    {
+        printf( "            No audio encoder support is compiled in!\n" );
+    }
+    else
+    {
+        printf( "        These are available by passing the name to --acodec option.\n" );
+        printf( "        Also, internal codec selection can be overriden by putting\n" );
+        printf( "        'ff' prefix before the name and force to use lavc version.\n" );
+        printf( "        Currently, there is no help for each encoders, so refer to\n" );
+        printf( "        the implementations of ffmpeg and individual encoder library.\n" );
+    }
+}
+
 const audio_encoder_t audio_encoder_lavc =
 {
     .init            = init,
@@ -216,5 +282,6 @@ const audio_encoder_t audio_encoder_lavc =
     .skip_samples    = skip_samples,
     .finish          = finish,
     .free_packet     = free_packet,
-    .close           = lavc_close
+    .close           = lavc_close,
+    .show_help       = lavc_help
 };

@@ -500,7 +500,7 @@ static int init_common( enc_qtaac_t *h, const char *opt_str )
         return -1;
     }
 
-    char **opts     = x264_split_options( opt_str, (const char*[]){ "is_vbr", "bitrate", "quality", "samplerate", NULL } );
+    char **opts     = x264_split_options( opt_str, (const char*[]){ AUDIO_CODEC_COMMON_OPTIONS, "samplerate", NULL } );
     assert( opts );
 
     if( !h->config.he_flag )
@@ -603,6 +603,8 @@ static void cleanup_common( enc_qtaac_t *h )
         free( h->buffer );
     if( h->samplebuffer )
         free( h->samplebuffer );
+    if( h->info.extradata )
+        free( h->info.extradata );
     if( h->in )
         x264_af_free_packet( h->in );
     free( h );
@@ -616,6 +618,7 @@ static hnd_t qtaac_init( hnd_t filter_chain, const char *opt_str )
     enc_qtaac_t *h = calloc( 1, sizeof( enc_qtaac_t ) );
     h->filter_chain = chain;
     h->info = chain->info;
+    h->info.codec_name = "aac";
 
     if( get_channel_configuration_index( chain->info.channels, 0 ) < 0 ||
         get_samplerate_index( chain->info.samplerate, 0 ) < 0 )
@@ -639,11 +642,6 @@ fail:
     return NULL;
 }
 
-static const char *qtaac_get_codec_name( hnd_t handle )
-{
-    return "aac";
-}
-
 static hnd_t qtaac_he_init( hnd_t filter_chain, const char *opt_str )
 {
     assert( filter_chain );
@@ -652,6 +650,7 @@ static hnd_t qtaac_he_init( hnd_t filter_chain, const char *opt_str )
     enc_qtaac_t *h = calloc( 1, sizeof( enc_qtaac_t ) );
     h->filter_chain = chain;
     h->info = chain->info;
+    h->info.codec_name = "aac_he";
 
     if( get_channel_configuration_index( chain->info.channels, 1 ) < 0 ||
         get_samplerate_index( chain->info.samplerate, 1 ) < 0 )
@@ -673,11 +672,6 @@ static hnd_t qtaac_he_init( hnd_t filter_chain, const char *opt_str )
 fail:
     cleanup_common( h );
     return NULL;
-}
-
-static const char *qtaac_he_get_codec_name( hnd_t handle )
-{
-    return "aac_he";
 }
 
 static audio_info_t *get_info( hnd_t handle )
@@ -754,6 +748,7 @@ eof_reached:
     h->finishing = 1;
     if( h->in )
         x264_af_free_packet( h->in );
+    h->in = NULL;
     ioData->mNumberBuffers = 0;
     ioData->mBuffers[0].mData = NULL;
     ioData->mBuffers[0].mDataByteSize = 0;
@@ -839,26 +834,74 @@ static void qtaac_close( hnd_t handle )
     cleanup_common( h );
 }
 
+static void qtaac_help( const char * const codec_name, int longhelp )
+{
+    printf( "      * For %s encoder (--acodec qtaac)\n", codec_name );
+    printf( "        This is an AAC-LC encoder using QuickTime Audio Compressor.\n" );
+    printf( "\n" );
+    printf( "        --aquality        VBR quality. [63]\n" );
+    printf( "                          Should be one of the values below:\n" );
+    printf( "                            - 0, 9 ,18 ,27 ,36 ,45 ,54 ,63 ,73, 82, 91, 100, 109, 118, 127\n" );
+    printf( "                          0 is lowest and 127 is highest.\n" );
+    printf( "        --abitrate        Enables ABR mode. Bitrate should be one of the discrete preset\n" );
+    printf( "                          values depending on both channels count and samplerate.\n" );
+    printf( "                          Examples for typical configurations.\n" );
+    printf( "                           - for 44100Hz or 48000Hz with 1ch:\n" );
+    printf( "                              32, 40, 48, 56, 64, 72, 80, 96, 112, 128, 144, 160, 192, 224, 256\n" );
+    printf( "                           - for 44100Hz or 48000Hz with 2ch:\n" );
+    printf( "                              64, 72, 80, 96, 112, 128, 144, 160, 192, 224, 256, 288, 320\n" );
+    printf( "                           - for 44100Hz or 48000Hz with 5.1ch:\n" );
+    printf( "                              160, 192, 224, 256, 288, 320, 384, 448, 512, 576, 640, 768\n");
+    printf( "                          The lower samplerate, the lower min/max values are applied.\n" );
+    printf( "        --asamplerate     Output samplerate. Should be one of the below.\n" );
+    printf( "                           - 8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000\n" );
+    printf( "                          Samplerate greater than input is not supported.\n" );
+    printf( "        --acodec-quality  Encoder's internal complexity. [0]\n" );
+    printf( "                           - 0 (medium), 1 (high), 2 (highest)\n" );
+    printf( "\n" );
+    printf( "        --aquality/--abitrate setting may be changed inside codec due to its\n" );
+    printf( "        limitations and extreme resampling settings (e.g. 48000->8000) may not work.\n" );
+    printf( "        If something goes wrong, it will result in a failure of codec initialization.\n" );
+}
+
+static void qtaac_he_help( const char * const codec_name, int longhelp )
+{
+    printf( "      * For %s encoder (--acodec qtaac_he)\n", codec_name );
+    printf( "        This is an AAC-HE encoder using QuickTime Audio Compressor.\n" );
+    printf( "        This encoder is roughly the same as qtaac encoder but has differences as below.\n" );
+    printf( "\n" );
+    printf( "        --aquality        Cannot be used, since there is no VBR mode.\n" );
+    printf( "        --abitrate        Must be specified. Applicable preset values are also changed.\n" );
+    printf( "                          Examples for typical configurations.\n" );
+    printf( "                           - for 44100Hz or 48000Hz with 1ch:\n" );
+    printf( "                              16, 24, 32, 40\n" );
+    printf( "                           - for 44100Hz or 48000Hz with 2ch:\n" );
+    printf( "                              32, 40, 48, 56, 64, 80\n" );
+    printf( "                           - for 44100Hz or 48000Hz with 5.1ch:\n" );
+    printf( "                              80, 96, 112, 128, 160, 192\n");
+    printf( "        --asamplerate     Samplerate < 32000Hz is not supported.\n" );
+}
+
 const audio_encoder_t audio_encoder_qtaac =
 {
     .init            = qtaac_init,
-    .get_codec_name  = qtaac_get_codec_name,
     .get_info        = get_info,
     .get_next_packet = get_next_packet,
     .skip_samples    = skip_samples,
     .finish          = finish,
     .free_packet     = free_packet,
-    .close           = qtaac_close
+    .close           = qtaac_close,
+    .show_help       = qtaac_help
 };
 
 const audio_encoder_t audio_encoder_qtaac_he =
 {
     .init            = qtaac_he_init,
-    .get_codec_name  = qtaac_he_get_codec_name,
     .get_info        = get_info,
     .get_next_packet = get_next_packet,
     .skip_samples    = skip_samples,
     .finish          = finish,
     .free_packet     = free_packet,
-    .close           = qtaac_close
+    .close           = qtaac_close,
+    .show_help       = qtaac_he_help
 };
