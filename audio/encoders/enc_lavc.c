@@ -58,6 +58,8 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
         codecname = "ac3";
     else if( ISCODEC( alac ) )
         codecname = "alac";
+    else if( ISCODEC( amrnb ) || ISCODEC( libopencore_amrnb ) )
+        codecname = "libopencore_amrnb";
     else // Check if the codec was prefixed with an 'ff' to "force" a libavcodec codec
     {    // TODO: figure out how to make x264_select_audio_encoder like this
         codecname = malloc( 32 );
