@@ -128,7 +128,7 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     else
         brval = x264_otof( x264_get_option( "bitrate", opts ), 128 ); // dummy default value, must never be used
 
-    x264_otof( x264_get_option( "quality", opts ), 0 ); // where do I use this?
+    h->ctx->compression_level = x264_otof( x264_get_option( "quality", opts ), FF_COMPRESSION_DEFAULT );
 
     x264_free_string_array( opts );
 
@@ -138,7 +138,7 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
         h->ctx->global_quality = FF_QP2LAMBDA * brval;
     }
     else
-        h->ctx->bit_rate = brval * 1000.0f;
+        h->ctx->bit_rate = lrintf( brval * 1000.0f );
 
     RETURN_IF_ERR( avcodec_open( h->ctx, codec ), "lavc", NULL, "could not open the %s encoder\n", h->info.codec_name );
 

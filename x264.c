@@ -1336,7 +1336,7 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
                 audio_filename = optarg;
                 break;
             case OPT_AUDIOBITRATE:
-                audio_bitrate = atoi( optarg );
+                audio_bitrate = atof( optarg );
                 FAIL_IF_ERROR( audio_bitrate <= 0, "bitrate must be > 0.\n" );
                 break;
             case OPT_AUDIOQUALITY:
