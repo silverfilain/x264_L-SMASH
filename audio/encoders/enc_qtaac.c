@@ -834,6 +834,51 @@ static void qtaac_close( hnd_t handle )
     cleanup_common( h );
 }
 
+static void qtaac_help( const char * const codec_name, int longhelp )
+{
+    printf( "      * for %s encoder (--acodec qtaac)\n", codec_name );
+    printf( "            This is an AAC-LC encoder using QuickTime Audio Compressor.\n" );
+    printf( "\n" );
+    printf( "            --aquality        means VBR quality, should be one of the values below:\n" );
+    printf( "                               - 0, 9 ,18 ,27 ,36 ,45 ,54 ,63 ,73, 82, 91, 100, 109, 118, 127\n" );
+    printf( "                              0 is lowest and 127 is highest.\n" );
+    printf( "            --abitrate        turns on ABR mode and bitrate should be one of the discrete preset values\n" );
+    printf( "                              depending on both channels count and samplerate.\n" );
+    printf( "                              here is the examples for typical configurations:\n" );
+    printf( "                               - for 44100Hz or 48000Hz with 1ch:\n" );
+    printf( "                                  32, 40, 48, 56, 64, 72, 80, 96, 112, 128, 144, 160, 192, 224, 256\n" );
+    printf( "                               - for 44100Hz or 48000Hz with 2ch:\n" );
+    printf( "                                  64, 72, 80, 96, 112, 128, 144, 160, 192, 224, 256, 288, 320\n" );
+    printf( "                               - for 44100Hz or 48000Hz with 5.1ch:\n" );
+    printf( "                                  160, 192, 224, 256, 288, 320, 384, 448, 512, 576, 640, 768\n");
+    printf( "                              in general, the lower samplelate, the lower min/max values are applied.\n" );
+    printf( "            --asamplerate     means output samplerate in Hz. should be one of the below:\n" );
+    printf( "                               - 8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000\n" );
+    printf( "                              samplerate greater than input is not supported.\n" );
+    printf( "            --acodec-quality  means encoder's internal complexity, takes 0 (medium) to 2 (highest). [0]\n" );
+    printf( "\n" );
+    printf( "            Note that --aquality/--abitrate setting may be changed inside codec due to its limitations and\n" );
+    printf( "            that extreme resampling settings (e.g. 48000 -> 8000) may not work.\n" );
+    printf( "            If something goes wrong, it will result in a failure of codec initialization.\n" );
+}
+
+static void qtaac_he_help( const char * const codec_name, int longhelp )
+{
+    printf( "      * for %s encoder (--acodec qtaac_he)\n", codec_name );
+    printf( "            This is an AAC-HE encoder using QuickTime Audio Compressor.\n" );
+    printf( "            This encoder is loosely the same as qtaac encoder but has differences below:\n" );
+    printf( "\n" );
+    printf( "            --aquality        cannot be used, --abitrate must be specified since there is no VBR mode.\n" );
+    printf( "            --abitrate        the examples for typical configurations are changed to:\n" );
+    printf( "                               - for 44100Hz or 48000Hz with 1ch:\n" );
+    printf( "                                  16, 24, 32, 40\n" );
+    printf( "                               - for 44100Hz or 48000Hz with 2ch:\n" );
+    printf( "                                  32, 40, 48, 56, 64, 80\n" );
+    printf( "                               - for 44100Hz or 48000Hz with 5.1ch:\n" );
+    printf( "                                  80, 96, 112, 128, 160, 192\n");
+    printf( "            --asamplerate     samplerate < 32000Hz is not supported\n" );
+}
+
 const audio_encoder_t audio_encoder_qtaac =
 {
     .init            = qtaac_init,
@@ -842,7 +887,8 @@ const audio_encoder_t audio_encoder_qtaac =
     .skip_samples    = skip_samples,
     .finish          = finish,
     .free_packet     = free_packet,
-    .close           = qtaac_close
+    .close           = qtaac_close,
+    .show_help       = qtaac_help
 };
 
 const audio_encoder_t audio_encoder_qtaac_he =
@@ -853,5 +899,6 @@ const audio_encoder_t audio_encoder_qtaac_he =
     .skip_samples    = skip_samples,
     .finish          = finish,
     .free_packet     = free_packet,
-    .close           = qtaac_close
+    .close           = qtaac_close,
+    .show_help       = qtaac_he_help
 };

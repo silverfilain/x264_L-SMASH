@@ -669,7 +669,10 @@ static void Help( x264_param_t *defaults, int longhelp )
 
     H0( "\n" );
     H0( "Audio:\n" );
-    H0( "Audio is automatically opened from the input file if supported by the demuxer.\n" );
+    H0( "\n" );
+    H0( "      Audio options may be used if audio support is compiled in.\n" );
+    H0( "      Audio is automatically opened from the input file if supported by the demuxer.\n" );
+    H0( "\n" );
     H0( "      --audiofile <filename>  Uses audio from the specified file.\n" );
     H0( "      --acodec <string>       Specifies the audio codec [auto].\n");
     H1( "                              Supported and compiled in codecs:\n" );
@@ -678,6 +681,8 @@ static void Help( x264_param_t *defaults, int longhelp )
     H0( "      --aquality <float>      Specifies audio quality [codec-dependent default]\n" );
     H0( "      --asamplerate <integer> Specifies audio samplerate [keep source samplerate]\n" );
     H0( "      --acodec-quality <float> Specifies audio codec encoding quality [codec specific]\n" );
+    H0( "\n" );
+    x264_audio_encoder_show_help( audio_encoders, longhelp );
     H0( "\n" );
     H0( "Input/Output:\n" );
     H0( "\n" );
@@ -1333,7 +1338,7 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
                 audio_filename = optarg;
                 break;
             case OPT_AUDIOBITRATE:
-                audio_bitrate = atoi( optarg );
+                audio_bitrate = atof( optarg );
                 FAIL_IF_ERROR( audio_bitrate <= 0, "bitrate must be > 0.\n" );
                 break;
             case OPT_AUDIOQUALITY:

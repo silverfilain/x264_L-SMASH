@@ -269,6 +269,22 @@ static void mp3_close( hnd_t handle )
     free( h );
 }
 
+static void mp3_help( const char * const codec_name, int longhelp )
+{
+    printf( "      * for lame %s encoder (--acodec mp3)\n", codec_name );
+    printf( "            --aquality        means VBR quality, takes 9 (lowest) to 0 (highest). [6]\n" );
+    printf( "            --abitrate        turns on CBR mode, the value should be one of the below (all in kbits/s).\n" );
+    printf( "                               - for 32000Hz or 44100Hz or 48000Hz:\n" );
+    printf( "                                    32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320\n" );
+    printf( "                               - for 16000Hz or 22050Hz or 24000Hz:\n" );
+    printf( "                                    8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160\n" );
+    printf( "                               - for 8000Hz or 11025Hz or 12000Hz:\n" );
+    printf( "                                    8, 16, 24, 32, 40, 48, 56, 64\n" );
+    printf( "            --asamplerate     means output samplerate in Hz, should be one of the below:\n" );
+    printf( "                               - 8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000\n" );
+    printf( "            --acodec-quality  means lame's internal encoder complexity, takes 9 (lowest) to 0 (highest). [0]\n" );
+}
+
 const audio_encoder_t audio_encoder_mp3 =
 {
     .init            = init,
@@ -277,5 +293,6 @@ const audio_encoder_t audio_encoder_mp3 =
     .skip_samples    = skip_samples,
     .finish          = finish,
     .free_packet     = free_packet,
-    .close           = mp3_close
+    .close           = mp3_close,
+    .show_help       = mp3_help
 };

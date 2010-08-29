@@ -231,6 +231,7 @@ static hnd_t copy_init( hnd_t filter_chain, const char *opts )
                 return NULL;
             }
             memcpy( h->ctx->extradata, h->pkt->data, h->ctx->extradata_size );
+            h->out = convert_to_audio_packet( h, h->pkt );
             h->info.extradata = h->ctx->extradata;
             h->info.extradata_size = h->ctx->extradata_size;
         }
