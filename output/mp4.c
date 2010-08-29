@@ -176,7 +176,7 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
         henc = x264_audio_copy_open( filters );
     else
     {
-        const audio_encoder_t *encoder = x264_select_audio_encoder( audio_enc, (char*[]){ "aac", "ac3", "alac", "amrnb", NULL } );
+        const audio_encoder_t *encoder = x264_select_audio_encoder( audio_enc, (char*[]){ "aac", "mp3", "ac3", "alac", "amrnb", NULL } );
         MP4_FAIL_IF_ERR( !encoder, "unable to select audio encoder.\n" );
 
         henc = x264_audio_encoder_open( encoder, filters, audio_parameters );
@@ -197,6 +197,8 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
         p_audio->codec_type = ISOM_CODEC_TYPE_MP4A_AUDIO;
         p_audio->has_sbr = 1;
     }
+    else if( !strcmp( info->codec_name, "mp3" ) )
+        p_audio->codec_type = ISOM_CODEC_TYPE_MP4A_AUDIO;
     else if( !strcmp( info->codec_name, "ac3" ) )
         p_audio->codec_type = ISOM_CODEC_TYPE_AC_3_AUDIO;
     else if( !strcmp( info->codec_name, "alac" ) )
@@ -508,6 +510,8 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
         {
             case ISOM_CODEC_TYPE_MP4A_AUDIO :
                 p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_Audio_ISO_14496_3;
+                if( !strcmp( p_audio->info->codec_name, "mp3" ) )
+                    p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_Audio_ISO_11172_3; /* Legacy Interface */
                 p_audio->summary->aot                    = MP4A_AUDIO_OBJECT_TYPE_AAC_LC;
                 p_audio->summary->sbr_mode               = p_audio->has_sbr ? MP4A_AAC_SBR_BACKWARD_COMPATIBLE : MP4A_AAC_SBR_NOT_SPECIFIED;
                 p_audio->summary->exdata_length          = p_audio->info->extradata_size;
