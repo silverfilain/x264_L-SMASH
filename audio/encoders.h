@@ -22,7 +22,7 @@ extern const audio_encoder_t audio_encoder_raw;
 extern const audio_encoder_t audio_encoder_lavc;
 #endif
 #if HAVE_LAME
-extern const audio_encoder_t audio_encoder_mp3;
+extern const audio_encoder_t audio_encoder_lame;
 #endif
 #if HAVE_QT_AAC
 extern const audio_encoder_t audio_encoder_qtaac;

@@ -114,7 +114,7 @@ static const char * const audio_encoders[] =
 #if HAVE_AUDIO
     "raw",
 #if HAVE_LAME
-    "mp3",
+    "lame",
 #endif
 #if HAVE_QT_AAC
     "qtaac",

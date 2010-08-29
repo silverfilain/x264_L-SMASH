@@ -20,7 +20,7 @@ typedef struct enc_lame_t
     audio_packet_t *in;
 } enc_lame_t;
 
-static hnd_t init( hnd_t filter_chain, const char *opt_str )
+static hnd_t lame_encoder_init( hnd_t filter_chain, const char *opt_str )
 {
     assert( filter_chain );
     audio_hnd_t *chain = filter_chain;
@@ -85,7 +85,7 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     h->buf_index = 0;
     h->last_dts = INVALID_DTS;
 
-    x264_cli_log( "audio", X264_LOG_INFO, "opened lame mp3 encoder (%s: %g%s, quality: %d, samplerate: %dhz)\n",
+    x264_cli_log( "audio", X264_LOG_INFO, "opened lame encoder (%s: %g%s, quality: %d, samplerate: %dhz)\n",
                   ( !is_vbr ? "bitrate" : "VBR" ), brval,
                   ( !is_vbr ? "kbps" : "" ), quality, h->info.samplerate );
 
@@ -257,7 +257,7 @@ error:
     return NULL;
 }
 
-static void mp3_close( hnd_t handle )
+static void lame_encoder_close( hnd_t handle )
 {
     enc_lame_t *h = handle;
 
@@ -269,7 +269,7 @@ static void mp3_close( hnd_t handle )
     free( h );
 }
 
-static void mp3_help( const char * const codec_name, int longhelp )
+static void lame_encoder_help( const char * const codec_name, int longhelp )
 {
     printf( "      * for lame %s encoder (--acodec mp3)\n", codec_name );
     printf( "            --aquality        means VBR quality, takes 9 (lowest) to 0 (highest). [6]\n" );
@@ -285,14 +285,14 @@ static void mp3_help( const char * const codec_name, int longhelp )
     printf( "            --acodec-quality  means lame's internal encoder complexity, takes 9 (lowest) to 0 (highest). [0]\n" );
 }
 
-const audio_encoder_t audio_encoder_mp3 =
+const audio_encoder_t audio_encoder_lame =
 {
-    .init            = init,
+    .init            = lame_encoder_init,
     .get_info        = get_info,
     .get_next_packet = get_next_packet,
     .skip_samples    = skip_samples,
     .finish          = finish,
     .free_packet     = free_packet,
-    .close           = mp3_close,
-    .show_help       = mp3_help
+    .close           = lame_encoder_close,
+    .show_help       = lame_encoder_help
 };
