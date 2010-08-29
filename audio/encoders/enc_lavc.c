@@ -54,25 +54,10 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
         h->info.codec_name = strdup( "aac" );
         codecname = "libfaac";
     }
-    else if( ISCODEC( ffaac ) )
-    {
-        free( (void*) h->info.codec_name );
-        codecname = h->info.codec_name = strdup( "aac" );
-    }
-    if( ISCODEC( ac3 ) )
+    else if( ISCODEC( ac3 ) )
         codecname = "ac3";
-    else if( ISCODEC( ffac3 ) )
-    {
-        free( (void*) h->info.codec_name );
-        codecname = h->info.codec_name = strdup( "ac3" );
-    }
-    if( ISCODEC( alac ) )
+    else if( ISCODEC( alac ) )
         codecname = "alac";
-    else if( ISCODEC( ffalac ) )
-    {
-        free( (void*) h->info.codec_name );
-        codecname = h->info.codec_name = strdup( "alac" );
-    }
     else // Check if the codec was prefixed with an 'ff' to "force" a libavcodec codec
     {    // TODO: figure out how to make x264_select_audio_encoder like this
         codecname = malloc( 32 );
