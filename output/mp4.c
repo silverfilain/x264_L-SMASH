@@ -92,6 +92,7 @@ typedef struct
 #if HAVE_MUXER_OPT
     char *psz_language;
 #endif
+    int brand_3gpp;
     uint32_t i_track;
     uint32_t i_sample_entry;
     uint64_t i_time_inc;
@@ -441,6 +442,12 @@ static int open_file(
         MP4_LOG_INFO( "audio muxing feature is disabled.\n" );
 #endif
 
+    char* ext = get_filename_extension( psz_filename );
+    if( !strcmp( ext, "3gp" ) )
+        p_mp4->brand_3gpp = 1;
+    else if( !strcmp( ext, "3g2" ) )
+        p_mp4->brand_3gpp = 2;
+
     *p_handle = p_mp4;
 
     return 0;
@@ -613,8 +620,10 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
     p_mp4->i_sei_size = sei_size;
 
     /* Write ftyp. */
-    uint32_t brands[2] = { ISOM_BRAND_TYPE_MP42, ISOM_BRAND_TYPE_ISOM };
-    MP4_FAIL_IF_ERR( isom_set_brands( p_mp4->p_root, brands[0], 0, brands, 2 ) || isom_write_ftyp( p_mp4->p_root ),
+    uint32_t brands[5] = { ISOM_BRAND_TYPE_ISOM, ISOM_BRAND_TYPE_MP42, ISOM_BRAND_TYPE_3GP6, ISOM_BRAND_TYPE_3G2A };
+    uint32_t minor_version = 0;
+    if( p_mp4->brand_3gpp == 2 ) minor_version = 0x00010000;
+    MP4_FAIL_IF_ERR( isom_set_brands( p_mp4->p_root, brands[1+p_mp4->brand_3gpp], minor_version, brands, 2+p_mp4->brand_3gpp ) || isom_write_ftyp( p_mp4->p_root ),
                      "failed to set brands / ftyp.\n" );
 
     /* Write mdat header. */

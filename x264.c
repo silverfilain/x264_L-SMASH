@@ -331,6 +331,8 @@ static void Help( x264_param_t *defaults, int longhelp )
         " .mkv -> Matroska\n"
         " .flv -> Flash Video\n"
         " .mp4 -> MP4\n"
+        " .3gp -> MP4 (branded '3gp6')\n"
+        " .3g2 -> MP4 (branded '3gp6' and '3g2a')\n"
         "Output bit depth: %d (configured at compile time)\n"
         "\n"
         "Options:\n"
@@ -945,7 +947,7 @@ static int select_output( const char *muxer, char *filename, x264_param_t *param
     if( !strcmp( filename, "-" ) || strcasecmp( muxer, "auto" ) )
         ext = muxer;
 
-    if( !strcasecmp( ext, "mp4" ) )
+    if( !strcasecmp( ext, "mp4" ) || !strcasecmp( ext, "3gp" ) || !strcasecmp( ext, "3gp" ) )
     {
         output = mp4_output;
         param->b_annexb = 0;
