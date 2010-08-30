@@ -948,7 +948,7 @@ static int select_output( const char *muxer, char *filename, x264_param_t *param
     if( !strcmp( filename, "-" ) || strcasecmp( muxer, "auto" ) )
         ext = muxer;
 
-    if( !strcasecmp( ext, "mp4" ) || !strcasecmp( ext, "3gp" ) || !strcasecmp( ext, "3gp" ) )
+    if( !strcasecmp( ext, "mp4" ) || !strcasecmp( ext, "3gp" ) || !strcasecmp( ext, "3g2" ) )
     {
         output = mp4_output;
         param->b_annexb = 0;
