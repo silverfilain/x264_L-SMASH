@@ -201,8 +201,8 @@ int main( int argc, char* argv[] )
     eprintf( "total frames = %d\n", numframe );
 
     /* close track */
-    if( isom_set_last_sample_delta( structs.root, track, structs.summary->samples_in_frame ) )
-        eprintf( "Failed to set last sample's delta.\n" );
+    if( isom_flush_pooled_samples( structs.root, track, structs.summary->samples_in_frame ) )
+        eprintf( "Failed to flush the rest of samples.\n" );
     // if( isom_update_track_duration( structs.root, track ) ) /* if not use edts */
     if( isom_create_explicit_timeline_map( structs.root, track, 0, 0, ISOM_NORMAL_EDIT ) ) /* use edts */
         eprintf( "Failed to set timeline map.\n" );

@@ -305,10 +305,10 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
 
     if( p_mp4->p_root )
     {
-        /* Add the last sample_delta. */
+        /* Flush the rest of samples and add the last sample_delta. */
         uint32_t last_delta = largest_pts - second_largest_pts;
-        MP4_LOG_IF_ERR( isom_set_last_sample_delta( p_mp4->p_root, p_mp4->i_track, (last_delta ? last_delta : 1) * p_mp4->i_time_inc ),
-                        "failed to set last sample's duration.\n" );
+        MP4_LOG_IF_ERR( isom_flush_pooled_samples( p_mp4->p_root, p_mp4->i_track, (last_delta ? last_delta : 1) * p_mp4->i_time_inc ),
+                        "failed to flush the rest of samples.\n" );
 
         /*
          * Declare the explicit time-line mapping.
@@ -340,7 +340,7 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
         if( p_audio )
         {
             MP4_LOG_IF_ERR( write_audio_frames( p_mp4, 0, 1 ), "failed to flush audio frame(s).\n" );
-            MP4_LOG_IF_ERR( isom_set_last_sample_delta( p_mp4->p_root, p_audio->i_track, p_audio->summary->samples_in_frame ),
+            MP4_LOG_IF_ERR( isom_flush_pooled_samples( p_mp4->p_root, p_audio->i_track, p_audio->summary->samples_in_frame ),
                             "failed to set last sample's duration for audio.\n" );
             MP4_LOG_IF_ERR( isom_create_explicit_timeline_map( p_mp4->p_root, p_audio->i_track, 0, 0, ISOM_NORMAL_EDIT ),
                             "failed to set timeline map for audio.\n" );
