@@ -112,7 +112,11 @@ void x264_sps_init( x264_sps_t *sps, int i_id, x264_param_t *param )
         sps->i_profile_idc  = PROFILE_MAIN;
     else
         sps->i_profile_idc  = PROFILE_BASELINE;
-    sps->i_level_idc = param->i_level_idc;
+    if( param->i_level_idc == 9 &&
+        ( sps->i_profile_idc == PROFILE_BASELINE || sps->i_profile_idc == PROFILE_MAIN || sps->i_profile_idc == PROFILE_EXTENDED ) )
+        sps->i_level_idc = 11;
+    else
+        sps->i_level_idc = param->i_level_idc;
 
     sps->b_constraint_set0  = sps->i_profile_idc == PROFILE_BASELINE;
     /* x264 doesn't support the features that are in Baseline and not in Main,
@@ -120,6 +124,8 @@ void x264_sps_init( x264_sps_t *sps, int i_id, x264_param_t *param )
     sps->b_constraint_set1  = sps->i_profile_idc <= PROFILE_MAIN;
     /* Never set constraint_set2, it is not necessary and not used in real world. */
     sps->b_constraint_set2  = 0;
+    /* level 1b with Baseline, Main and Extended profile requires constraint_set3 == 1 */
+    sps->b_constraint_set3  = ( sps->i_level_idc == 11 && param->i_level_idc == 9 );
 
     sps->vui.i_num_reorder_frames = param->i_bframe_pyramid ? 2 : param->i_bframe ? 1 : 0;
     /* extra slot with pyramid so that we don't have to override the
@@ -252,8 +258,9 @@ void x264_sps_write( bs_t *s, x264_sps_t *sps )
     bs_write( s, 1, sps->b_constraint_set0 );
     bs_write( s, 1, sps->b_constraint_set1 );
     bs_write( s, 1, sps->b_constraint_set2 );
+    bs_write( s, 1, sps->b_constraint_set3 );
 
-    bs_write( s, 5, 0 );    /* reserved */
+    bs_write( s, 4, 0 );    /* reserved */
 
     bs_write( s, 8, sps->i_level_idc );
 
@@ -640,7 +647,7 @@ void x264_filler_write( x264_t *h, bs_t *s, int filler )
 const x264_level_t x264_levels[] =
 {
     { 10,   1485,    99,   152064,     64,    175,  64, 64,  0, 2, 0, 0, 1 },
-//  {"1b",  1485,    99,   152064,    128,    350,  64, 64,  0, 2, 0, 0, 1 },
+    {  9,   1485,    99,   152064,    128,    350,  64, 64,  0, 2, 0, 0, 1 }, /* "1b" */
     { 11,   3000,   396,   345600,    192,    500, 128, 64,  0, 2, 0, 0, 1 },
     { 12,   6000,   396,   912384,    384,   1000, 128, 64,  0, 2, 0, 0, 1 },
     { 13,  11880,   396,   912384,    768,   2000, 128, 64,  0, 2, 0, 0, 1 },
@@ -658,6 +665,14 @@ const x264_level_t x264_levels[] =
     { 0 }
 };
 
+const x264_level_t* x264_get_level_constraints( x264_param_t *param )
+{
+    const x264_level_t *l = x264_levels;
+    while( l->level_idc != 0 && l->level_idc != param->i_level_idc )
+        l++;
+    return l;
+}
+
 #define ERROR(...)\
 {\
     if( verbose )\
@@ -673,9 +688,7 @@ int x264_validate_levels( x264_t *h, int verbose )
     int cbp_factor = h->sps->i_profile_idc==PROFILE_HIGH10 ? 12 :
                      h->sps->i_profile_idc==PROFILE_HIGH ? 5 : 4;
 
-    const x264_level_t *l = x264_levels;
-    while( l->level_idc != 0 && l->level_idc != h->param.i_level_idc )
-        l++;
+    const x264_level_t *l = x264_get_level_constraints( &h->param );
 
     if( l->frame_size < mbs
         || l->frame_size*8 < h->sps->i_mb_width * h->sps->i_mb_width
@@ -701,4 +714,12 @@ int x264_validate_levels( x264_t *h, int verbose )
 
     /* TODO check the rest of the limits */
     return ret;
+}
+
+const x264_level_t* x264_get_valid_level_constraints( x264_t *h )
+{
+    const x264_level_t *l = x264_levels;
+    do h->param.i_level_idc = l->level_idc;
+        while( l[1].level_idc && x264_validate_levels( h, 0 ) && l++ );
+    return l;
 }
