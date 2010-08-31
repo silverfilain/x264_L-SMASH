@@ -31,7 +31,6 @@
 #include "common/common.h"
 #include "ratecontrol.h"
 #include "me.h"
-#include "set.h"
 
 typedef struct
 {
@@ -1193,7 +1192,9 @@ void x264_ratecontrol_start( x264_t *h, int i_force_qp, int overhead )
         rc->buffer_rate = h->fenc->i_cpb_duration * rc->vbv_max_rate * h->sps->vui.i_num_units_in_tick / h->sps->vui.i_time_scale;
         update_vbv_plan( h, overhead );
 
-        const x264_level_t *l = x264_get_level_constraints( &h->param );
+        const x264_level_t *l = x264_levels;
+        while( l->level_idc != 0 && l->level_idc != h->param.i_level_idc )
+            l++;
 
         int mincr = l->mincr;
 

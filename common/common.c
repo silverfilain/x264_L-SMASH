@@ -62,7 +62,6 @@ void x264_param_default( x264_param_t *param )
     param->i_fps_num       = 25;
     param->i_fps_den       = 1;
     param->i_level_idc     = -1;
-    param->b_level_1b      = 0;
     param->i_slice_max_size = 0;
     param->i_slice_max_mbs = 0;
     param->i_slice_count = 0;
@@ -604,18 +603,10 @@ int x264_param_parse( x264_param_t *p, const char *name, const char *value )
         p->b_deterministic = atobool(value);
     OPT2("level", "level-idc")
     {
-        if( !strcmp(value, "1b") )
-        {
-            p->i_level_idc = 11;
-            p->b_level_1b = 1;
-        }
+        if( atof(value) < 6 )
+            p->i_level_idc = (int)(10*atof(value)+.5);
         else
-        {
-            if( atof(value) < 6 )
-                p->i_level_idc = (int)(10*atof(value)+.5);
-            else
-                p->i_level_idc = atoi(value);
-        }
+            p->i_level_idc = atoi(value);
     }
     OPT("sar")
     {

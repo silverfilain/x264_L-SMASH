@@ -35,7 +35,7 @@
 
 #include <stdarg.h>
 
-#define X264_BUILD 105
+#define X264_BUILD 104
 
 /* x264_t:
  *      opaque handler for encoder */
@@ -231,7 +231,6 @@ typedef struct x264_param_t
     int         i_height;
     int         i_csp;  /* CSP of encoded bitstream, only i420 supported */
     int         i_level_idc;
-    int         b_level_1b;
     int         i_frame_total; /* number of frames to encode if known, else 0 */
 
     /* NAL HRD
@@ -477,8 +476,7 @@ typedef struct {
 } x264_level_t;
 
 /* all of the levels defined in the standard, terminated by .level_idc=0 */
-//extern const x264_level_t x264_levels[];
-//extern const x264_level_t x264_level_1b;
+extern const x264_level_t x264_levels[];
 
 /****************************************************************************
  * Basic parameter handling functions
