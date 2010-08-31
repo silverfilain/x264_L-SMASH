@@ -722,7 +722,7 @@ static int x264_validate_parameters( x264_t *h )
         h->param.analyse.i_subpel_refine = 9;
 
     {
-        const x264_level_t *l;
+        const x264_level_t *l = x264_levels;
         if( h->param.i_level_idc < 0 )
         {
             int maxrate_bak = h->param.rc.i_vbv_max_bitrate;
@@ -730,12 +730,14 @@ static int x264_validate_parameters( x264_t *h )
                 h->param.rc.i_vbv_max_bitrate = h->param.rc.i_bitrate * 2;
             h->sps = h->sps_array;
             x264_sps_init( h->sps, h->param.i_sps_id, &h->param );
-            l = x264_get_valid_level_constraints( h );
+            do h->param.i_level_idc = l->level_idc;
+                while( l[1].level_idc && x264_validate_levels( h, 0 ) && l++ );
             h->param.rc.i_vbv_max_bitrate = maxrate_bak;
         }
         else
         {
-            l = x264_get_level_constraints( &h->param );
+            while( l->level_idc && l->level_idc != h->param.i_level_idc )
+                l++;
             if( l->level_idc == 0 )
             {
                 x264_log( h, X264_LOG_ERROR, "invalid level_idc: %d\n", h->param.i_level_idc );
@@ -1155,17 +1157,16 @@ x264_t *x264_encoder_open( x264_param_t *param )
                           h->sps->i_profile_idc == PROFILE_HIGH ? "High" :
                           h->sps->i_profile_idc == PROFILE_HIGH10 ? "High 10" :
                           "High 4:4:4 Predictive";
-    const char *level_1b = ( h->sps->i_level_idc == 9 || ( h->sps->i_level_idc == 11 && h->sps->b_constraint_set3) ) ? "(1b)" : "";
 
     if( h->sps->i_profile_idc < PROFILE_HIGH10 )
     {
-        x264_log( h, X264_LOG_INFO, "profile %s, level %d.%d%s\n",
-            profile, h->sps->i_level_idc/10, h->sps->i_level_idc%10, level_1b );
+        x264_log( h, X264_LOG_INFO, "profile %s, level %d.%d\n",
+            profile, h->sps->i_level_idc/10, h->sps->i_level_idc%10 );
     }
     else
     {
-        x264_log( h, X264_LOG_INFO, "profile %s, level %d.%d%s, bit depth %d\n",
-            profile, h->sps->i_level_idc/10, h->sps->i_level_idc%10, level_1b, BIT_DEPTH );
+        x264_log( h, X264_LOG_INFO, "profile %s, level %d.%d, bit depth %d\n",
+            profile, h->sps->i_level_idc/10, h->sps->i_level_idc%10, BIT_DEPTH );
     }
 
     return h;

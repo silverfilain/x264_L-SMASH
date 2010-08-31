@@ -36,7 +36,6 @@
 #include "input/input.h"
 #include "output/output.h"
 #include "filters/filters.h"
-#include "encoder/set.h"
 
 #define FAIL_IF_ERROR( cond, ... ) FAIL_IF_ERR( cond, "x264", __VA_ARGS__ )
 
@@ -1569,13 +1568,17 @@ generic_option:
      * if the user didn't explicitly set a reference frame count. */
     if( !b_user_ref )
     {
-        const x264_level_t *l = x264_get_level_constraints( param );
-        if( l->level_idc != 0 )
-        {
-            int mbs = (((param->i_width)+15)>>4) * (((param->i_height)+15)>>4);
-            while( mbs * 384 * param->i_frame_reference > l->dpb && param->i_frame_reference > 1 )
-                param->i_frame_reference--;
-        }
+        int mbs = (((param->i_width)+15)>>4) * (((param->i_height)+15)>>4);
+        for( int i = 0; x264_levels[i].level_idc != 0; i++ )
+            if( param->i_level_idc == x264_levels[i].level_idc )
+            {
+                while( mbs * 384 * param->i_frame_reference > x264_levels[i].dpb &&
+                       param->i_frame_reference > 1 )
+                {
+                    param->i_frame_reference--;
+                }
+                break;
+            }
     }
 
 

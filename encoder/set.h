@@ -34,7 +34,5 @@ int  x264_validate_levels( x264_t *h, int verbose );
 void x264_sei_buffering_period_write( x264_t *h, bs_t *s );
 void x264_sei_pic_timing_write( x264_t *h, bs_t *s );
 void x264_filler_write( x264_t *h, bs_t *s, int filler );
-const x264_level_t* x264_get_level_constraints( x264_param_t *param );
-const x264_level_t* x264_get_valid_level_constraints( x264_t *h );
 
 #endif
