@@ -1064,7 +1064,7 @@ static int isom_add_tkhd( isom_root_t *root, uint32_t trak_number, uint32_t hdlr
             default :
                 break;
         }
-        tkhd->duration = 0xffff;
+        tkhd->duration = 0xffffffff;
         tkhd->track_ID = trak->root->moov->mvhd->next_track_ID;
         ++ trak->root->moov->mvhd->next_track_ID;
         trak->tkhd = tkhd;
@@ -3220,39 +3220,6 @@ static int isom_update_mdhd_duration( isom_root_t *root, uint32_t trak_number )
     return 0;
 }
 
-static int isom_update_tkhd_duration( isom_root_t *root, uint32_t trak_number )
-{
-    isom_trak_entry_t *trak = isom_get_trak( root, trak_number );
-    if( !trak || !trak->tkhd )
-        return -1;
-    isom_tkhd_t *tkhd = trak->tkhd;
-    tkhd->duration = 0;
-    if( !trak->edts || !trak->edts->elst )
-    {
-        if( !trak->mdia || !trak->mdia->mdhd || !trak->root || !trak->root->moov || !trak->root->moov->mvhd || !trak->mdia->mdhd->timescale )
-            return -1;
-        if( !trak->mdia->mdhd->duration && isom_update_mdhd_duration( root, trak_number ) )
-            return -1;
-        tkhd->duration = trak->mdia->mdhd->duration * ((double)trak->root->moov->mvhd->timescale / trak->mdia->mdhd->timescale);
-    }
-    else
-    {
-        tkhd->duration = 0;
-        for( isom_entry_t *entry = trak->edts->elst->list->head; entry; entry = entry->next )
-        {
-            isom_elst_entry_t *data = (isom_elst_entry_t *)entry->data;
-            if( !data )
-                return -1;
-            tkhd->duration += data->segment_duration;
-        }
-    }
-    if( tkhd->duration > UINT32_MAX )
-        tkhd->full_header.version = 1;
-    if( !tkhd->duration )
-        tkhd->duration = tkhd->full_header.version == 1 ? 0xffffffff : 0xffff;
-    return 0;
-}
-
 static int isom_update_mvhd_duration( isom_root_t *root )
 {
     if( !root || !root->moov || !root->moov->mvhd )
@@ -3272,13 +3239,45 @@ static int isom_update_mvhd_duration( isom_root_t *root )
     return 0;
 }
 
+static int isom_update_tkhd_duration( isom_root_t *root, uint32_t trak_number )
+{
+    isom_trak_entry_t *trak = isom_get_trak( root, trak_number );
+    if( !trak || !trak->tkhd )
+        return -1;
+    isom_tkhd_t *tkhd = trak->tkhd;
+    tkhd->duration = 0;
+    if( !trak->edts || !trak->edts->elst )
+    {
+        if( !trak->mdia || !trak->mdia->mdhd || !trak->root || !trak->root->moov || !trak->root->moov->mvhd || !trak->mdia->mdhd->timescale )
+            return -1;
+        if( !trak->mdia->mdhd->duration && isom_update_mdhd_duration( root, trak_number ) )
+            return -1;
+        tkhd->duration = trak->mdia->mdhd->duration * ((double)trak->root->moov->mvhd->timescale / trak->mdia->mdhd->timescale);
+    }
+    else
+    {
+        for( isom_entry_t *entry = trak->edts->elst->list->head; entry; entry = entry->next )
+        {
+            isom_elst_entry_t *data = (isom_elst_entry_t *)entry->data;
+            if( !data )
+                return -1;
+            tkhd->duration += data->segment_duration;
+        }
+    }
+    if( tkhd->duration > UINT32_MAX )
+        tkhd->full_header.version = 1;
+    if( !tkhd->duration )
+        tkhd->duration = tkhd->full_header.version == 1 ? 0xffffffffffffffff : 0xffffffff;
+    return isom_update_mvhd_duration( root );
+}
+
 int isom_update_track_duration( isom_root_t *root, uint32_t trak_number )
 {
-    if( isom_update_mdhd_duration( root, trak_number ) ||
-        isom_update_tkhd_duration( root, trak_number ) ||
-        isom_update_mvhd_duration( root ) )
+    if( isom_update_mdhd_duration( root, trak_number ) )
         return -1;
-    return 0;
+    /* If the track already has a edit list, we don't change or update duration in tkhd and mvhd. */
+    isom_trak_entry_t *trak = isom_get_trak( root, trak_number );
+    return trak->edts && trak->edts->elst ? 0 : isom_update_tkhd_duration( root, trak_number );
 }
 
 int isom_add_mandatory_boxes( isom_root_t *root, uint32_t hdlr_type )
@@ -3879,9 +3878,6 @@ int isom_set_last_sample_delta( isom_root_t *root, uint32_t trak_number, uint32_
     if( !trak || !trak->mdia || !trak->mdia->mdhd || !trak->mdia->minf || !trak->mdia->minf->stbl ||
         !trak->mdia->minf->stbl->stsz || !trak->mdia->minf->stbl->stts->list || !trak->mdia->minf->stbl->stts->list )
         return -1;
-    /* Ensure that stts is complete. */
-    if( isom_output_cache( root, trak_number ) )
-        return -1;
     isom_stts_t *stts = trak->mdia->minf->stbl->stts;
     uint32_t sample_count = isom_get_sample_count( trak );
     if( !stts->list->tail )
@@ -3922,6 +3918,13 @@ int isom_set_last_sample_delta( isom_root_t *root, uint32_t trak_number, uint32_
     else
         return -1;
     return isom_update_track_duration( root, trak_number );
+}
+
+int isom_flush_pooled_samples( isom_root_t *root, uint32_t trak_number, uint32_t last_sample_delta )
+{
+    if( isom_output_cache( root, trak_number ) )
+        return -1;
+    return isom_set_last_sample_delta( root, trak_number, last_sample_delta );
 }
 
 int isom_set_language( isom_root_t *root, uint32_t trak_number, char *language )
@@ -4031,7 +4034,7 @@ int isom_create_explicit_timeline_map( isom_root_t *root, uint32_t trak_number, 
         return -1;
     if( isom_add_elst_entry( trak->edts->elst, segment_duration, media_time, media_rate ) )
         return -1;
-    return isom_update_tkhd_duration( root, trak_number ) ? -1 : isom_update_mvhd_duration( root );
+    return isom_update_tkhd_duration( root, trak_number );
 }
 
 static int isom_check_mandatory_boxes( isom_root_t *root )
