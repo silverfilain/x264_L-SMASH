@@ -824,6 +824,10 @@ static void qtaac_help( const char * const codec_name, int longhelp )
     printf( "                          Samplerate greater than input is not supported.\n" );
     printf( "        --acodec-quality  Encoder's internal complexity. [0]\n" );
     printf( "                             0 (medium), 1 (high), 2 (highest)\n" );
+    printf( "        --aextraopt       Profile and bitrate mode.\n" );
+    printf( "                             sbr  : enable HE-AAC encoding. [0]\n" );
+    printf( "                             mode : bitrate control mode. [abr]\n" );
+    printf( "                                    \"abr\", \"cbr\", \"cvbr\"\n" );
     printf( "\n" );
     printf( "        --aquality/--abitrate setting may be changed inside codec due to its\n" );
     printf( "        limitations and extreme resampling settings (e.g. 48000->8000) may not work.\n" );
