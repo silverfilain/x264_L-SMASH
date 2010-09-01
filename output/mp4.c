@@ -7,6 +7,7 @@
  *          Loren Merritt <lorenm@u.washington.edu>
  *          Yusuke Nakamura <muken.the.vfrmaniac@gmail.com>
  *          Takashi Hirata <silverfilain@gmail.com>
+ *          golgol7777 <golgol7777@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -192,12 +193,11 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
     if( !strcmp( info->codec_name, "aac" ) )
     {
         p_audio->codec_type = ISOM_CODEC_TYPE_MP4A_AUDIO;
-        p_audio->has_sbr = 0;
-    }
-    else if( !strcmp( info->codec_name, "aac_he" ) )
-    {
-        p_audio->codec_type = ISOM_CODEC_TYPE_MP4A_AUDIO;
-        p_audio->has_sbr = 1;
+        audio_aac_info_t *aacinfo = info->opaque;
+        if( aacinfo )
+            p_audio->has_sbr = aacinfo->has_sbr;
+        else
+            p_audio->has_sbr = 0; // SBR presence isn't specified, so assume implicit signaling
     }
     else if( !strcmp( info->codec_name, "mp3" ) )
         p_audio->codec_type = ISOM_CODEC_TYPE_MP4A_AUDIO;
