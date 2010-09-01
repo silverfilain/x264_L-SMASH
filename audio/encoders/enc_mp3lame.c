@@ -221,7 +221,11 @@ static audio_packet_t *get_next_packet( hnd_t handle )
     return out;
 
 error:
-    x264_af_free_packet( h->in );
+    if( h->in )
+    {
+        x264_af_free_packet( h->in );
+        h->in = NULL;
+    }
     x264_af_free_packet( out );
     return NULL;
 }
@@ -243,6 +247,8 @@ static audio_packet_t *finish( hnd_t encoder )
     len = lame_encode_flush( h->lame, h->buffer + h->buf_index, h->bufsize - h->buf_index );
     if( len < 0 )
         goto error;
+
+    h->buf_index += len;
 
     out->size = get_next_mp3frame( h, out->data );
     if( !out->size )
