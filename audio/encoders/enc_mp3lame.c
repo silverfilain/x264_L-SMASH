@@ -20,7 +20,7 @@ typedef struct enc_lame_t
     audio_packet_t *in;
 } enc_lame_t;
 
-static hnd_t lame_encoder_init( hnd_t filter_chain, const char *opt_str )
+static hnd_t init( hnd_t filter_chain, const char *opt_str )
 {
     assert( filter_chain );
     audio_hnd_t *chain = filter_chain;
@@ -85,7 +85,7 @@ static hnd_t lame_encoder_init( hnd_t filter_chain, const char *opt_str )
     h->buf_index = 0;
     h->last_dts = INVALID_DTS;
 
-    x264_cli_log( "audio", X264_LOG_INFO, "opened lame encoder (%s: %g%s, quality: %d, samplerate: %dhz)\n",
+    x264_cli_log( "audio", X264_LOG_INFO, "opened lame mp3 encoder (%s: %g%s, quality: %d, samplerate: %dhz)\n",
                   ( !is_vbr ? "bitrate" : "VBR" ), brval,
                   ( !is_vbr ? "kbps" : "" ), quality, h->info.samplerate );
 
@@ -257,7 +257,7 @@ error:
     return NULL;
 }
 
-static void lame_encoder_close( hnd_t handle )
+static void mp3_close( hnd_t handle )
 {
     enc_lame_t *h = handle;
 
@@ -269,9 +269,9 @@ static void lame_encoder_close( hnd_t handle )
     free( h );
 }
 
-static void lame_encoder_help( const char * const codec_name, int longhelp )
+static void mp3_help( const char * const codec_name, int longhelp )
 {
-    printf( "      * for %s encoder (--acodec lame)\n", codec_name );
+    printf( "      * for %s encoder (--acodec mp3)\n", codec_name );
     printf( "        --aquality        VBR quality. [6]\n" );
     printf( "                            - 9 (lowest) to 0 (highest)\n" );
     printf( "        --abitrate        Enables CBR mode. Bitrate should be one of the values below.\n" );
@@ -287,14 +287,14 @@ static void lame_encoder_help( const char * const codec_name, int longhelp )
     printf( "                            - 9 (poor quality) to 0 (best quality)\n" );
 }
 
-const audio_encoder_t audio_encoder_lame =
+const audio_encoder_t audio_encoder_mp3 =
 {
-    .init            = lame_encoder_init,
+    .init            = init,
     .get_info        = get_info,
     .get_next_packet = get_next_packet,
     .skip_samples    = skip_samples,
     .finish          = finish,
     .free_packet     = free_packet,
-    .close           = lame_encoder_close,
-    .show_help       = lame_encoder_help
+    .close           = mp3_close,
+    .show_help       = mp3_help
 };
