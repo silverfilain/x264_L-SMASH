@@ -72,7 +72,7 @@ void x264_audio_encoder_close( hnd_t encoder )
     free( enc );
 }
 
-const audio_encoder_t *x264_encoder_by_name( const char *name )
+const audio_encoder_t *x264_encoder_by_name( const char *name, int fallback )
 {
 #define ENC( name ) &audio_encoder_ ## name
 #define IFRET( enc ) if( !strcmp( #enc, name ) ) return ENC( enc );
@@ -99,7 +99,7 @@ const audio_encoder_t *x264_encoder_by_name( const char *name )
 #undef IFRET
 #undef ENC
 #if HAVE_AUDIO && HAVE_LAVF
-    return &audio_encoder_lavc; // fallback to libavcodec
+    return fallback ? &audio_encoder_lavc : NULL; // fallback to libavcodec
 #else
     return NULL;
 #endif
@@ -116,7 +116,7 @@ const audio_encoder_t *x264_select_audio_encoder( const char *encoder, char* all
             const audio_encoder_t *enc;
             for( int i = 0; allowed_list[i] != NULL; i++ )
             {
-                enc = x264_encoder_by_name( allowed_list[i] );
+                enc = x264_encoder_by_name( allowed_list[i], 0 );
                 if( enc )
                     return enc;
             }
@@ -185,7 +185,7 @@ const audio_encoder_t *x264_select_audio_encoder( const char *encoder, char* all
                 return NULL;
         }
     }
-    return x264_encoder_by_name( encoder );
+    return x264_encoder_by_name( encoder, 1 );
 }
 
 void x264_audio_encoder_show_help( const char * const encoder_list[], int longhelp )
@@ -209,7 +209,7 @@ void x264_audio_encoder_show_help( const char * const encoder_list[], int longhe
         if( !strcmp( encoder_list[i], "auto" ) || !strcmp( encoder_list[i], "none" ) )
             continue;
 
-        enc = x264_encoder_by_name( encoder_list[i] );
+        enc = x264_encoder_by_name( encoder_list[i], 1 );
 
         if( !enc || !enc->show_help )
             continue;
