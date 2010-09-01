@@ -62,8 +62,13 @@ enum
     EncoderQuality_Highest = 2,
 };
 
-static const char const *encoder_quality_names[] = {
+static const char * const encoder_quality_names[] = {
     "medium", "high", "highest",
+};
+
+static const char * const encoder_mode_names[][4] = {
+    { "ABR", NULL, "CVBR", "CBR", },
+    { "CBR", "ABR", "CVBR", },
 };
 
 static int available_quality_values[] = {
@@ -140,6 +145,18 @@ static int get_samplerate_index( int samplerate, int he_flag )
 {
     return !he_flag ? get_samplerate_index_lc( samplerate )
                     : get_samplerate_index_he( samplerate );
+}
+
+static int get_mode_index( char *mode, int he_flag )
+{
+    if( !strcmp( mode, "cbr" ) )
+        return !he_flag ? BitRateControlMode_LC_CBR : BitRateControlMode_HE_CBR;
+    else if( !strcmp( mode, "abr" ) )
+        return !he_flag ? BitRateControlMode_LC_ABR : BitRateControlMode_HE_ABR;
+    else if( !strcmp( mode, "cvbr" ) )
+        return !he_flag ? BitRateControlMode_LC_ConstrainedVBR : BitRateControlMode_HE_ConstrainedVBR;
+    else
+        return !he_flag ? BitRateControlMode_LC_ABR : BitRateControlMode_HE_ABR;
 }
 
 static int find_nearest_index( int value, int *val_list, int num )
@@ -488,30 +505,37 @@ static void read_AudioSpecificConfig( UInt8 *esds_buf, UInt32 size, UInt8 **asc,
     }
 }
 
-static int init_common( enc_qtaac_t *h, const char *opt_str )
+static hnd_t qtaac_init( hnd_t filter_chain, const char *opt_str )
 {
-    assert( h );
-    audio_hnd_t *chain = h->filter_chain;
+    assert( filter_chain );
+    audio_hnd_t *chain = filter_chain;
+    enc_qtaac_t *h = calloc( 1, sizeof( enc_qtaac_t ) );
+    h->filter_chain = chain;
+    h->info = chain->info;
+    h->info.codec_name = "aac";
+
     AudioStreamBasicDescription indesc, outdesc;
 
-    if( chain->info.channels > 8 )
-    {
-        x264_cli_log( "qtaac", X264_LOG_ERROR, "audio with %d-ch is not supported\n", chain->info.channels );
-        return -1;
-    }
-
-    char **opts     = x264_split_options( opt_str, (const char*[]){ AUDIO_CODEC_COMMON_OPTIONS, "samplerate", NULL } );
+    char **opts     = x264_split_options( opt_str, (const char*[]){ AUDIO_CODEC_COMMON_OPTIONS, "samplerate", "sbr", "mode", NULL } );
     assert( opts );
 
-    if( !h->config.he_flag )
+    h->config.he_flag = x264_otob( x264_get_option( "sbr", opts ), 0 );
+
+    if( get_channel_configuration_index( chain->info.channels, h->config.he_flag ) < 0 ||
+        get_samplerate_index( chain->info.samplerate, h->config.he_flag ) < 0 )
     {
-        h->config.is_vbr  = x264_otob( x264_get_option( "is_vbr", opts ), 1 );
-        h->config.encoder_mode = h->config.is_vbr ? BitRateControlMode_LC_TrueVBR : BitRateControlMode_LC_ABR;
+        x264_cli_log( "qtaac", X264_LOG_ERROR, "unsupported input samplerate or channel configuration\n" );
+        goto error;
     }
+
+    h->config.is_vbr  = x264_otob( x264_get_option( "is_vbr", opts ), h->config.he_flag ? 0 : 1 );
+
+    if( h->config.is_vbr )
+        h->config.encoder_mode = BitRateControlMode_LC_TrueVBR;
     else
     {
-        h->config.is_vbr  = 0;
-        h->config.encoder_mode = BitRateControlMode_HE_ABR;
+        char *mode = x264_otos( x264_get_option( "mode", opts ), "abr" );
+        h->config.encoder_mode = get_mode_index( mode, h->config.he_flag );
     }
 
     if( h->config.is_vbr )
@@ -557,6 +581,10 @@ static int init_common( enc_qtaac_t *h, const char *opt_str )
     h->info.samplesize     = h->info.channels * h->info.chansize;
     h->info.framesize      = h->info.framelen * h->info.samplesize;
 
+    audio_aac_info_t *aacinfo = malloc( sizeof( audio_aac_info_t ) );
+    aacinfo->has_sbr          = !!h->config.he_flag;
+    h->info.opaque            = aacinfo;
+
     UInt32 size;
     if( QTGetComponentProperty( h->ci, kQTPropertyClass_SCAudio, kQTSCAudioPropertyID_MaximumOutputPacketSize, sizeof(size), &size, NULL ) != noErr )
         goto error;
@@ -585,92 +613,13 @@ static int init_common( enc_qtaac_t *h, const char *opt_str )
 
     x264_cli_log( "audio", X264_LOG_INFO, "opened qtaac encoder (%s %s: %d%s, quality: %s, samplerate: %dhz)\n",
                   ( !h->config.he_flag ? "AAC-LC" : "AAC-HE" ),
-                  ( !h->config.is_vbr ? "bitrate" : "VBR" ), h->desired_brval, ( !h->config.is_vbr ? "kbps" : "" ),
+                  ( !h->config.is_vbr ? encoder_mode_names[!!h->config.he_flag][h->config.encoder_mode] : "VBR" ),
+                  h->desired_brval, ( !h->config.is_vbr ? "kbps" : "" ),
                   encoder_quality_names[h->config.encoder_quality], h->info.samplerate );
 
-    return 0;
+    return h;
 
 error:
-    return -1;
-}
-
-static void cleanup_common( enc_qtaac_t *h )
-{
-    assert( h );
-    if( h->ci )
-        CloseComponent( h->ci );
-    if( h->buffer )
-        free( h->buffer );
-    if( h->samplebuffer )
-        free( h->samplebuffer );
-    if( h->info.extradata )
-        free( h->info.extradata );
-    if( h->in )
-        x264_af_free_packet( h->in );
-    free( h );
-}
-
-static hnd_t qtaac_init( hnd_t filter_chain, const char *opt_str )
-{
-    assert( filter_chain );
-    audio_hnd_t *chain = filter_chain;
-
-    enc_qtaac_t *h = calloc( 1, sizeof( enc_qtaac_t ) );
-    h->filter_chain = chain;
-    h->info = chain->info;
-    h->info.codec_name = "aac";
-
-    if( get_channel_configuration_index( chain->info.channels, 0 ) < 0 ||
-        get_samplerate_index( chain->info.samplerate, 0 ) < 0 )
-    {
-        x264_cli_log( "qtaac", X264_LOG_ERROR, "unsupported input samplerate or channel configuration\n" );
-        goto fail;
-    }
-
-    h->config.he_flag  = 0;
-
-    if( init_common( h, opt_str ) < 0 )
-    {
-        x264_cli_log( "qtaac", X264_LOG_ERROR, "failed to init audio encoder\n" );
-        goto fail;
-    }
-
-    return h;
-
-fail:
-    cleanup_common( h );
-    return NULL;
-}
-
-static hnd_t qtaac_he_init( hnd_t filter_chain, const char *opt_str )
-{
-    assert( filter_chain );
-    audio_hnd_t *chain = filter_chain;
-
-    enc_qtaac_t *h = calloc( 1, sizeof( enc_qtaac_t ) );
-    h->filter_chain = chain;
-    h->info = chain->info;
-    h->info.codec_name = "aac_he";
-
-    if( get_channel_configuration_index( chain->info.channels, 1 ) < 0 ||
-        get_samplerate_index( chain->info.samplerate, 1 ) < 0 )
-    {
-        x264_cli_log( "qtaac_he", X264_LOG_ERROR, "unsupported input samplerate or channel configuration\n" );
-        goto fail;
-    }
-
-    h->config.he_flag  = 1;
-
-    if( init_common( h, opt_str ) < 0 )
-    {
-        x264_cli_log( "qtaac", X264_LOG_ERROR, "failed to init audio encoder\n" );
-        goto fail;
-    }
-
-    return h;
-
-fail:
-    cleanup_common( h );
     return NULL;
 }
 
@@ -829,57 +778,63 @@ static audio_packet_t *finish( hnd_t encoder )
 
 static void qtaac_close( hnd_t handle )
 {
+    assert( handle );
     enc_qtaac_t *h = handle;
 
-    cleanup_common( h );
+    if( h->ci )
+        CloseComponent( h->ci );
+    if( h->buffer )
+        free( h->buffer );
+    if( h->samplebuffer )
+        free( h->samplebuffer );
+    if( h->info.extradata )
+        free( h->info.extradata );
+    if( h->info.opaque )
+        free( h->info.opaque );
+    if( h->in )
+        x264_af_free_packet( h->in );
+    free( h );
 }
 
 static void qtaac_help( const char * const codec_name, int longhelp )
 {
-    printf( "      * For %s encoder (--acodec qtaac)\n", codec_name );
-    printf( "        This is an AAC-LC encoder using QuickTime Audio Compressor.\n" );
+    if( longhelp < 2 )
+        return;
+
+    printf( "      * For %s encoder (--acodec %s)\n", codec_name, codec_name );
+    printf( "        An AAC-LC and AAC-HE encoder using QuickTime Audio Compressor.\n" );
     printf( "\n" );
-    printf( "        --aquality        VBR quality. [63]\n" );
-    printf( "                          Should be one of the values below:\n" );
-    printf( "                            - 0, 9 ,18 ,27 ,36 ,45 ,54 ,63 ,73, 82, 91, 100, 109, 118, 127\n" );
+    printf( "        --aquality        VBR quality. Cannot be used for HE-AAC.[63]\n" );
+    printf( "                          Should be one of the values below.\n" );
+    printf( "                             0, 9 ,18 ,27 ,36 ,45 ,54 ,63 ,73, 82, 91, 100, 109, 118, 127\n" );
     printf( "                          0 is lowest and 127 is highest.\n" );
-    printf( "        --abitrate        Enables ABR mode. Bitrate should be one of the discrete preset\n" );
-    printf( "                          values depending on both channels count and samplerate.\n" );
+    printf( "        --abitrate        Enables bitrate mode. Bitrate should be one of the discrete preset\n" );
+    printf( "                          values depending on profile, channels count, and samplerate.\n" );
     printf( "                          Examples for typical configurations.\n" );
-    printf( "                           - for 44100Hz or 48000Hz with 1ch:\n" );
-    printf( "                              32, 40, 48, 56, 64, 72, 80, 96, 112, 128, 144, 160, 192, 224, 256\n" );
-    printf( "                           - for 44100Hz or 48000Hz with 2ch:\n" );
-    printf( "                              64, 72, 80, 96, 112, 128, 144, 160, 192, 224, 256, 288, 320\n" );
-    printf( "                           - for 44100Hz or 48000Hz with 5.1ch:\n" );
-    printf( "                              160, 192, 224, 256, 288, 320, 384, 448, 512, 576, 640, 768\n");
+    printf( "                           - for 44100Hz or 48000Hz with 1ch\n" );
+    printf( "                             LC: 32, 40, 48, 56, 64, 72, 80, 96, 112, 128, 144, 160, 192, 224, 256\n" );
+    printf( "                             HE: 16, 24, 32, 40\n" );
+    printf( "                           - for 44100Hz or 48000Hz with 2ch\n" );
+    printf( "                             LC: 64, 72, 80, 96, 112, 128, 144, 160, 192, 224, 256, 288, 320\n" );
+    printf( "                             HE: 32, 40, 48, 56, 64, 80\n" );
+    printf( "                           - for 44100Hz or 48000Hz with 5.1ch\n" );
+    printf( "                             LC: 160, 192, 224, 256, 288, 320, 384, 448, 512, 576, 640, 768\n");
+    printf( "                             HE: 80, 96, 112, 128, 160, 192\n");
     printf( "                          The lower samplerate, the lower min/max values are applied.\n" );
     printf( "        --asamplerate     Output samplerate. Should be one of the below.\n" );
-    printf( "                           - 8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000\n" );
+    printf( "                             LC: 8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000\n" );
+    printf( "                             HE: 32000, 44100, 48000\n" );
     printf( "                          Samplerate greater than input is not supported.\n" );
     printf( "        --acodec-quality  Encoder's internal complexity. [0]\n" );
-    printf( "                           - 0 (medium), 1 (high), 2 (highest)\n" );
+    printf( "                             0 (medium), 1 (high), 2 (highest)\n" );
+    printf( "        --aextraopt       Profile and bitrate mode.\n" );
+    printf( "                             sbr  : enable HE-AAC encoding. [0]\n" );
+    printf( "                             mode : bitrate control mode. [abr]\n" );
+    printf( "                                    \"abr\", \"cbr\", \"cvbr\"\n" );
     printf( "\n" );
     printf( "        --aquality/--abitrate setting may be changed inside codec due to its\n" );
     printf( "        limitations and extreme resampling settings (e.g. 48000->8000) may not work.\n" );
     printf( "        If something goes wrong, it will result in a failure of codec initialization.\n" );
-}
-
-static void qtaac_he_help( const char * const codec_name, int longhelp )
-{
-    printf( "      * For %s encoder (--acodec qtaac_he)\n", codec_name );
-    printf( "        This is an AAC-HE encoder using QuickTime Audio Compressor.\n" );
-    printf( "        This encoder is roughly the same as qtaac encoder but has differences as below.\n" );
-    printf( "\n" );
-    printf( "        --aquality        Cannot be used, since there is no VBR mode.\n" );
-    printf( "        --abitrate        Must be specified. Applicable preset values are also changed.\n" );
-    printf( "                          Examples for typical configurations.\n" );
-    printf( "                           - for 44100Hz or 48000Hz with 1ch:\n" );
-    printf( "                              16, 24, 32, 40\n" );
-    printf( "                           - for 44100Hz or 48000Hz with 2ch:\n" );
-    printf( "                              32, 40, 48, 56, 64, 80\n" );
-    printf( "                           - for 44100Hz or 48000Hz with 5.1ch:\n" );
-    printf( "                              80, 96, 112, 128, 160, 192\n");
-    printf( "        --asamplerate     Samplerate < 32000Hz is not supported.\n" );
 }
 
 const audio_encoder_t audio_encoder_qtaac =
@@ -894,14 +849,3 @@ const audio_encoder_t audio_encoder_qtaac =
     .show_help       = qtaac_help
 };
 
-const audio_encoder_t audio_encoder_qtaac_he =
-{
-    .init            = qtaac_he_init,
-    .get_info        = get_info,
-    .get_next_packet = get_next_packet,
-    .skip_samples    = skip_samples,
-    .finish          = finish,
-    .free_packet     = free_packet,
-    .close           = qtaac_close,
-    .show_help       = qtaac_he_help
-};

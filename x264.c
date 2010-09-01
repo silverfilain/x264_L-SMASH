@@ -112,11 +112,10 @@ static const char * const audio_encoders[] =
 #if HAVE_AUDIO
     "raw",
 #if HAVE_LAME
-    "lame",
+    "mp3",
 #endif
 #if HAVE_QT_AAC
     "qtaac",
-    "qtaac_he",
 #endif
 #if HAVE_LAVF
     "lavc",
@@ -683,6 +682,8 @@ static void Help( x264_param_t *defaults, int longhelp )
     H0( "      --aquality <float>      Quality-based VBR [codec-dependent default]\n" );
     H0( "      --asamplerate <integer> Audio samplerate (Hz) [keep source samplerate]\n" );
     H0( "      --acodec-quality <float> Codec's internal compression quality [codec specific]\n" );
+    H1( "      --aextraopt <string>    Pass extra option to codec [codec specific]\n" );
+    H1( "                              Should be comma separated \"name=value\" style\n" );
     H0( "\n" );
     x264_audio_encoder_show_help( audio_encoders, longhelp );
     H0( "\n" );
@@ -777,6 +778,7 @@ enum {
     OPT_AUDIOQUALITY,
     OPT_AUDIOSAMPLERATE,
     OPT_AUDIOCODECQUALITY,
+    OPT_AUDIOEXTRAOPT,
     OPT_CHAPTER,
     OPT_LANGUAGE
 } OptionsOPT;
@@ -936,6 +938,7 @@ static struct option long_options[] =
     { "aquality",    required_argument, NULL, OPT_AUDIOQUALITY },
     { "asamplerate", required_argument, NULL, OPT_AUDIOSAMPLERATE },
     { "acodec-quality",    required_argument, NULL, OPT_AUDIOCODECQUALITY },
+    { "aextraopt",   required_argument, NULL, OPT_AUDIOEXTRAOPT },
     { "chapter",     required_argument, NULL, OPT_CHAPTER },
     { "language",    required_argument, NULL, OPT_LANGUAGE },
     {0, 0, 0, 0}
@@ -1154,6 +1157,7 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
     int audio_samplerate = -1;
     int audio_enable     = 1;
     hnd_t haud           = NULL;
+    char *audio_extraopt = NULL;
 
 #ifndef HAVE_AUDIO
     audio_enable = 0;
@@ -1327,7 +1331,7 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
                     audio_enable = 0;
                 else
                 {
-                    FAIL_IF_ERROR( strcmp( audio_enc, "auto" ) && strcmp( audio_enc, "copy" ) && !x264_encoder_by_name( audio_enc ),
+                    FAIL_IF_ERROR( strcmp( audio_enc, "auto" ) && strcmp( audio_enc, "copy" ) && !x264_encoder_by_name( audio_enc, 0 ),
                                    "audio encoder '%s' not supported or not compiled in\n", audio_enc );
 #ifdef HAVE_AUDIO
                     audio_enable = 1;
@@ -1351,6 +1355,9 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
                 break;
             case OPT_AUDIOSAMPLERATE:
                 audio_samplerate = atoi( optarg );
+                break;
+            case OPT_AUDIOEXTRAOPT:
+                audio_extraopt = optarg;
                 break;
             case OPT_CHAPTER:
                 output_opt.chapter = optarg;
@@ -1454,23 +1461,28 @@ generic_option:
                   info.height, info.interlaced ? 'i' : 'p', info.sar_width, info.sar_height,
                   info.fps_num, info.fps_den, info.vfr ? 'v' : 'c' );
 
-    char arg[128] = { 0 };
+#define MAX_ARGS 256
+    char arg[MAX_ARGS] = { 0 };
     int len = 0;
     if( audio_enable )
     {
         if( audio_bitrate > 0 )
-            len += snprintf( &arg[len], 128, "is_vbr=0,bitrate=%f", audio_bitrate );
+            len += snprintf( &arg[len], MAX_ARGS, "is_vbr=0,bitrate=%f", audio_bitrate );
         else if( isfinite( audio_quality ) )
-            len += snprintf( &arg[len], 128, "is_vbr=1,bitrate=%f", audio_quality );
+            len += snprintf( &arg[len], MAX_ARGS, "is_vbr=1,bitrate=%f", audio_quality );
 
         if( isfinite( acodec_quality ) )
-            len += snprintf( &arg[len], 128 - len, "%squality=%f", len ? "," : "", acodec_quality );
+            len += snprintf( &arg[len], MAX_ARGS - len, "%squality=%f", len ? "," : "", acodec_quality );
 
         if( audio_samplerate > 0 )
-            len += snprintf( &arg[len], 128 - len, "%ssamplerate=%d", len ? "," : "", audio_samplerate );
-        
-        len += snprintf( &arg[len], 128 - len, "%scodec=%s", len ? "," : "", audio_enc );
+            len += snprintf( &arg[len], MAX_ARGS - len, "%ssamplerate=%d", len ? "," : "", audio_samplerate );
+
+        if( audio_extraopt )
+            len += snprintf( &arg[len], MAX_ARGS - len, "%s%s", len ? "," : "", audio_extraopt );
+
+        len += snprintf( &arg[len], MAX_ARGS - len, "%scodec=%s", len ? "," : "", audio_enc );
     }
+#undef MAX_ARGS
 
     FAIL_IF_ERROR( output.open_file( output_filename, &opt->hout, haud, audio_enc, arg, &output_opt ) < 0, "could not open output file `%s'\n", output_filename )
 

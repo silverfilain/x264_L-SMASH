@@ -57,7 +57,13 @@ typedef struct audio_info_t
     timebase_t  timebase;
     uint8_t    *extradata;
     int         extradata_size;
+    void       *opaque;
 } audio_info_t;
+
+typedef struct audio_aac_info_t
+{
+    int has_sbr;
+} audio_aac_info_t;
 
 typedef struct audio_packet_t {
     int64_t         dts;
