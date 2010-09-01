@@ -26,7 +26,6 @@ extern const audio_encoder_t audio_encoder_mp3;
 #endif
 #if HAVE_QT_AAC
 extern const audio_encoder_t audio_encoder_qtaac;
-extern const audio_encoder_t audio_encoder_qtaac_he;
 #endif
 #endif /* HAVE_AUDIO */
 

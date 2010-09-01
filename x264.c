@@ -118,7 +118,6 @@ static const char * const audio_encoders[] =
 #endif
 #if HAVE_QT_AAC
     "qtaac",
-    "qtaac_he",
 #endif
 #if HAVE_LAVF
     "lavc",

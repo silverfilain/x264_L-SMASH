@@ -92,7 +92,6 @@ const audio_encoder_t *x264_encoder_by_name( const char *name, int fallback )
     }
 #if HAVE_QT_AAC
     IFRET( qtaac );
-    IFRET( qtaac_he );
 #endif
     IFRET( raw );
 #endif /* HAVE_AUDIO */
@@ -145,7 +144,6 @@ const audio_encoder_t *x264_select_audio_encoder( const char *encoder, char* all
                 {
                     if( !strcmp( encoder, "aac" )      ||
                         !strcmp( encoder, "qtaac" )    ||
-                        !strcmp( encoder, "qtaac_he" ) ||
                         !strcmp( encoder, "libfaac" )  ||
                         !strcmp( encoder, "ffaac" ) )
                     {
