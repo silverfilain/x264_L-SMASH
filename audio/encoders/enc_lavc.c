@@ -244,11 +244,16 @@ static void lavc_close( hnd_t handle )
 
 static void lavc_help( const char * const codec_name, int longhelp )
 {
+    if( longhelp < 2 )
+        return;
+
     avcodec_register_all();
     AVCodec *enc = NULL;
     int num = 0;
+    int len = 0, line = 1;
+    char list[1024];
 
-    printf( "      * for %s encoder\n", codec_name );
+    printf( "      * For %s encoder\n", codec_name );
     printf( "        --asamplerate is not supported for this encoder.\n" );
     printf( "\n" );
     printf( "        The list of audio codecs compiled in libavcodec are:\n" );
@@ -256,16 +261,23 @@ static void lavc_help( const char * const codec_name, int longhelp )
     {
         if( enc->type == CODEC_TYPE_AUDIO && enc->encode )
         {
-            printf( "            - %s\n", enc->name );
+            len += snprintf( &list[len], 1024-len, "%s ", enc->name );
             num++;
+        }
+        if( len / 80 == line )
+        {
+            len += snprintf( &list[len], 1024-len, "\n" );
+            line++;
         }
     }
     if( !num )
     {
-        printf( "            No audio encoder support is compiled in!\n" );
+        printf( "          No audio encoder support is compiled in!\n" );
     }
     else
     {
+        printf( "          %s\n", list );
+        printf( "\n" );
         printf( "        These are available by passing the name to --acodec option.\n" );
         printf( "        Also, internal codec selection can be overriden by putting\n" );
         printf( "        'ff' prefix before the name and force to use lavc version.\n" );

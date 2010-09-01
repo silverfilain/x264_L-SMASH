@@ -85,7 +85,10 @@ static void raw_close( hnd_t handle )
 
 static void raw_help( const char * const codec_name, int longhelp )
 {
-    printf( "      * For %s encoder (--acodec raw)\n", codec_name );
+    if( longhelp < 2 )
+        return;
+
+    printf( "      * For %s encoder (--acodec %s)\n", codec_name, codec_name );
     printf( "        Currently, all audio options except for --acodec and\n" );
     printf( "        --audiofile are ignored for this codec.\n" );
 }

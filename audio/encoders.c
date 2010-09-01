@@ -188,10 +188,10 @@ const audio_encoder_t *x264_select_audio_encoder( const char *encoder, char* all
 
 void x264_audio_encoder_show_help( const char * const encoder_list[], int longhelp )
 {
-    if( !longhelp )
+    if( longhelp < 2 )
     {
         printf( "      Available options and their value ranges are depend on audio codec.\n" );
-        printf( "      For the codec dependent helps, see --longhelp or --fullhelp.\n" );
+        printf( "      For the codec dependent helps, see --fullhelp.\n" );
         return;
     }
 

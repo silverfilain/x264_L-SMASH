@@ -798,6 +798,9 @@ static void qtaac_close( hnd_t handle )
 
 static void qtaac_help( const char * const codec_name, int longhelp )
 {
+    if( longhelp < 2 )
+        return;
+
     printf( "      * For %s encoder (--acodec %s)\n", codec_name, codec_name );
     printf( "        An AAC-LC and AAC-HE encoder using QuickTime Audio Compressor.\n" );
     printf( "\n" );
