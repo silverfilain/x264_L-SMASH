@@ -123,6 +123,13 @@ static int init( hnd_t *handle, const char *opt_str )
         goto error;
     }
 
+    res = h->func.avs_invoke( h->env, "KillVideo", res, NULL );
+    if( avs_is_error( res ) )
+    {
+        AF_LOG_WARN( h, "failed to kill video stream\n" );
+        goto error;
+    }
+
     h->clip = h->func.avs_take_clip( res, h->env );
     if( !avs_is_clip( res ) )
     {
