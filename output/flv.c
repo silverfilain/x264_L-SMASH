@@ -277,6 +277,14 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
         x264_put_amf_double( c, a_flv->info->samplerate );
         x264_put_amf_string( c, "stereo" );
         x264_put_amf_bool  ( c, a_flv->stereo );
+        if( a_flv->codecid == FLV_CODECID_RAW )
+        {
+            // this is slightly inaccurate for some fps and samplerate conbinations
+            if( !p_param->b_vfr_input )
+                a_flv->info->framelen = (double)a_flv->info->samplerate * p_param->i_fps_den / p_param->i_fps_num + 0.5;
+            else
+                a_flv->info->framelen = (double)a_flv->info->samplerate * p_param->i_timebase_den / p_param->i_timebase_num + 0.5;
+        }
     }
 #endif
 
