@@ -127,6 +127,19 @@ static const char * const audio_encoders[] =
     NULL
 };
 
+static const char * const audio_demuxers[] =
+{
+    "auto",
+#if HAVE_AUDIO
+#if HAVE_LAVF
+    "lavf",
+#endif
+#if HAVE_AVS
+    "avs",
+#endif
+#endif /* HAVE_AUDIO */
+    NULL
+};
 
 static const char * const pulldown_names[] = { "none", "22", "32", "64", "double", "triple", "euro", 0 };
 static const char * const log_level_names[] = { "none", "error", "warning", "info", "debug", 0 };
@@ -680,6 +693,9 @@ static void Help( x264_param_t *defaults, int longhelp )
     H0( "      Audio is automatically opened from the input file if supported by the demuxer.\n" );
     H0( "\n" );
     H0( "      --audiofile <filename>  Uses audio from the specified file.\n" );
+    H1( "      --ademuxer <string>     Demux audio by the specified demuxer [%s].\n"
+        "                              Supported and compiled in demuxers:\n"
+        "                                  - %s\n", audio_demuxers[0], stringify_names( buf, audio_demuxers ) );
     H0( "      --acodec <string>       Audio codec [auto].\n");
     H1( "                              Supported and compiled in codecs:\n" );
     H1( "                                  - %s\n", stringify_names( buf, audio_encoders ) );
@@ -775,6 +791,7 @@ enum {
     OPT_INPUT_RES,
     OPT_INPUT_CSP,
     OPT_AUDIOFILE,
+    OPT_AUDIODEMUXER,
     OPT_AUDIOCODEC,
     OPT_AUDIOBITRATE,
     OPT_AUDIOQUALITY,
@@ -933,6 +950,7 @@ static struct option long_options[] =
     { "input-res",   required_argument, NULL, OPT_INPUT_RES },
     { "input-csp",   required_argument, NULL, OPT_INPUT_CSP },
     { "audiofile",   required_argument, NULL, OPT_AUDIOFILE },
+    { "ademuxer",    required_argument, NULL, OPT_AUDIODEMUXER },
     { "acodec",      required_argument, NULL, OPT_AUDIOCODEC },
     { "abitrate",    required_argument, NULL, OPT_AUDIOBITRATE },
     { "aquality",    required_argument, NULL, OPT_AUDIOQUALITY },
@@ -1107,6 +1125,33 @@ static int init_vid_filters( char *sequence, hnd_t *handle, video_info_t *info, 
     return 0;
 }
 
+static int select_audio_demuxer( const char *demuxer, char *used_demuxer, char **encoder, char *filename )
+{
+    int b_auto = !strcasecmp( demuxer, "auto" );
+    const char *module = b_auto ? NULL : demuxer;
+    const char UNUSED *ext = get_filename_extension( filename );
+    if( b_auto )
+    {
+        if( !strcasecmp( ext, "avs" ) )
+#if HAVE_AVS
+            module = "avs";
+#else
+        x264_cli_log( "x264", X264_LOG_ERROR, "not compiled with AVS audio input support\n" );
+        return -1;
+#endif
+#if HAVE_LAVF
+        if( !module )
+            module = "lavf";
+#endif
+    }
+
+    if( !module )
+        return -1;
+
+    strcpy( used_demuxer, module );
+    return 0;
+}
+
 static int parse_enum_name( const char *arg, const char * const *names, const char **dst )
 {
     for( int i = 0; names[i]; i++ )
@@ -1153,6 +1198,7 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
 
     char *audio_enc      = "auto";
     char *audio_filename = NULL;
+    const char *audio_demuxer = "auto";
     float audio_bitrate  = -1;
     float audio_quality  = NAN;
     float acodec_quality = NAN;
@@ -1344,6 +1390,9 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
             case OPT_AUDIOFILE:
                 audio_filename = optarg;
                 break;
+            case OPT_AUDIODEMUXER:
+                FAIL_IF_ERROR( parse_enum_name( optarg, audio_demuxers, &audio_demuxer ), "Unknown audio demuxer `%s'\n", optarg )
+                break;
             case OPT_AUDIOBITRATE:
                 audio_bitrate = atof( optarg );
                 FAIL_IF_ERROR( audio_bitrate <= 0, "bitrate must be > 0.\n" );
@@ -1429,14 +1478,14 @@ generic_option:
     {
         if( audio_filename )
         {
-#if HAVE_AVS
-            if( !strcmp( get_filename_extension( audio_filename ), "avs" ) )
-            {
-                haud = x264_audio_open_from_file( "avs", audio_filename, TRACK_ANY );
-            }
+            char used_demuxer[8];
+            if( !select_audio_demuxer( audio_demuxer, used_demuxer, &audio_enc, audio_filename ) )
+                haud = x264_audio_open_from_file( used_demuxer, audio_filename, TRACK_ANY );
             else
-#endif
-                haud = x264_audio_open_from_file( NULL, audio_filename, TRACK_ANY );
+            {
+                x264_cli_log( "x264", X264_LOG_WARNING, "no suitable audio demuxer is found for --audiofile, disabling audio.\n" );
+                audio_enable = 0;
+            }
         }
         else if( input.open_audio )
             haud = input.open_audio( opt->hin, TRACK_ANY );
@@ -1446,7 +1495,7 @@ generic_option:
             audio_enable = 0;
         }
 
-        if( audio_filename && !haud )
+        if( audio_filename && ( audio_enable && !haud ) )
             return -1;
     }
 
