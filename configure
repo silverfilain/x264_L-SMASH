@@ -27,6 +27,7 @@ echo "  --host=HOST              build programs to run on HOST"
 echo "  --cross-prefix=PREFIX    use PREFIX for compilation tools"
 echo "  --sysroot=SYSROOT        root of cross-build tree"
 echo "  --qtsdk=QTSDKROOT        root of QuickTime SDK (x86 mingw only)"
+echo "  --enable-lsmash          enables L-SMASH importer"
 echo ""
 exit 1
 fi
@@ -148,6 +149,7 @@ pic="no"
 vis="no"
 shared="no"
 bit_depth="8"
+lsmash="no"
 
 audio_mp3="auto"
 audio_qtaac="auto"
@@ -250,6 +252,9 @@ for opt do
                 exit 1
             fi
             bit_depth=`expr $bit_depth + 0`
+            ;;
+        --enable-lsmash)
+            lsmash="yes"
             ;;
         *)
             echo "Unknown option $opt, ignored"
@@ -671,6 +676,9 @@ if [ "$audio" = "auto" ]; then
         audio_encs="$audio_encs, lavc"
     else
         audio_lavc="no"
+    fi
+    if [ "$lsmash" = "yes" ]; then
+        define HAVE_LSMASH
     fi
 fi
 

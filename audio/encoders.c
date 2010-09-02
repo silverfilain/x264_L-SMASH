@@ -232,6 +232,9 @@ hnd_t x264_audio_copy_open( hnd_t handle )
 #if HAVE_LAVF
     IFRET( lavf );
 #endif
+#if HAVE_LSMASH
+    IFRET( lsmash );
+#endif
 #endif // HAVE_AUDIO
 #undef IFRET
     return NULL;

@@ -135,6 +135,9 @@ static const char * const audio_demuxers[] =
 #if HAVE_AVS
     "avs",
 #endif
+#if HAVE_LSMASH
+    "lsmash",
+#endif
 #endif /* HAVE_AUDIO */
     NULL
 };
@@ -1144,6 +1147,11 @@ static int select_audio_demuxer( const char *demuxer, char *used_demuxer, char *
 
     if( !module )
         return -1;
+
+#if HAVE_LSMASH
+    if( !strcasecmp( module, "lsmash" ) )
+        *encoder = "copy";
+#endif
 
     strcpy( used_demuxer, module );
     return 0;

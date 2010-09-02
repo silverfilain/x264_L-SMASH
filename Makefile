@@ -53,6 +53,9 @@ endif
 ifneq ($(findstring HAVE_AVS, $(CONFIG)),)
 SRCCLI += input/audio/avs.c
 endif
+ifneq ($(findstring HAVE_LSMASH, $(CONFIG)),)
+SRCCLI += input/audio/lsmash.c
+endif
 endif
 
 ifneq ($(findstring HAVE_LAME, $(CONFIG)),)
