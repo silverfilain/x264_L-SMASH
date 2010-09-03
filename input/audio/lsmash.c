@@ -64,7 +64,12 @@ static int lsmash_init( hnd_t *handle, const char *opt_str )
             break;
         case MP4SYS_OBJECT_TYPE_Audio_ISO_11172_3:
         case MP4SYS_OBJECT_TYPE_Audio_ISO_13818_3:
-            h->info.codec_name = "mp3";
+            if( h->summary->aot == MP4A_AUDIO_OBJECT_TYPE_Layer_3 )
+                h->info.codec_name = "mp3";
+            else if( h->summary->aot == MP4A_AUDIO_OBJECT_TYPE_Layer_2 )
+                h->info.codec_name = "mp2";
+            else
+                h->info.codec_name = "mp1";
             break;
         case MP4SYS_OBJECT_TYPE_PRIV_SAMR_AUDIO:
             h->info.codec_name = "amrnb";
