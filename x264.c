@@ -1133,12 +1133,14 @@ static int select_audio_demuxer( const char *demuxer, char *used_demuxer, char *
     if( b_auto )
     {
         if( !strcasecmp( ext, "avs" ) )
+        {
 #if HAVE_AVS
             module = "avs";
 #else
-        x264_cli_log( "x264", X264_LOG_ERROR, "not compiled with AVS audio input support\n" );
-        return -1;
+            x264_cli_log( "x264", X264_LOG_ERROR, "not compiled with AVS audio input support\n" );
+            return -1;
 #endif
+        }
 #if HAVE_LAVF
         if( !module )
             module = "lavf";
