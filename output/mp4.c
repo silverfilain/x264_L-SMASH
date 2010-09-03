@@ -199,7 +199,8 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
         else
             p_audio->has_sbr = 0; // SBR presence isn't specified, so assume implicit signaling
     }
-    else if( !strcmp( info->codec_name, "mp3" ) )
+    else if( ( !strcmp( info->codec_name, "mp3" ) || !strcmp( info->codec_name, "mp2" ) || !strcmp( info->codec_name, "mp1" ) )
+             && info->samplerate >= 16000 ) /* freq <16khz is MPEG-2.5. */
         p_audio->codec_type = ISOM_CODEC_TYPE_MP4A_AUDIO;
     else if( !strcmp( info->codec_name, "ac3" ) )
         p_audio->codec_type = ISOM_CODEC_TYPE_AC_3_AUDIO;
@@ -209,7 +210,7 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
         p_audio->codec_type = ISOM_CODEC_TYPE_SAMR_AUDIO;
     else
     {
-        MP4_LOG_ERROR( "unsupported audio codec.\n" );
+        MP4_LOG_ERROR( "unsupported audio codec '%s'.\n", info->codec_name );
         goto error;
     }
 
@@ -518,8 +519,13 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
         {
             case ISOM_CODEC_TYPE_MP4A_AUDIO :
                 p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_Audio_ISO_14496_3;
-                if( !strcmp( p_audio->info->codec_name, "mp3" ) )
-                    p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_Audio_ISO_11172_3; /* Legacy Interface */
+                if( !strcmp( p_audio->info->codec_name, "mp3" ) || !strcmp( p_audio->info->codec_name, "mp2" ) || !strcmp( p_audio->info->codec_name, "mp1" ) )
+                {
+                    if( p_audio->info->samplerate >= 32000 )
+                        p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_Audio_ISO_11172_3; /* Legacy Interface */
+                    else
+                        p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_Audio_ISO_13818_3; /* Legacy Interface */
+                }
                 p_audio->summary->aot                    = MP4A_AUDIO_OBJECT_TYPE_AAC_LC;
                 p_audio->summary->sbr_mode               = p_audio->has_sbr ? MP4A_AAC_SBR_BACKWARD_COMPATIBLE : MP4A_AAC_SBR_NOT_SPECIFIED;
                 p_audio->summary->exdata_length          = p_audio->info->extradata_size;
