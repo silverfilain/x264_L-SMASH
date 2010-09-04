@@ -349,15 +349,6 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
     x264_put_be16( c, pps_size - 4 );
     flv_append_data( c, p_nal[1].p_payload + 4, pps_size - 4 );
 
-    // FRExt fields
-    if( sps[1] == 100 || sps[1] == 110 || sps[1] == 122 || sps[1] == 144 )
-    {
-        x264_put_byte( c, 0xfd );   // 6 bits reserved (111111) + 2 bits chroma format indicator (1)
-        x264_put_byte( c, (BIT_DEPTH-8) | 0xf8 );   // 5 bits reserved (111111) + 3 bits bit depth of the samples in the luma arrays
-        x264_put_byte( c, (BIT_DEPTH-8) | 0xf8 );   // 5 bits reserved (111111) + 3 bits bit depth of the samples in the chroma arrays
-        x264_put_byte( c, 0 );      // number of spsext
-    }
-
     // rewrite data length info
     unsigned length = c->d_cur - p_flv->start;
     rewrite_amf_be24( c, length, p_flv->start - 10 );
