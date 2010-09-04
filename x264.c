@@ -873,7 +873,7 @@ static struct option long_options[] =
     { "mixed-refs",        no_argument, NULL, 0 },
     { "no-mixed-refs",     no_argument, NULL, 0 },
     { "no-chroma-me",      no_argument, NULL, 0 },
-    { "8x8dct",            no_argument, NULL, 0 },
+    { "8x8dct",            no_argument, NULL, '8' },
     { "no-8x8dct",         no_argument, NULL, 0 },
     { "trellis",     required_argument, NULL, 't' },
     { "fast-pskip",        no_argument, NULL, 0 },
@@ -881,8 +881,8 @@ static struct option long_options[] =
     { "no-dct-decimate",   no_argument, NULL, 0 },
     { "aq-strength", required_argument, NULL, 0 },
     { "aq-mode",     required_argument, NULL, 0 },
-    { "deadzone-inter", required_argument, NULL, '0' },
-    { "deadzone-intra", required_argument, NULL, '0' },
+    { "deadzone-inter", required_argument, NULL, 0 },
+    { "deadzone-intra", required_argument, NULL, 0 },
     { "level",       required_argument, NULL, 0 },
     { "ratetol",     required_argument, NULL, 0 },
     { "vbv-maxrate", required_argument, NULL, 0 },
@@ -1005,9 +1005,9 @@ static int select_output( const char *muxer, char *filename, x264_param_t *param
 static int select_input( const char *demuxer, char *used_demuxer, char *filename,
                          hnd_t *p_handle, video_info_t *info, cli_input_opt_t *opt )
 {
-    const char *ext = get_filename_extension( filename );
-    int b_regular = strcmp( filename, "-" );
     int b_auto = !strcasecmp( demuxer, "auto" );
+    const char *ext = b_auto ? get_filename_extension( filename ) : "";
+    int b_regular = strcmp( filename, "-" );
     if( !b_regular && b_auto )
         ext = "raw";
     b_regular = b_regular && x264_is_regular_file_path( filename );

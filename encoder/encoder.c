@@ -1779,8 +1779,8 @@ static inline void x264_slice_init( x264_t *h, int i_nal_type, int i_global_qp )
     {
         x264_slice_header_init( h, &h->sh, h->sps, h->pps, h->i_idr_pic_id, h->i_frame_num, i_global_qp );
 
-        /* increment id */
-        h->i_idr_pic_id = ( h->i_idr_pic_id + 1 ) % 65536;
+        /* alternate id */
+        h->i_idr_pic_id ^= 1;
     }
     else
     {
@@ -3077,7 +3077,7 @@ void    x264_encoder_close  ( x264_t *h )
         const int i_count = h->stat.i_frame_count[SLICE_TYPE_I] +
                             h->stat.i_frame_count[SLICE_TYPE_P] +
                             h->stat.i_frame_count[SLICE_TYPE_B];
-        int64_t i_mb_count = i_count * h->mb.i_mb_count;
+        int64_t i_mb_count = (int64_t)i_count * h->mb.i_mb_count;
         float fps = (float) h->param.i_fps_num / h->param.i_fps_den;
         float f_bitrate;
         /* duration algorithm fails with one frame */
