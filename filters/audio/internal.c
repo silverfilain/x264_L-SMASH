@@ -82,6 +82,19 @@ uint8_t *x264_af_interleave2( enum SampleFmt outfmt, float **in, unsigned channe
     return out;
 }
 
+uint8_t *x264_af_interleave3( enum SampleFmt outfmt, float **in, unsigned channels, unsigned samplecount, int *map )
+{
+    void *map_tmp[8];
+    for( int i=0; i<channels; i++ )
+        map_tmp[i] = in[i];
+    for( int i=0; i<channels; i++ )
+        in[i] = map_tmp[map[i]];
+    float   *tmp = x264_af_interleave( in, channels, samplecount );
+    uint8_t *out = x264_af_convert( outfmt, (uint8_t*) tmp, SMPFMT_FLT, channels, samplecount );
+    free( tmp );
+    return out;
+}
+
 static inline int samplesize( enum SampleFmt fmt )
 {
     switch( fmt )

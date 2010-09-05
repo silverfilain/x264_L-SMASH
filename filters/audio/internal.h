@@ -55,4 +55,6 @@ float  **x264_af_deinterleave2( uint8_t *samples, enum SampleFmt fmt, unsigned c
 uint8_t *x264_af_interleave2  ( enum SampleFmt outfmt, float **in, unsigned channels, unsigned samplecount );
 uint8_t *x264_af_convert      ( enum SampleFmt outfmt, uint8_t *in, enum SampleFmt fmt, unsigned channels, unsigned samplecount );
 
+uint8_t *x264_af_interleave3  ( enum SampleFmt outfmt, float **in, unsigned channels, unsigned samplecount, int *map );
+
 #endif /* FILTERS_AUDIO_INTERNAL_H_ */
