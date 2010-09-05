@@ -85,6 +85,9 @@ const audio_encoder_t *x264_encoder_by_name( const char *name, int fallback )
 #if HAVE_QT_AAC
         return ENC( qtaac );
 #endif
+#if HAVE_FAAC
+        return ENC( faac );
+#endif
 #if HAVE_LAVF
         return ENC( lavc ); // automatically tries faac and ffaac, in this order
 #endif
@@ -92,6 +95,9 @@ const audio_encoder_t *x264_encoder_by_name( const char *name, int fallback )
     }
 #if HAVE_QT_AAC
     IFRET( qtaac );
+#endif
+#if HAVE_FAAC
+    IFRET( faac );
 #endif
     IFRET( raw );
 #endif /* HAVE_AUDIO */
@@ -144,6 +150,7 @@ const audio_encoder_t *x264_select_audio_encoder( const char *encoder, char* all
                 {
                     if( !strcmp( encoder, "aac" )      ||
                         !strcmp( encoder, "qtaac" )    ||
+                        !strcmp( encoder, "faac" )    ||
                         !strcmp( encoder, "libfaac" )  ||
                         !strcmp( encoder, "ffaac" ) )
                     {

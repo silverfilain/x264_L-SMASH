@@ -27,6 +27,9 @@ extern const audio_encoder_t audio_encoder_mp3;
 #if HAVE_QT_AAC
 extern const audio_encoder_t audio_encoder_qtaac;
 #endif
+#if HAVE_FAAC
+extern const audio_encoder_t audio_encoder_faac;
+#endif
 #endif /* HAVE_AUDIO */
 
 #define AUDIO_CODEC_COMMON_OPTIONS "codec", "is_vbr", "bitrate", "quality"

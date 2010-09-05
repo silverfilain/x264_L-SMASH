@@ -66,6 +66,10 @@ ifneq ($(findstring HAVE_QT_AAC, $(CONFIG)),)
 SRCCLI += audio/encoders/enc_qtaac.c
 endif
 
+ifneq ($(findstring HAVE_FAAC, $(CONFIG)),)
+SRCCLI += audio/encoders/enc_faac.c
+endif
+
 # Visualization sources
 ifeq ($(VIS),yes)
 SRCS   += common/visualize.c common/display-x11.c
