@@ -153,6 +153,7 @@ bit_depth="8"
 
 audio_mp3="auto"
 audio_qtaac="auto"
+audio_faac="auto"
 audio_lavc="auto"
 
 CFLAGS="$CFLAGS -Wall -I."
@@ -669,6 +670,16 @@ if [ "$audio" = "auto" ]; then
             CFLAGS="$CFLAGS -D__CFTREE__ -Wno-multichar -Wno-unknown-pragmas"
         else
             audio_qtaac="no"
+        fi
+    fi
+    if [ "$audio_faac" = "auto" ]; then
+        if cc_check faac.h "-lfaac" "faacEncGetVersion( (void *)0, (void *)0 );"; then
+            LDFLAGSCLI="-lfaac $LDFLAGSCLI"
+            define HAVE_FAAC
+            audio_faac="yes"
+            audio_encs="$audio_encs, faac"
+        else
+            audio_faac="no"
         fi
     fi
     if [ "$audio_lavc" = "auto" -a "$lavf" = "yes" ]; then
