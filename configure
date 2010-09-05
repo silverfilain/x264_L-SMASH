@@ -28,6 +28,8 @@ echo "  --host=HOST              build programs to run on HOST"
 echo "  --cross-prefix=PREFIX    use PREFIX for compilation tools"
 echo "  --sysroot=SYSROOT        root of cross-build tree"
 echo "  --qtsdk=QTSDKROOT        root of QuickTime SDK (x86 mingw only)"
+echo "  --enable-nonfree         allow use of nonfree code, the resulting libs"
+echo "                           and binaries will be unredistributable"
 echo ""
 exit 1
 fi
@@ -151,6 +153,8 @@ vis="no"
 shared="no"
 bit_depth="8"
 
+nonfree="no"
+
 audio_mp3="auto"
 audio_qtaac="auto"
 audio_faac="auto"
@@ -247,7 +251,10 @@ for opt do
             ;;
         --qtsdk=*)
             CFLAGS="$CFLAGS -I${opt#--qtsdk=}/CIncludes"
-            LDFLAGSCLI="$LDFLAGSCLI ${opt#--qtsdk=}/Libraries/QTMLClient.LIB"
+            LDFLAGSCLI="$LDFLAGSCLI ${opt#--qtsdk=}/Libraries/QTMLClient.lib"
+            ;;
+        --enable-nonfree)
+            nonfree="yes"
             ;;
         --bit-depth=*)
             bit_depth="${opt#--bit-depth=}"
@@ -674,10 +681,18 @@ if [ "$audio" = "auto" ]; then
     fi
     if [ "$audio_faac" = "auto" ]; then
         if cc_check faac.h "-lfaac" "faacEncGetVersion( (void *)0, (void *)0 );"; then
-            LDFLAGSCLI="-lfaac $LDFLAGSCLI"
-            define HAVE_FAAC
-            audio_faac="yes"
-            audio_encs="$audio_encs, faac"
+            if [ "$nonfree" = "yes" ]; then
+                LDFLAGSCLI="-lfaac $LDFLAGSCLI"
+                define HAVE_FAAC
+                audio_faac="yes"
+                audio_encs="$audio_encs, faac"
+            else
+                echo "Warning: Found usable FAAC library but --enable-nonfree isn't specified."
+                echo "Warning: If you want to compile libfaac support in, configure with --enable-nonfree."
+                echo "Warning: As a consequence, the resulting binaries will be unredistributable."
+                echo ""
+                audio_faac="no"
+            fi
         else
             audio_faac="no"
         fi
