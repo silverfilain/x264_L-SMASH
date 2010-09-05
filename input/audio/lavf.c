@@ -235,6 +235,13 @@ static hnd_t copy_init( hnd_t filter_chain, const char *opts )
             h->info.extradata = h->ctx->extradata;
             h->info.extradata_size = h->ctx->extradata_size;
         }
+        else if( !strcmp( h->ctx->codec->name, "libopencore_amrwb" ) )
+        {
+            /* FIXME: lavf uses the name "libopencore_amrwb", but it should be "amrwb" just like amrnb. */
+            free( (void*)h->info.codec_name );
+            h->info.codec_name = strdup( "amrwb" );
+            h->out = convert_to_audio_packet( h, h->pkt );
+        }
         else
             h->out = convert_to_audio_packet( h, h->pkt );
 

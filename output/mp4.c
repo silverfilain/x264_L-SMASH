@@ -179,6 +179,7 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
         henc = x264_audio_copy_open( filters );
     else
     {
+        /* libopencore-amr does not have AMR-WB encoder yet, so we can't use it. */
         const audio_encoder_t *encoder = x264_select_audio_encoder( audio_enc, (char*[]){ "aac", "mp3", "ac3", "alac", "amrnb", NULL } );
         MP4_FAIL_IF_ERR( !encoder, "unable to select audio encoder.\n" );
 
@@ -208,6 +209,8 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
         p_audio->codec_type = ISOM_CODEC_TYPE_ALAC_AUDIO;
     else if( !strcmp( info->codec_name, "amrnb" ) )
         p_audio->codec_type = ISOM_CODEC_TYPE_SAMR_AUDIO;
+    else if( !strcmp( info->codec_name, "amrwb" ) )
+        p_audio->codec_type = ISOM_CODEC_TYPE_SAWB_AUDIO;
     else
     {
         MP4_LOG_ERROR( "unsupported audio codec '%s'.\n", info->codec_name );
@@ -543,8 +546,13 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
                 break;
             case ISOM_CODEC_TYPE_SAMR_AUDIO :
                 p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_PRIV_SAMR_AUDIO;
-                MP4_FAIL_IF_ERR( mp4sys_amrnb_create_damr( p_audio->summary ),
-                                 "failed to create Narrowband AMR specific info.\n" );
+                MP4_FAIL_IF_ERR( mp4sys_amr_create_damr( p_audio->summary ),
+                                 "failed to create AMR specific info.\n" );
+                break;
+            case ISOM_CODEC_TYPE_SAWB_AUDIO :
+                p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_PRIV_SAWB_AUDIO;
+                MP4_FAIL_IF_ERR( mp4sys_amr_create_damr( p_audio->summary ),
+                                 "failed to create AMR specific info.\n" );
                 break;
             default :
                 p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_NONE;
@@ -576,6 +584,8 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
             p_audio->codec_type = ISOM_CODEC_TYPE_MP4A_AUDIO; break;
         case MP4SYS_OBJECT_TYPE_PRIV_SAMR_AUDIO:
             p_audio->codec_type = ISOM_CODEC_TYPE_SAMR_AUDIO; break;
+        case MP4SYS_OBJECT_TYPE_PRIV_SAWB_AUDIO:
+            p_audio->codec_type = ISOM_CODEC_TYPE_SAWB_AUDIO; break;
         default:
             MP4_FAIL_IF_ERR( 1, "Unknown object_type_indication.\n" );
         }

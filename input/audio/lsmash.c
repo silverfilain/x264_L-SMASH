@@ -74,6 +74,9 @@ static int lsmash_init( hnd_t *handle, const char *opt_str )
         case MP4SYS_OBJECT_TYPE_PRIV_SAMR_AUDIO:
             h->info.codec_name = "amrnb";
             break;
+        case MP4SYS_OBJECT_TYPE_PRIV_SAWB_AUDIO:
+            h->info.codec_name = "amrwb";
+            break;
         default :
             AF_LOG_ERR( h, "unknown audio stream type.\n" );
             goto error;

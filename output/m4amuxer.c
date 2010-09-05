@@ -104,6 +104,8 @@ int main( int argc, char* argv[] )
         codec_code = ISOM_CODEC_TYPE_MP4A_AUDIO; break;
     case MP4SYS_OBJECT_TYPE_PRIV_SAMR_AUDIO:
         codec_code = ISOM_CODEC_TYPE_SAMR_AUDIO; break;
+    case MP4SYS_OBJECT_TYPE_PRIV_SAWB_AUDIO:
+        codec_code = ISOM_CODEC_TYPE_SAWB_AUDIO; break;
     default:
         return M4AMUX_ERR( "Unknown object_type_indication.\n" );
     }
