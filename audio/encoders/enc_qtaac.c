@@ -637,7 +637,7 @@ static void free_packet( hnd_t handle, audio_packet_t *packet )
     x264_af_free_packet( packet );
 }
 
-static const int qt_channel_map[][8] = {
+static int qt_channel_map[][8] = {
  { 0, },
  { 0, 1, },
  { 2, 0, 1, },
@@ -654,7 +654,6 @@ static OSStatus pcmInputDataProc( ComponentInstance ci,
                           AudioStreamPacketDescription **outDataPacketDescription,
                           void *inRefCon )
 {
-    int i;
     enc_qtaac_t *h = inRefCon;
     UInt32 requested_packets = *ioNumberDataPackets;
 
@@ -674,15 +673,9 @@ static OSStatus pcmInputDataProc( ComponentInstance ci,
         h->last_dts = h->last_sample;
     h->last_sample += h->in->samplecount;
 
-    void *tmp[8];
-    for( i=0; i<h->info.channels; i++ )
-        tmp[i] = h->in->samples[i];
-    for( i=0; i<h->info.channels; i++ )
-        h->in->samples[i] = tmp[qt_channel_map[h->info.channels-1][i]];
-
     if( h->samplebuffer )
         free( h->samplebuffer );
-    h->samplebuffer = x264_af_interleave2( SMPFMT_FLT, h->in->samples, h->info.channels, h->in->samplecount );
+    h->samplebuffer = x264_af_interleave3( SMPFMT_FLT, h->in->samples, h->info.channels, h->in->samplecount, qt_channel_map[h->info.channels-1] );
 
     ioData->mNumberBuffers = 1;
     ioData->mBuffers[0].mNumberChannels = h->info.channels;
