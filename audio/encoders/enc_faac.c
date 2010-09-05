@@ -261,7 +261,7 @@ static void faac_help( const char * const codec_name, int longhelp )
     printf( "        --aquality        VBR quality. [100]\n" );
     printf( "                              10 (lowest) to 500 (highest)\n" );
     printf( "        --abitrate        Bitrate in kbits/s. [128]\n" );
-    printf( "                          Roughly 32-320 are achieved at typical\n);
+    printf( "                          Roughly 32-320 are achieved at typical\n" );
     printf( "                          2ch, 44100Hz, 16bit PCM audio.\n" );
 }
 
