@@ -150,7 +150,7 @@ int main( int argc, char* argv[] )
     if( isom_set_handler_name( structs.root, track, handler_name ) )
         return M4AMUX_ERR( "Failed to set handler name.\n" );
 
-    uint32_t sample_entry = isom_add_sample_entry( structs.root, track, ISOM_CODEC_TYPE_MP4A_AUDIO, structs.summary );
+    uint32_t sample_entry = isom_add_sample_entry( structs.root, track, codec_code, structs.summary );
     if( !sample_entry )
         return M4AMUX_ERR( "Failed to add sample_entry.\n" );
 
