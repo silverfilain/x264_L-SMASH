@@ -286,7 +286,7 @@ static int write_audio_frames( mp4_hnd_t *p_mp4, double video_cts, int finish )
         p_sample->cts = audio_timestamp;
         p_sample->prop.sync_point = 0; /* means, every sample can be random access point. */
         p_sample->index = p_audio->i_sample_entry;
-        MP4_FAIL_IF_ERR( isom_write_sample( p_mp4->p_root, p_audio->i_track, p_sample, 0.5 ),
+        MP4_FAIL_IF_ERR( isom_write_sample( p_mp4->p_root, p_audio->i_track, p_sample ),
                          "failed to write a audio sample.\n" );
 
         p_audio->i_numframe++;
@@ -458,6 +458,10 @@ static int open_file(
 static int set_param( hnd_t handle, x264_param_t *p_param )
 {
     mp4_hnd_t *p_mp4 = handle;
+
+    /* Set max duration per chunk. */
+    MP4_FAIL_IF_ERR( isom_set_max_chunk_duration( p_mp4->p_root, 0.5 ),
+                     "failed to set max duration per chunk.\n" );
 
     p_mp4->i_time_inc = p_param->i_timebase_num;
 
@@ -666,7 +670,7 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
     p_sample->index = 1;
 
     /* Write data per sample. */
-    MP4_FAIL_IF_ERR( isom_write_sample( p_mp4->p_root, p_mp4->i_track, p_sample, 0.5 ),
+    MP4_FAIL_IF_ERR( isom_write_sample( p_mp4->p_root, p_mp4->i_track, p_sample ),
                      "failed to write a video frame.\n" );
 
     p_mp4->i_numframe++;

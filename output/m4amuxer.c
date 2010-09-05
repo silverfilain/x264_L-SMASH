@@ -136,6 +136,9 @@ int main( int argc, char* argv[] )
     if( !track )
         return M4AMUX_ERR( "Failed to add mandatory boxes.\n" );
 
+    if( isom_set_max_chunk_duration( structs.root, 0.5 ) )
+        return M4AMUX_ERR( "Failed to set max duration per chunk.\n" );
+
     if( isom_set_movie_timescale( structs.root, 600 ) )
         return M4AMUX_ERR( "Failed to set movie timescale.\n" );
 
@@ -196,7 +199,7 @@ int main( int argc, char* argv[] )
         sample->cts = sample->dts;
         sample->index = sample_entry;
         sample->prop = dependency; /* every sample is a random access point. */
-        if( isom_write_sample( structs.root, track, sample, 0.5 ) )
+        if( isom_write_sample( structs.root, track, sample ) )
             return M4AMUX_ERR( "Failed to write a frame.\n" );
         numframe++;
         eprintf( "frame = %d\r", numframe );
