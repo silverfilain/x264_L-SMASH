@@ -754,6 +754,8 @@ static void Help( x264_param_t *defaults, int longhelp )
     H2( "      --chapter <string>      Set the chapter list from chapter format file\n"
         "                              Format of each line: hours:minutes:seconds.milliseconds chaptername\n" );
     H2( "      --language <string>     Set the language by ISO639-2 language codes\n" );
+    H2( "      --no-mp4-sar            Eliminate sample aspect ratio information on the container level\n"
+        "                              Valid only with mp4/3gp/3g2 muxer (otherwise ignored)\n" );
     H0( "\n" );
     H0( "Filtering:\n" );
     H0( "\n" );
@@ -803,7 +805,8 @@ enum {
     OPT_AUDIOCODECQUALITY,
     OPT_AUDIOEXTRAOPT,
     OPT_CHAPTER,
-    OPT_LANGUAGE
+    OPT_LANGUAGE,
+    OPT_NO_CONTAINER_SAR
 } OptionsOPT;
 
 static char short_options[] = "8A:B:b:f:hI:i:m:o:p:q:r:t:Vvw";
@@ -965,6 +968,7 @@ static struct option long_options[] =
     { "aextraopt",   required_argument, NULL, OPT_AUDIOEXTRAOPT },
     { "chapter",     required_argument, NULL, OPT_CHAPTER },
     { "language",    required_argument, NULL, OPT_LANGUAGE },
+    { "no-container-sar",  no_argument, NULL, OPT_NO_CONTAINER_SAR },
     {0, 0, 0, 0}
 };
 
@@ -1426,6 +1430,8 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
                 break;
             case OPT_LANGUAGE:
                 output_opt.language = optarg;
+            case OPT_NO_CONTAINER_SAR:
+                output_opt.no_sar = 1;
                 break;
             default:
 generic_option:

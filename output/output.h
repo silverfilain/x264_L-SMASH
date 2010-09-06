@@ -32,6 +32,7 @@ typedef struct
 {
     char *chapter;
     char *language;
+    int no_sar;
 } cli_output_opt_t;
 
 typedef struct
