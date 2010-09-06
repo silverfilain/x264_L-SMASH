@@ -34,6 +34,9 @@ const audio_encoder_entry_t registered_audio_encoders[] = {
 #endif
     { "amrnb",  "libopencore_amrnb", &audio_encoder_lavc, },
 #endif
+#if HAVE_AMRWB_3GPP
+    { "amrwb",  "amrnb_3gpp", &audio_encoder_amrwb_3gpp, },
+#endif
     { NULL, },
 };
 

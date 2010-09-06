@@ -31,6 +31,9 @@ extern const audio_encoder_t audio_encoder_qtaac;
 #if HAVE_FAAC
 extern const audio_encoder_t audio_encoder_faac;
 #endif
+#if HAVE_AMRWB_3GPP
+extern const audio_encoder_t audio_encoder_amrwb_3gpp;
+#endif
 
 enum audio_encoder_query
 {

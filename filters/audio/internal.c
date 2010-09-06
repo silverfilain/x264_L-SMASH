@@ -21,6 +21,16 @@ int x264_af_resize_buffer( float **buffer, unsigned channels, unsigned samplecou
     return 0;
 }
 
+int x264_af_resize_fill_buffer( float **buffer, unsigned out_samplecount, unsigned channels, unsigned in_samplecount, float value )
+{
+    if( x264_af_resize_buffer( buffer, channels, out_samplecount ) )
+        return -1;
+    for( int c = 0; c < channels; c++ )
+        for( int s = in_samplecount; s < out_samplecount; s++ )
+            buffer[c][s] = value;
+    return 0;
+}
+
 float **x264_af_dup_buffer( float **buffer, unsigned channels, unsigned samplecount )
 {
     float **buf = x264_af_get_buffer( channels, samplecount );
