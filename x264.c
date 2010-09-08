@@ -676,6 +676,7 @@ static void Help( x264_param_t *defaults, int longhelp )
     H1( "      --ademuxer <string>     Demux audio by the specified demuxer [%s]\n"
         "                              Supported and compiled in demuxers:\n"
         "                                  - %s\n", audio_demuxers[0], stringify_names( buf, audio_demuxers ) );
+    H0( "      --atrack <integer>      Audio track number [auto]\n" );
     H0( "      --acodec <string>       Audio codec [auto]\n" );
     H1( "                              Available settings:\n" );
     H1( "                                  - auto (select muxer default codec and its default encoder)\n" );
@@ -779,6 +780,7 @@ enum {
     OPT_INPUT_CSP,
     OPT_AUDIOFILE,
     OPT_AUDIODEMUXER,
+    OPT_AUDIOTRACK,
     OPT_AUDIOCODEC,
     OPT_AUDIOBITRATE,
     OPT_AUDIOQUALITY,
@@ -938,6 +940,7 @@ static struct option long_options[] =
     { "input-csp",   required_argument, NULL, OPT_INPUT_CSP },
     { "audiofile",   required_argument, NULL, OPT_AUDIOFILE },
     { "ademuxer",    required_argument, NULL, OPT_AUDIODEMUXER },
+    { "atrack",      required_argument, NULL, OPT_AUDIOTRACK },
     { "acodec",      required_argument, NULL, OPT_AUDIOCODEC },
     { "abitrate",    required_argument, NULL, OPT_AUDIOBITRATE },
     { "aquality",    required_argument, NULL, OPT_AUDIOQUALITY },
@@ -1188,6 +1191,7 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
     char *audio_enc      = "auto";
     char *audio_filename = NULL;
     const char *audio_demuxer = "auto";
+    int audio_track      = TRACK_ANY;
     float audio_bitrate  = -1;
     float audio_quality  = NAN;
     float acodec_quality = NAN;
@@ -1383,6 +1387,9 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
             case OPT_AUDIODEMUXER:
                 FAIL_IF_ERROR( parse_enum_name( optarg, audio_demuxers, &audio_demuxer ), "Unknown audio demuxer `%s'\n", optarg )
                 break;
+            case OPT_AUDIOTRACK:
+                audio_track = atoi( optarg );
+                break;
             case OPT_AUDIOBITRATE:
                 audio_bitrate = atof( optarg );
                 FAIL_IF_ERROR( audio_bitrate <= 0, "bitrate must be > 0.\n" );
@@ -1470,7 +1477,7 @@ generic_option:
         {
             char used_demuxer[8];
             if( !select_audio_demuxer( audio_demuxer, used_demuxer, &audio_enc, audio_filename ) )
-                haud = x264_audio_open_from_file( used_demuxer, audio_filename, TRACK_ANY );
+                haud = x264_audio_open_from_file( used_demuxer, audio_filename, audio_track );
             else
             {
                 x264_cli_log( "x264", X264_LOG_WARNING, "no suitable audio demuxer is found for --audiofile, disabling audio.\n" );
@@ -1478,7 +1485,7 @@ generic_option:
             }
         }
         else if( input.open_audio )
-            haud = input.open_audio( opt->hin, TRACK_ANY );
+            haud = input.open_audio( opt->hin, audio_track );
         else
         {
             x264_cli_log( "x264", X264_LOG_WARNING, "the used input does not support audio and --audiofile was not given, disabling audio.\n" );
