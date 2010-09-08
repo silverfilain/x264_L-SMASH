@@ -107,29 +107,6 @@ static const char * const muxer_names[] =
     0
 };
 
-// Keep in sync with x264_encoder_by_name (audio/encoders.c)
-static const char * const audio_encoders[] =
-{
-    "auto",
-#if HAVE_AUDIO
-    "raw",
-#if HAVE_LAME
-    "mp3",
-#endif
-#if HAVE_QT_AAC
-    "qtaac",
-#endif
-#if HAVE_FAAC
-    "faac",
-#endif
-#if HAVE_LAVF
-    "lavc",
-#endif
-#endif /* HAVE_AUDIO */
-    "none",
-    NULL
-};
-
 static const char * const audio_demuxers[] =
 {
     "auto",
@@ -695,21 +672,28 @@ static void Help( x264_param_t *defaults, int longhelp )
     H0( "      Audio options may be used if audio support is compiled in.\n" );
     H0( "      Audio is automatically opened from the input file if supported by the demuxer.\n" );
     H0( "\n" );
-    H0( "      --audiofile <filename>  Uses audio from the specified file.\n" );
-    H1( "      --ademuxer <string>     Demux audio by the specified demuxer [%s].\n"
+    H0( "      --audiofile <filename>  Uses audio from the specified file\n" );
+    H1( "      --ademuxer <string>     Demux audio by the specified demuxer [%s]\n"
         "                              Supported and compiled in demuxers:\n"
         "                                  - %s\n", audio_demuxers[0], stringify_names( buf, audio_demuxers ) );
-    H0( "      --acodec <string>       Audio codec [auto].\n");
-    H1( "                              Supported and compiled in codecs:\n" );
-    H1( "                                  - %s\n", stringify_names( buf, audio_encoders ) );
-    H0( "      --abitrate <float>      Enables bitrate mode and set bitrate (kbits/s).\n" );
+    H0( "      --acodec <string>       Audio codec [auto]\n" );
+    H1( "                              Available settings:\n" );
+    H1( "                                  - auto (select muxer default codec and its default encoder)\n" );
+    H1( "                                  - copy (copy source audio without transcoding)\n" );
+    H1( "                                  - none (disable audio)\n" );
+    H1( "                                Set audio format only and automatically choose encoder\n" );
+    x264_audio_encoder_list_codecs( longhelp );
+    H2( "                                Force to use specified audio encoder\n" );
+    H2( "                                'ff' prefix indicate they are supported via libavcodec\n" );
+    x264_audio_encoder_list_encoders( longhelp );
+    H0( "      --abitrate <float>      Enables bitrate mode and set bitrate (kbits/s)\n" );
     H0( "      --aquality <float>      Quality-based VBR [codec-dependent default]\n" );
     H0( "      --asamplerate <integer> Audio samplerate (Hz) [keep source samplerate]\n" );
     H0( "      --acodec-quality <float> Codec's internal compression quality [codec specific]\n" );
     H1( "      --aextraopt <string>    Pass extra option to codec [codec specific]\n" );
     H1( "                              Should be comma separated \"name=value\" style\n" );
     H0( "\n" );
-    x264_audio_encoder_show_help( audio_encoders, longhelp );
+    x264_audio_encoder_show_help( longhelp );
     H0( "\n" );
     H0( "Input/Output:\n" );
     H0( "\n" );
@@ -1383,8 +1367,9 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
                     audio_enable = 0;
                 else
                 {
-                    FAIL_IF_ERROR( strcmp( audio_enc, "auto" ) && strcmp( audio_enc, "copy" ) && !x264_encoder_by_name( audio_enc, 1 ),
-                                   "audio encoder '%s' not supported or not compiled in\n", audio_enc );
+                    FAIL_IF_ERROR( strcmp( audio_enc, "auto" ) && strcmp( audio_enc, "copy" ) &&
+                                   !x264_audio_encoder_by_name( audio_enc, QUERY_CODEC, NULL ) && !x264_audio_encoder_by_name( audio_enc, QUERY_ENCODER, NULL ),
+                                   "audio codec '%s' not supported or not compiled in\n", audio_enc );
 #ifdef HAVE_AUDIO
                     audio_enable = 1;
 #else
@@ -1510,7 +1495,6 @@ generic_option:
                   info.height, info.interlaced ? 'i' : 'p', info.sar_width, info.sar_height,
                   info.fps_num, info.fps_den, info.vfr ? 'v' : 'c' );
 
-#define MAX_ARGS 256
     char arg[MAX_ARGS] = { 0 };
     int len = 0;
     if( audio_enable )
@@ -1528,10 +1512,7 @@ generic_option:
 
         if( audio_extraopt )
             len += snprintf( &arg[len], MAX_ARGS - len, "%s%s", len ? "," : "", audio_extraopt );
-
-        len += snprintf( &arg[len], MAX_ARGS - len, "%scodec=%s", len ? "," : "", audio_enc );
     }
-#undef MAX_ARGS
 
     FAIL_IF_ERROR( output.open_file( output_filename, &opt->hout, haud, audio_enc, arg ) < 0, "could not open output file `%s'\n", output_filename )
 

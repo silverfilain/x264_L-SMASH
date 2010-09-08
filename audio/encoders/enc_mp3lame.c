@@ -275,28 +275,26 @@ static void mp3_close( hnd_t handle )
     free( h );
 }
 
-static void mp3_help( const char * const codec_name, int longhelp )
+static void mp3_help( const char * const encoder_name )
 {
-   if( longhelp < 2 )
-       return;
-
-    printf( "      * For %s encoder (--acodec %s)\n", codec_name, codec_name );
-    printf( "        --aquality        VBR quality. [6]\n" );
-    printf( "                              9 (lowest) to 0 (highest)\n" );
-    printf( "        --abitrate        Enables CBR mode. Bitrate should be one of the values below.\n" );
-    printf( "                            - for 32000Hz or 44100Hz or 48000Hz\n" );
-    printf( "                              32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320\n" );
-    printf( "                            - for 16000Hz or 22050Hz or 24000Hz\n" );
-    printf( "                              8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160\n" );
-    printf( "                            - for 8000Hz or 11025Hz or 12000Hz\n" );
-    printf( "                              8, 16, 24, 32, 40, 48, 56, 64\n" );
-    printf( "        --asamplerate     Output samplerate. Should be one of the values below.\n" );
-    printf( "                              8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000\n" );
-    printf( "        --acodec-quality  Internal algorithmic complexity. [0]\n" );
-    printf( "                              9 (poor quality) to 0 (best quality)\n" );
+    printf( "      * lame encoder help\n" );
+    printf( "        --aquality        VBR quality [6]\n" );
+    printf( "                             9 (lowest) to 0 (highest)\n" );
+    printf( "        --abitrate        Enables CBR mode. Bitrate should be one of the values below\n" );
+    printf( "                           - for 32000Hz or 44100Hz or 48000Hz\n" );
+    printf( "                             32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320\n" );
+    printf( "                           - for 16000Hz or 22050Hz or 24000Hz\n" );
+    printf( "                             8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160\n" );
+    printf( "                           - for 8000Hz or 11025Hz or 12000Hz\n" );
+    printf( "                             8, 16, 24, 32, 40, 48, 56, 64\n" );
+    printf( "        --asamplerate     Output samplerate. Should be one of the values below\n" );
+    printf( "                             8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000\n" );
+    printf( "        --acodec-quality  Internal algorithmic complexity [0]\n" );
+    printf( "                             9 (poor quality) to 0 (best quality)\n" );
+    printf( "\n" );
 }
 
-const audio_encoder_t audio_encoder_mp3 =
+const audio_encoder_t audio_encoder_lame =
 {
     .init            = init,
     .get_info        = get_info,
@@ -305,5 +303,6 @@ const audio_encoder_t audio_encoder_mp3 =
     .finish          = finish,
     .free_packet     = free_packet,
     .close           = mp3_close,
-    .show_help       = mp3_help
+    .show_help       = mp3_help,
+    .is_valid_encoder = NULL
 };

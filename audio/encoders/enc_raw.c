@@ -83,14 +83,12 @@ static void raw_close( hnd_t handle )
     free( handle );
 }
 
-static void raw_help( const char * const codec_name, int longhelp )
+static void raw_help( const char * const codec_name )
 {
-    if( longhelp < 2 )
-        return;
-
-    printf( "      * For %s encoder (--acodec %s)\n", codec_name, codec_name );
-    printf( "        Currently, all audio options except for --acodec and\n" );
-    printf( "        --audiofile are ignored for this codec.\n" );
+    printf( "      * raw encoder help\n" );
+    printf( "        Directly pass the decoded PCM samples (in native endian) to muxer.\n" );
+    printf( "        All audio options except for --acodec and --audiofile are ignored.\n" );
+    printf( "\n" );
 }
 
 const audio_encoder_t audio_encoder_raw =
@@ -102,5 +100,6 @@ const audio_encoder_t audio_encoder_raw =
     .finish          = finish,
     .free_packet     = free_packet,
     .close           = raw_close,
-    .show_help       = raw_help
+    .show_help       = raw_help,
+    .is_valid_encoder = NULL
 };
