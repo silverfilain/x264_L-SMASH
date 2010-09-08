@@ -18,6 +18,45 @@ typedef struct enc_lavc_t
     enum SampleFormat smpfmt;
 } enc_lavc_t;
 
+static int is_encoder_available( const char *name, void **priv )
+{
+    avcodec_register_all();
+    AVCodec *enc = NULL;
+
+    if( (enc = avcodec_find_encoder_by_name( name )) )
+    {
+        if( priv )
+            *priv = enc;
+        return 0;
+    }
+
+    if( name[0] == 'f' && name[1] == 'f' )
+    {
+        enc = avcodec_find_encoder_by_name( &name[2] );
+        if( enc )
+        {
+            if( priv )
+                *priv = enc;
+            return 0;
+        }
+    }
+
+    return -1;
+}
+
+static const struct {
+    enum CodecID id;
+    const char *name;
+} ffcodecid_to_codecname[] = {
+    { CODEC_ID_MP3,    "mp3", },
+    { CODEC_ID_VORBIS, "vorbis", },
+    { CODEC_ID_AAC,    "aac", },
+    { CODEC_ID_AC3,    "ac3", },
+    { CODEC_ID_ALAC,   "alac", },
+    { CODEC_ID_AMR_NB, "amrnb", },
+    { CODEC_ID_NONE,   NULL, },
+};
+
 #define ISCODEC( name ) (!strcmp( h->info.codec_name, #name ))
 
 static hnd_t init( hnd_t filter_chain, const char *opt_str )
@@ -30,66 +69,24 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     char **opts = x264_split_options( opt_str, (const char*[]){ AUDIO_CODEC_COMMON_OPTIONS, NULL } );
     assert( opts );
 
-    const char *codecname = h->info.codec_name = strdup( x264_get_option( "codec", opts ) );
-    RETURN_IF_ERR( !h->info.codec_name, "lavc", NULL, "codec not specified" );
-
-    if( ISCODEC( mp3 ) )
-        codecname = "libmp3lame";
-    else if( ISCODEC( vorbis ) )
-        codecname = "libvorbis";
-    else if( ISCODEC( libmp3lame ) )
-    {
-        free( (void*) h->info.codec_name ); // stupid const warnings
-        h->info.codec_name = strdup( "mp3" );
-        codecname = "libmp3lame";
-    }
-    else if( ISCODEC( libvorbis ) )
-    {
-        free( (void*) h->info.codec_name );
-        h->info.codec_name = strdup( "vorbis" );
-        codecname = "libvorbis";
-    }
-    else if( ISCODEC( aac ) || ISCODEC( libfaac ) )
-    {
-        free( (void*) h->info.codec_name );
-        h->info.codec_name = strdup( "aac" );
-        codecname = "libfaac";
-    }
-    else if( ISCODEC( ac3 ) )
-        codecname = "ac3";
-    else if( ISCODEC( alac ) )
-        codecname = "alac";
-    else if( ISCODEC( amrnb ) || ISCODEC( libopencore_amrnb ) )
-    {
-        free( (void*) h->info.codec_name );
-        h->info.codec_name = strdup( "amrnb" );
-        codecname = "libopencore_amrnb";
-    }
-    else // Check if the codec was prefixed with an 'ff' to "force" a libavcodec codec
-    {    // TODO: figure out how to make x264_select_audio_encoder like this
-        codecname = malloc( 32 );
-        if( sscanf( h->info.codec_name, "ff%31s", (char*)codecname ) )
-            h->info.codec_name = codecname;
-        else
-        {
-            free( (void*) codecname );
-            codecname = h->info.codec_name;
-        }
-    }
+    const char *codecname = strdup( x264_get_option( "codec", opts ) );
+    RETURN_IF_ERR( !codecname, "lavc", NULL, "codec not specified" );
 
     avcodec_register_all();
 
-    AVCodec *codec = avcodec_find_encoder_by_name( codecname );
-    if( !codec && !strcmp( x264_get_option( "codec", opts ), "aac" ) )
-    {
-        x264_cli_log( "lavc", X264_LOG_WARNING, "libfaac encoder unavailable, trying ffaac encoder...\n" );
-        codecname = "aac";
-        codec     = avcodec_find_encoder_by_name( codecname );
-    }
-
-    RETURN_IF_ERR( !codec, "lavc", NULL, "could not find codec %s\n", codec );
+    AVCodec *codec = NULL;
+    RETURN_IF_ERR( is_encoder_available( codecname, (void **)&codec ),
+                   "lavc", NULL, "codec %s not supported or compiled in\n", codecname );
 
     int i;
+    h->info.codec_name = NULL;
+    for( i = 0; ffcodecid_to_codecname[i].id != CODEC_ID_NONE; i++ )
+    {
+        if( codec->id == ffcodecid_to_codecname[i].id )
+            h->info.codec_name = ffcodecid_to_codecname[i].name;
+    }
+    RETURN_IF_ERR( !h->info.codec_name, "lavc", NULL, "failed to set codec name for muxer\n" );
+
     for( i = 0; codec->sample_fmts[i] != -1; i++ )
     {
         // Prefer floats...
@@ -132,7 +129,7 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     else
         h->ctx->bit_rate = lrintf( brval * 1000.0f );
 
-    RETURN_IF_ERR( avcodec_open( h->ctx, codec ), "lavc", NULL, "could not open the %s encoder\n", h->info.codec_name );
+    RETURN_IF_ERR( avcodec_open( h->ctx, codec ), "lavc", NULL, "could not open the %s encoder\n", codec->name );
 
     if( ISCODEC( ac3 ) )
     {
@@ -165,7 +162,7 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
                       ? FF_MIN_BUFFER_SIZE * 3 / 2
                       : 2 * (8 + h->info.framesize);
 
-    x264_cli_log( "audio", X264_LOG_INFO, "opened libavcodec's %s encoder (%s%.1f%s, %dbits, %dch, %dhz)\n", codecname,
+    x264_cli_log( "audio", X264_LOG_INFO, "opened libavcodec's %s encoder (%s%.1f%s, %dbits, %dch, %dhz)\n", codec->name,
                   is_vbr ? "V" : "", brval, is_vbr ? "" : "kbps", h->info.chansize * 8, h->info.channels, h->info.samplerate );
     return h;
 }
@@ -242,48 +239,46 @@ static void lavc_close( hnd_t handle )
     free( h );
 }
 
-static void lavc_help( const char * const codec_name, int longhelp )
+static void lavc_help_default( const char * const encoder_name )
 {
-    if( longhelp < 2 )
+    printf( "      * (ff)%s encoder help\n", encoder_name );
+    printf( "        No detailed help available at present\n" );
+    printf( "\n" );
+}
+
+static void lavc_help_amrnb( const char * const encoder_name )
+{
+    printf( "      * (ff)%s encoder help\n", encoder_name );
+    printf( "        This encoder accepts only mono (1ch), 8000Hz audio.\n" );
+    printf( "        --aquality        Cannot be used\n" );
+    printf( "        --abitrate        Only one of the values below can be acceptable\n" );
+    printf( "                             4.75, 5.15, 5.9, 6.7, 7.4, 7.95, 10.2, 12.2\n" );
+    printf( "\n" );
+}
+
+static void lavc_help( const char * const encoder_name )
+{
+    AVCodec *enc = NULL;
+
+    if( is_encoder_available( encoder_name, (void **)&enc ) )
         return;
 
-    avcodec_register_all();
-    AVCodec *enc = NULL;
-    int num = 0;
-    int len = 0, line = 1;
-    char list[1024];
+#define SHOWHELP( encoder, helpname ) if( !strcmp( enc->name, #encoder ) ) lavc_help_##helpname ( #encoder );
 
-    printf( "      * For %s encoder\n", codec_name );
-    printf( "        --asamplerate is not supported for this encoder.\n" );
-    printf( "\n" );
-    printf( "        The list of audio codecs compiled in libavcodec are:\n" );
-    while( (enc = av_codec_next( enc )) )
-    {
-        if( enc->type == CODEC_TYPE_AUDIO && enc->encode )
-        {
-            len += snprintf( &list[len], 1024-len, "%s ", enc->name );
-            num++;
-        }
-        if( len / 80 == line )
-        {
-            len += snprintf( &list[len], 1024-len, "\n" );
-            line++;
-        }
-    }
-    if( !num )
-    {
-        printf( "          No audio encoder support is compiled in!\n" );
-    }
-    else
-    {
-        printf( "          %s\n", list );
-        printf( "\n" );
-        printf( "        These are available by passing the name to --acodec option.\n" );
-        printf( "        Also, internal codec selection can be overriden by putting\n" );
-        printf( "        'ff' prefix before the name and force to use lavc version.\n" );
-        printf( "        Currently, there is no help for each encoders, so refer to\n" );
-        printf( "        the implementations of ffmpeg and individual encoder library.\n" );
-    }
+#if 0
+    SHOWHELP( libmp3lame, default );
+    SHOWHELP( libfaac, default );
+    SHOWHELP( aac, default );
+    SHOWHELP( ac3, default );
+    SHOWHELP( alac, default );
+    SHOWHELP( libvorbis, default );
+    SHOWHELP( vorbis, default );
+#endif
+    SHOWHELP( libopencore_amrnb, amrnb );
+
+#undef SHOWHELP
+
+    return;
 }
 
 const audio_encoder_t audio_encoder_lavc =
@@ -295,5 +290,6 @@ const audio_encoder_t audio_encoder_lavc =
     .finish          = finish,
     .free_packet     = free_packet,
     .close           = lavc_close,
-    .show_help       = lavc_help
+    .show_help       = lavc_help,
+    .is_valid_encoder = is_encoder_available
 };

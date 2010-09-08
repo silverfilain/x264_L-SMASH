@@ -44,6 +44,7 @@ enum SampleFmt {
 
 float  **x264_af_get_buffer   ( unsigned channels, unsigned samplecount );
 int      x264_af_resize_buffer( float **buffer, unsigned channels, unsigned samplecount );
+int      x264_af_resize_fill_buffer( float **buffer, unsigned out_samplecount, unsigned channels, unsigned in_samplecount, float value );
 void     x264_af_free_buffer  ( float **buffer, unsigned channels );
 float  **x264_af_dup_buffer   ( float **buffer, unsigned channels, unsigned samplecount );
 int      x264_af_cat_buffer   ( float **buf, unsigned bufsamples, float **in, unsigned insamples, unsigned channels );

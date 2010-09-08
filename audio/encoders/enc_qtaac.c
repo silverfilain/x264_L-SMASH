@@ -789,21 +789,17 @@ static void qtaac_close( hnd_t handle )
     free( h );
 }
 
-static void qtaac_help( const char * const codec_name, int longhelp )
+static void qtaac_help( const char * const encoder_name )
 {
-    if( longhelp < 2 )
-        return;
-
-    printf( "      * For %s encoder (--acodec %s)\n", codec_name, codec_name );
-    printf( "        An AAC-LC and AAC-HE encoder using QuickTime Audio Compressor.\n" );
-    printf( "\n" );
-    printf( "        --aquality        VBR quality. Cannot be used for HE-AAC.[63]\n" );
-    printf( "                          Should be one of the values below.\n" );
+    printf( "      * qtaac encoder help\n" );
+    printf( "        --aquality        VBR quality [63]\n" );
+    printf( "                          Cannot be used for HE-AAC and possible values are:\n" );
     printf( "                             0, 9 ,18 ,27 ,36 ,45 ,54 ,63 ,73, 82, 91, 100, 109, 118, 127\n" );
     printf( "                          0 is lowest and 127 is highest.\n" );
-    printf( "        --abitrate        Enables bitrate mode. Bitrate should be one of the discrete preset\n" );
-    printf( "                          values depending on profile, channels count, and samplerate.\n" );
-    printf( "                          Examples for typical configurations.\n" );
+    printf( "        --abitrate        Enables bitrate mode\n" );
+    printf( "                          Bitrate should be one of the discrete preset values depending on\n" );
+    printf( "                          profile, channels count, and samplerate.\n" );
+    printf( "                          Examples for typical configurations\n" );
     printf( "                           - for 44100Hz or 48000Hz with 1ch\n" );
     printf( "                             LC: 32, 40, 48, 56, 64, 72, 80, 96, 112, 128, 144, 160, 192, 224, 256\n" );
     printf( "                             HE: 16, 24, 32, 40\n" );
@@ -813,21 +809,22 @@ static void qtaac_help( const char * const codec_name, int longhelp )
     printf( "                           - for 44100Hz or 48000Hz with 5.1ch\n" );
     printf( "                             LC: 160, 192, 224, 256, 288, 320, 384, 448, 512, 576, 640, 768\n");
     printf( "                             HE: 80, 96, 112, 128, 160, 192\n");
-    printf( "                          The lower samplerate, the lower min/max values are applied.\n" );
-    printf( "        --asamplerate     Output samplerate. Should be one of the below.\n" );
+    printf( "                          The lower samplerate, the lower min/max values are applied\n" );
+    printf( "        --asamplerate     Output samplerate\n" );
     printf( "                             LC: 8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000\n" );
     printf( "                             HE: 32000, 44100, 48000\n" );
-    printf( "                          Samplerate greater than input is not supported.\n" );
-    printf( "        --acodec-quality  Encoder's internal complexity. [0]\n" );
+    printf( "                          Samplerate greater than input is not supported\n" );
+    printf( "        --acodec-quality  Encoder's internal complexity [0]\n" );
     printf( "                             0 (medium), 1 (high), 2 (highest)\n" );
-    printf( "        --aextraopt       Profile and bitrate mode.\n" );
-    printf( "                             sbr  : enable HE-AAC encoding. [0]\n" );
-    printf( "                             mode : bitrate control mode. [abr]\n" );
+    printf( "        --aextraopt       Profile and bitrate mode\n" );
+    printf( "                             sbr  : enable HE-AAC encoding [0]\n" );
+    printf( "                             mode : bitrate control mode [abr]\n" );
     printf( "                                    \"abr\", \"cbr\", \"cvbr\"\n" );
     printf( "\n" );
     printf( "        --aquality/--abitrate setting may be changed inside codec due to its\n" );
     printf( "        limitations and extreme resampling settings (e.g. 48000->8000) may not work.\n" );
     printf( "        If something goes wrong, it will result in a failure of codec initialization.\n" );
+    printf( "\n" );
 }
 
 const audio_encoder_t audio_encoder_qtaac =
@@ -839,6 +836,6 @@ const audio_encoder_t audio_encoder_qtaac =
     .finish          = finish,
     .free_packet     = free_packet,
     .close           = qtaac_close,
-    .show_help       = qtaac_help
+    .show_help       = qtaac_help,
+    .is_valid_encoder = NULL
 };
-

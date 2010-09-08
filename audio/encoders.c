@@ -3,6 +3,43 @@
 #include <assert.h>
 #include <stdlib.h>
 
+typedef struct {
+    const char *codec;
+    const char *name;
+    const audio_encoder_t *encoder;
+} audio_encoder_entry_t;
+
+const audio_encoder_entry_t registered_audio_encoders[] = {
+    { "raw",    "raw",        &audio_encoder_raw, },
+#if HAVE_LAME
+    { "mp3",    "lame",       &audio_encoder_lame, },
+#endif
+#if HAVE_LAVF
+    { "mp3",    "libmp3lame", &audio_encoder_lavc, },
+#endif
+#if HAVE_QT_AAC
+    { "aac",    "qtaac",      &audio_encoder_qtaac, },
+#endif
+#if HAVE_FAAC
+    { "aac",    "faac",       &audio_encoder_faac, },
+#endif
+#if HAVE_LAVF
+    { "aac",    "libfaac",    &audio_encoder_lavc, },
+    { "aac",    "aac",        &audio_encoder_lavc, },
+    { "ac3",    "ac3",        &audio_encoder_lavc, },
+    { "alac",   "alac",       &audio_encoder_lavc, },
+#if 0
+    { "vorbis", "libvorbis",  &audio_encoder_lavc, },
+    { "vorbis", "vorbis",     &audio_encoder_lavc, },
+#endif
+    { "amrnb",  "libopencore_amrnb", &audio_encoder_lavc, },
+#endif
+#if HAVE_AMRWB_3GPP
+    { "amrwb",  "amrnb_3gpp", &audio_encoder_amrwb_3gpp, },
+#endif
+    { NULL, },
+};
+
 struct aenc_t
 {
     const audio_encoder_t *enc;
@@ -72,45 +109,48 @@ void x264_audio_encoder_close( hnd_t encoder )
     free( enc );
 }
 
-const audio_encoder_t *x264_encoder_by_name( const char *name, int fallback )
+const audio_encoder_t *x264_audio_encoder_by_name( const char *name, int mode, char *used_enc )
 {
-#define ENC( name ) &audio_encoder_ ## name
-#define IFRET( enc ) if( !strcmp( #enc, name ) ) return ENC( enc );
-#if HAVE_AUDIO
-#if HAVE_LAME
-    IFRET( mp3 );
-#endif
-    if( !strcmp( "aac", name ) )
+    const audio_encoder_entry_t *cur = NULL;
+    const audio_encoder_t *ret = NULL;
+
+    for( int i=0; registered_audio_encoders[i].codec; i++ )
     {
-#if HAVE_QT_AAC
-        return ENC( qtaac );
-#endif
-#if HAVE_FAAC
-        return ENC( faac );
-#endif
-#if HAVE_LAVF
-        return ENC( lavc ); // automatically tries faac and ffaac, in this order
-#endif
-        return NULL;
+        char ffprefixed_name[32] = { 0 };
+
+        cur = &registered_audio_encoders[i];
+
+        if( !strcmp( name, mode == QUERY_CODEC ? cur->codec : cur->name ) )
+            ret = cur->encoder;
+        else if( ( mode == QUERY_ENCODER ) && ( cur->encoder == &audio_encoder_lavc ) )
+        {
+            snprintf( &ffprefixed_name[0], 32, "ff%s", cur->name );
+            if( !strcmp( name, ffprefixed_name ) )
+                ret = cur->encoder;
+        }
+
+        if( ret )
+        {
+            if( !ret->is_valid_encoder )
+                break;
+            else
+            {
+                if( !ret->is_valid_encoder( cur->name, NULL ) ||
+                    !ret->is_valid_encoder( ffprefixed_name, NULL ) )
+                    break;
+                else
+                    ret = NULL;
+            }
+        }
     }
-#if HAVE_QT_AAC
-    IFRET( qtaac );
-#endif
-#if HAVE_FAAC
-    IFRET( faac );
-#endif
-    IFRET( raw );
-#endif /* HAVE_AUDIO */
-#undef IFRET
-#undef ENC
-#if HAVE_AUDIO && HAVE_LAVF
-    return fallback ? &audio_encoder_lavc : NULL; // fallback to libavcodec
-#else
-    return NULL;
-#endif
+
+    if( used_enc )
+        strcpy( used_enc, cur->name );
+
+    return ret;
 }
 
-const audio_encoder_t *x264_select_audio_encoder( const char *encoder, char* allowed_list[] )
+const audio_encoder_t *x264_select_audio_encoder( const char *encoder, char* allowed_list[], char *used_enc )
 {
     if( !encoder )
         return NULL;
@@ -121,7 +161,7 @@ const audio_encoder_t *x264_select_audio_encoder( const char *encoder, char* all
             const audio_encoder_t *enc;
             for( int i = 0; allowed_list[i] != NULL; i++ )
             {
-                enc = x264_encoder_by_name( allowed_list[i], 0 );
+                enc = x264_audio_encoder_by_name( allowed_list[i], QUERY_CODEC, used_enc );
                 if( enc )
                     return enc;
             }
@@ -129,97 +169,118 @@ const audio_encoder_t *x264_select_audio_encoder( const char *encoder, char* all
         }
         else
         {
-            int valid = 0;
+            const audio_encoder_t *enc;
             for( int i = 0; allowed_list[i] != NULL; i++ )
             {
                 if( !strcmp( encoder, allowed_list[i] ) )
                 {
-                    valid = 1;
-                    break;
-                }
-                if( !strcmp( allowed_list[i], "mp3" ) )
-                {
-                    if( !strcmp( encoder, "mp3" ) ||
-                        !strcmp( encoder, "libmp3lame" ) )
-                    {
-                        valid = 1;
-                        break;
-                    }
-                }
-                if( !strcmp( allowed_list[i], "aac" ) )
-                {
-                    if( !strcmp( encoder, "aac" )      ||
-                        !strcmp( encoder, "qtaac" )    ||
-                        !strcmp( encoder, "faac" )    ||
-                        !strcmp( encoder, "libfaac" )  ||
-                        !strcmp( encoder, "ffaac" ) )
-                    {
-                        valid = 1;
-                        break;
-                    }
-                }
-                if( !strcmp( allowed_list[i], "ac3" ) )
-                {
-                    if( !strcmp( encoder, "ac3" ) ||
-                        !strcmp( encoder, "ffac3" ) )
-                    {
-                        valid = 1;
-                        break;
-                    }
-                }
-                if( !strcmp( allowed_list[i], "alac" ) )
-                {
-                    if( !strcmp( encoder, "alac" ) ||
-                        !strcmp( encoder, "ffalac" ) )
-                    {
-                        valid = 1;
-                        break;
-                    }
-                }
-                if( !strcmp( allowed_list[i], "amrnb" ) )
-                {
-                    if( !strcmp( encoder, "amrnb" ) ||
-                        !strcmp( encoder, "libopencore_amrnb" ) )
-                    {
-                        valid = 1;
-                        break;
-                    }
+                    enc = x264_audio_encoder_by_name( allowed_list[i], QUERY_CODEC, used_enc );
+                    if( enc )
+                        return enc;
                 }
             }
-            if( !valid )
-                return NULL;
         }
     }
-    return x264_encoder_by_name( encoder, 1 );
+    return x264_audio_encoder_by_name( encoder, QUERY_ENCODER, used_enc );
 }
 
-void x264_audio_encoder_show_help( const char * const encoder_list[], int longhelp )
+#define INDENT "                              "
+
+void x264_audio_encoder_list_codecs( int longhelp )
+{
+    if( longhelp < 1 )
+        return;
+
+    const char *prev_name = "";
+    int len = strlen( INDENT ) + 6;
+
+    printf( INDENT "    - " );
+    for( int i=0; registered_audio_encoders[i].codec; i++ )
+    {
+        const char *codec_name = registered_audio_encoders[i].codec;
+
+        if( x264_audio_encoder_by_name( codec_name, QUERY_CODEC, NULL ) &&
+            strcmp( prev_name, codec_name ) )
+        {
+            printf( "%s", codec_name );
+            len += strlen( codec_name );
+            prev_name = codec_name;
+
+            if( registered_audio_encoders[i+1].codec )
+            {
+                if( len >= 80 - strlen( ", " ) )
+                {
+                    printf( ",\n" INDENT "      " );
+                    len = strlen( INDENT ) + 6;
+                }
+                else
+                    printf( ", " );
+            }
+        }
+    }
+    printf( "\n" );
+    return;
+}
+
+void x264_audio_encoder_list_encoders( int longhelp )
+{
+    if( longhelp < 2 )
+        return;
+
+    int len = strlen( INDENT ) + 6;
+
+    printf( INDENT "    - " );
+    for( int i=0; registered_audio_encoders[i].codec; i++ )
+    {
+        const char *encoder_name = registered_audio_encoders[i].name;
+        const audio_encoder_t *enc = registered_audio_encoders[i].encoder;
+
+        if( x264_audio_encoder_by_name( encoder_name, QUERY_ENCODER, NULL ) )
+        {
+            printf( "%s%s", ( enc == &audio_encoder_lavc ? "(ff)" : "" ), encoder_name );
+            len += strlen( encoder_name ) + ( enc == &audio_encoder_lavc ? 4 : 0 );
+
+            if( registered_audio_encoders[i+1].codec )
+            {
+                if( len >= 80 - strlen( ", " ) )
+                {
+                    printf( ",\n" INDENT "      " );
+                    len = strlen( INDENT ) + 6;
+                }
+                else
+                    printf( ", " );
+            }
+        }
+    }
+    printf( "\n" );
+    return;
+}
+
+#undef INDENT
+
+void x264_audio_encoder_show_help( int longhelp )
 {
     if( longhelp < 2 )
     {
-        printf( "      Available options and their value ranges are depend on audio codec.\n" );
-        printf( "      For the codec dependent helps, see --fullhelp.\n" );
+        printf( "      For the encoder specific helps, see --fullhelp.\n" );
         return;
     }
 
-    printf( "      Codec specific notes for audio options:\n" );
+    printf( "      Encoder specific helps:\n" );
 #if !HAVE_AUDIO
-    printf( "            There is no available audio codec in this x264 build.\n" );
+    printf( "            There is no available audio encoder in this x264 build.\n" );
     return;
 #endif
-    for( int i=0; encoder_list[i]; i++ )
+    for( int i=0; registered_audio_encoders[i].codec; i++ )
     {
-        const audio_encoder_t *enc;
+        const audio_encoder_entry_t *cur = &registered_audio_encoders[i];
+        const audio_encoder_t *enc = NULL;
 
-        if( !strcmp( encoder_list[i], "auto" ) || !strcmp( encoder_list[i], "none" ) )
-            continue;
-
-        enc = x264_encoder_by_name( encoder_list[i], 1 );
+        enc = x264_audio_encoder_by_name( cur->name, QUERY_ENCODER, NULL );
 
         if( !enc || !enc->show_help )
             continue;
-        enc->show_help( encoder_list[i], longhelp );
-        printf( "\n" );
+        enc->show_help( cur->name );
     }
 
     return;

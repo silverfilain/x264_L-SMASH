@@ -105,29 +105,6 @@ static const char * const muxer_names[] =
     0
 };
 
-// Keep in sync with x264_encoder_by_name (audio/encoders.c)
-static const char * const audio_encoders[] =
-{
-    "auto",
-#if HAVE_AUDIO
-    "raw",
-#if HAVE_LAME
-    "mp3",
-#endif
-#if HAVE_QT_AAC
-    "qtaac",
-#endif
-#if HAVE_FAAC
-    "faac",
-#endif
-#if HAVE_LAVF
-    "lavc",
-#endif
-#endif /* HAVE_AUDIO */
-    "none",
-    NULL
-};
-
 static const char * const audio_demuxers[] =
 {
     "auto",
@@ -693,21 +670,29 @@ static void Help( x264_param_t *defaults, int longhelp )
     H0( "      Audio options may be used if audio support is compiled in.\n" );
     H0( "      Audio is automatically opened from the input file if supported by the demuxer.\n" );
     H0( "\n" );
-    H0( "      --audiofile <filename>  Uses audio from the specified file.\n" );
-    H1( "      --ademuxer <string>     Demux audio by the specified demuxer [%s].\n"
+    H0( "      --audiofile <filename>  Uses audio from the specified file\n" );
+    H1( "      --ademuxer <string>     Demux audio by the specified demuxer [%s]\n"
         "                              Supported and compiled in demuxers:\n"
         "                                  - %s\n", audio_demuxers[0], stringify_names( buf, audio_demuxers ) );
-    H0( "      --acodec <string>       Audio codec [auto].\n");
-    H1( "                              Supported and compiled in codecs:\n" );
-    H1( "                                  - %s\n", stringify_names( buf, audio_encoders ) );
-    H0( "      --abitrate <float>      Enables bitrate mode and set bitrate (kbits/s).\n" );
+    H0( "      --atrack <integer>      Audio track number [auto]\n" );
+    H0( "      --acodec <string>       Audio codec [auto]\n" );
+    H1( "                              Available settings:\n" );
+    H1( "                                  - auto (select muxer default codec and its default encoder)\n" );
+    H1( "                                  - copy (copy source audio without transcoding)\n" );
+    H1( "                                  - none (disable audio)\n" );
+    H1( "                                Set audio format only and automatically choose encoder\n" );
+    x264_audio_encoder_list_codecs( longhelp );
+    H2( "                                Force to use specified audio encoder\n" );
+    H2( "                                'ff' prefix indicate they are supported via libavcodec\n" );
+    x264_audio_encoder_list_encoders( longhelp );
+    H0( "      --abitrate <float>      Enables bitrate mode and set bitrate (kbits/s)\n" );
     H0( "      --aquality <float>      Quality-based VBR [codec-dependent default]\n" );
     H0( "      --asamplerate <integer> Audio samplerate (Hz) [keep source samplerate]\n" );
     H0( "      --acodec-quality <float> Codec's internal compression quality [codec specific]\n" );
     H1( "      --aextraopt <string>    Pass extra option to codec [codec specific]\n" );
     H1( "                              Should be comma separated \"name=value\" style\n" );
     H0( "\n" );
-    x264_audio_encoder_show_help( audio_encoders, longhelp );
+    x264_audio_encoder_show_help( longhelp );
     H0( "\n" );
     H0( "Input/Output:\n" );
     H0( "\n" );
@@ -798,6 +783,7 @@ enum {
     OPT_INPUT_CSP,
     OPT_AUDIOFILE,
     OPT_AUDIODEMUXER,
+    OPT_AUDIOTRACK,
     OPT_AUDIOCODEC,
     OPT_AUDIOBITRATE,
     OPT_AUDIOQUALITY,
@@ -960,6 +946,7 @@ static struct option long_options[] =
     { "input-csp",   required_argument, NULL, OPT_INPUT_CSP },
     { "audiofile",   required_argument, NULL, OPT_AUDIOFILE },
     { "ademuxer",    required_argument, NULL, OPT_AUDIODEMUXER },
+    { "atrack",      required_argument, NULL, OPT_AUDIOTRACK },
     { "acodec",      required_argument, NULL, OPT_AUDIOCODEC },
     { "abitrate",    required_argument, NULL, OPT_AUDIOBITRATE },
     { "aquality",    required_argument, NULL, OPT_AUDIOQUALITY },
@@ -1214,6 +1201,7 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
     char *audio_enc      = "auto";
     char *audio_filename = NULL;
     const char *audio_demuxer = "auto";
+    int audio_track      = TRACK_ANY;
     float audio_bitrate  = -1;
     float audio_quality  = NAN;
     float acodec_quality = NAN;
@@ -1394,8 +1382,9 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
                     audio_enable = 0;
                 else
                 {
-                    FAIL_IF_ERROR( strcmp( audio_enc, "auto" ) && strcmp( audio_enc, "copy" ) && !x264_encoder_by_name( audio_enc, 1 ),
-                                   "audio encoder '%s' not supported or not compiled in\n", audio_enc );
+                    FAIL_IF_ERROR( strcmp( audio_enc, "auto" ) && strcmp( audio_enc, "copy" ) &&
+                                   !x264_audio_encoder_by_name( audio_enc, QUERY_CODEC, NULL ) && !x264_audio_encoder_by_name( audio_enc, QUERY_ENCODER, NULL ),
+                                   "audio codec '%s' not supported or not compiled in\n", audio_enc );
 #ifdef HAVE_AUDIO
                     audio_enable = 1;
 #else
@@ -1408,6 +1397,9 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
                 break;
             case OPT_AUDIODEMUXER:
                 FAIL_IF_ERROR( parse_enum_name( optarg, audio_demuxers, &audio_demuxer ), "Unknown audio demuxer `%s'\n", optarg )
+                break;
+            case OPT_AUDIOTRACK:
+                audio_track = atoi( optarg );
                 break;
             case OPT_AUDIOBITRATE:
                 audio_bitrate = atof( optarg );
@@ -1504,7 +1496,7 @@ generic_option:
         {
             char used_demuxer[8];
             if( !select_audio_demuxer( audio_demuxer, used_demuxer, &audio_enc, audio_filename ) )
-                haud = x264_audio_open_from_file( used_demuxer, audio_filename, TRACK_ANY );
+                haud = x264_audio_open_from_file( used_demuxer, audio_filename, audio_track );
             else
             {
                 x264_cli_log( "x264", X264_LOG_WARNING, "no suitable audio demuxer is found for --audiofile, disabling audio.\n" );
@@ -1512,7 +1504,7 @@ generic_option:
             }
         }
         else if( input.open_audio )
-            haud = input.open_audio( opt->hin, TRACK_ANY );
+            haud = input.open_audio( opt->hin, audio_track );
         else
         {
             x264_cli_log( "x264", X264_LOG_WARNING, "the used input does not support audio and --audiofile was not given, disabling audio.\n" );
@@ -1529,7 +1521,6 @@ generic_option:
                   info.height, info.interlaced ? 'i' : 'p', info.sar_width, info.sar_height,
                   info.fps_num, info.fps_den, info.vfr ? 'v' : 'c' );
 
-#define MAX_ARGS 256
     char arg[MAX_ARGS] = { 0 };
     int len = 0;
     if( audio_enable )
@@ -1547,10 +1538,7 @@ generic_option:
 
         if( audio_extraopt )
             len += snprintf( &arg[len], MAX_ARGS - len, "%s%s", len ? "," : "", audio_extraopt );
-
-        len += snprintf( &arg[len], MAX_ARGS - len, "%scodec=%s", len ? "," : "", audio_enc );
     }
-#undef MAX_ARGS
 
     FAIL_IF_ERROR( output.open_file( output_filename, &opt->hout, haud, audio_enc, arg, &output_opt ) < 0, "could not open output file `%s'\n", output_filename )
 

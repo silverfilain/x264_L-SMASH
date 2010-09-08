@@ -23,7 +23,7 @@ static const int faac_channel_map[][8] = {
  { 0, },
  { 0, 1, },
  { 2, 0, 1, },
- { 2, 0, 1, 3, }, // seems faac assumes L R C S bt default for 4ch
+ { 2, 0, 1, 3, }, // seems faac assumes L R C S for 4ch by default
  { 2, 0, 1, 3, 4, },
  { 2, 0, 1, 4, 5, 3, },
  { 2, 0, 1, 6, 4, 5, 3, },
@@ -252,17 +252,21 @@ static void faac_close( hnd_t handle )
     free( h );
 }
 
-static void faac_help( const char * const codec_name, int longhelp )
+static void faac_help( const char * const encoder_name )
 {
-   if( longhelp < 2 )
-       return;
-
-    printf( "      * For %s encoder (--acodec %s)\n", codec_name, codec_name );
-    printf( "        --aquality        VBR quality. [100]\n" );
-    printf( "                              10 (lowest) to 500 (highest)\n" );
-    printf( "        --abitrate        Bitrate in kbits/s. [128]\n" );
+    printf( "      * faac encoder help\n" );
+    printf( "        --aquality        VBR quality [100]\n" );
+    printf( "                             10 (lowest) to 500 (highest)\n" );
+    printf( "        --abitrate        Bitrate in kbits/s [128]\n" );
     printf( "                          Roughly 32-320 are achieved at typical\n" );
-    printf( "                          2ch, 44100Hz, 16bit PCM audio.\n" );
+    printf( "                          2ch, 44100Hz, 16bit PCM audio\n" );
+    printf( "        --aextraopt       Should be used only for extremely fine tunes\n" );
+    printf( "                             cutoff: set cutoff in Hz [auto]\n" );
+    printf( "                             midside: use of M/S stereo [1 (on)]\n" );
+    printf( "                             tns: use of temporal noise shaping [0 (off)]\n" );
+    printf( "                             shortctl: enforce block type [0 (auto)]\n" );
+    printf( "                                - 0 (auto), 1 (no SHORT), 2 (no LONG)\n" );
+    printf( "\n" );
 }
 
 const audio_encoder_t audio_encoder_faac =
@@ -274,5 +278,6 @@ const audio_encoder_t audio_encoder_faac =
     .finish          = finish,
     .free_packet     = free_packet,
     .close           = faac_close,
-    .show_help       = faac_help
+    .show_help       = faac_help,
+    .is_valid_encoder = NULL
 };

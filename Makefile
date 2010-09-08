@@ -70,6 +70,10 @@ ifneq ($(findstring HAVE_FAAC, $(CONFIG)),)
 SRCCLI += audio/encoders/enc_faac.c
 endif
 
+ifneq ($(findstring HAVE_AMRWB_3GPP, $(CONFIG)),)
+SRCCLI += audio/encoders/enc_amrwb_3gpp.c
+endif
+
 # Visualization sources
 ifeq ($(VIS),yes)
 SRCS   += common/visualize.c common/display-x11.c

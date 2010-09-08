@@ -159,6 +159,7 @@ audio_mp3="auto"
 audio_qtaac="auto"
 audio_faac="auto"
 audio_lavc="auto"
+audio_amrwb="no"
 
 CFLAGS="$CFLAGS -Wall -I."
 LDFLAGS="$LDFLAGS"
@@ -252,6 +253,9 @@ for opt do
             ;;
         --enable-nonfree)
             nonfree="yes"
+            ;;
+        --enable-amrwb-3gpp)
+            audio_amrwb="auto"
             ;;
         --bit-depth=*)
             bit_depth="${opt#--bit-depth=}"
@@ -695,6 +699,28 @@ if [ "$audio" = "auto" ]; then
             fi
         else
             audio_faac="no"
+        fi
+    fi
+    if [ "$audio_amrwb" = "auto" ]; then
+        if echo $LDFLAGSCLI | grep -q 'opencore-amrwb' ; then
+            echo "Warning: 3gpp's AMR-WB is not compatible with opencore-amrwb (and lavc with it)."
+            echo "Warning: If any error occures and you still want 3gpp's AMR-WB support,"
+            echo "Warning: rebuild libavcodec without opencore-amrwb support."
+            echo ""
+        fi
+        if cc_check enc_if.h "-lamrwb_3gpp_enc" "(void)E_IF_init();"; then
+            if [ "$nonfree" = "yes" ]; then
+                LDFLAGSCLI="-lamrwb_3gpp_enc $LDFLAGSCLI"
+                define HAVE_AMRWB_3GPP
+                audio_amrwb="yes"
+                audio_encs="$audio_encs, amrwb_3gpp"
+            else
+                echo "Warning: Found available 3gpp's AMR-WB but --enable-nonfree isn't specified."
+                echo ""
+                audio_amrwb="no"
+            fi
+        else
+            audio_amrwb="no"
         fi
     fi
     if [ "$audio_lavc" = "auto" -a "$lavf" = "yes" ]; then
