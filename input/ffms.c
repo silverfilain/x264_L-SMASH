@@ -95,7 +95,7 @@ static int open_file( char *psz_filename, hnd_t *p_handle, video_info_t *info, c
     FAIL_IF_ERROR( trackno < 0, "could not find video track\n" )
 
 #if HAVE_AUDIO
-    h->filename  = psz_filename;
+    h->filename  = strdup( psz_filename );
     h->has_audio = !!( FFMS_GetFirstTrackOfType( idx, FFMS_TYPE_AUDIO, &e ) > 0 );
 #endif
 
