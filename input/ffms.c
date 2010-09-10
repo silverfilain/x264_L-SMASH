@@ -35,16 +35,21 @@
 #define SetConsoleTitle(t)
 #endif
 
+#if HAVE_AUDIO
 #include "audio/audio.h"
+#endif
 
 typedef struct
 {
-    char *filename;
     FFMS_VideoSource *video_source;
     FFMS_Track *track;
     int reduce_pts;
     int vfr_input;
     int num_frames;
+#if HAVE_AUDIO
+    char *filename;
+    int has_audio;
+#endif
 } ffms_hnd_t;
 
 static int FFMS_CC update_progress( int64_t current, int64_t total, void *private )
@@ -89,7 +94,11 @@ static int open_file( char *psz_filename, hnd_t *p_handle, video_info_t *info, c
     int trackno = FFMS_GetFirstTrackOfType( idx, FFMS_TYPE_VIDEO, &e );
     FAIL_IF_ERROR( trackno < 0, "could not find video track\n" )
 
-    h->filename = psz_filename;
+#if HAVE_AUDIO
+    h->filename  = psz_filename;
+    h->has_audio = !!( FFMS_GetFirstTrackOfType( idx, FFMS_TYPE_AUDIO, &e ) > 0 );
+#endif
+
     h->video_source = FFMS_CreateVideoSource( psz_filename, trackno, idx, 1, seekmode, &e );
     FAIL_IF_ERROR( !h->video_source, "could not create video source\n" )
 
@@ -180,14 +189,28 @@ static int close_file( hnd_t handle )
 {
     ffms_hnd_t *h = handle;
     FFMS_DestroyVideoSource( h->video_source );
+#if HAVE_AUDIO
+    free( h->filename );
+#endif
     free( h );
     return 0;
 }
 
+#if HAVE_AUDIO
 static hnd_t open_audio( hnd_t handle, int track )
 {
     ffms_hnd_t *h = handle;
+    if( !x264_is_regular_file_path( h->filename ) )
+    {
+        x264_cli_log( "ffms", X264_LOG_WARNING, "reading audio from non-regular files is not implemented yet.\n" );
+        return 0;
+    }
+    if( !h->has_audio )
+        return 0;
     return x264_audio_open_from_file( NULL, h->filename, track );
 }
 
 const cli_input_t ffms_input = { open_file, picture_alloc, read_frame, NULL, picture_clean, close_file, open_audio };
+#else
+const cli_input_t ffms_input = { open_file, picture_alloc, read_frame, NULL, picture_clean, close_file };
+#endif
