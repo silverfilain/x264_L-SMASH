@@ -27,16 +27,21 @@
 #include <libavformat/avformat.h>
 #include <libavutil/pixdesc.h>
 
+#if HAVE_AUDIO
 #include "audio/audio.h"
+#endif
 
 typedef struct
 {
-    char *filename;
     AVFormatContext *lavf;
     int stream_id;
     int next_frame;
     int vfr_input;
     cli_pic_t *first_pic;
+#if HAVE_AUDIO
+    char *filename;
+    int has_audio;
+#endif
 } lavf_hnd_t;
 
 static int read_frame_internal( cli_pic_t *p_pic, lavf_hnd_t *h, int i_frame, video_info_t *info )
@@ -142,7 +147,13 @@ static int open_file( char *psz_filename, hnd_t *p_handle, video_info_t *info, c
     if( param )
         free( param );
     FAIL_IF_ERROR( av_find_stream_info( h->lavf ) < 0, "could not find input stream info\n" )
+
+#if HAVE_AUDIO
     h->filename = strdup( psz_filename );
+    int j = 0;
+    while( j < h->lavf->nb_streams )
+        h->has_audio |= !!(h->lavf->streams[j++]->codec->codec_type == CODEC_TYPE_AUDIO );
+#endif
 
     int i = 0;
     while( i < h->lavf->nb_streams && h->lavf->streams[i]->codec->codec_type != CODEC_TYPE_VIDEO )
@@ -220,11 +231,14 @@ static int close_file( hnd_t handle )
     lavf_hnd_t *h = handle;
     avcodec_close( h->lavf->streams[h->stream_id]->codec );
     av_close_input_file( h->lavf );
+#if HAVE_AUDIO
     free( h->filename );
+#endif
     free( h );
     return 0;
 }
 
+#if HAVE_AUDIO
 static hnd_t open_audio( hnd_t handle, int track )
 {
     lavf_hnd_t *h = handle;
@@ -233,7 +247,12 @@ static hnd_t open_audio( hnd_t handle, int track )
         x264_cli_log( "lavf", X264_LOG_WARNING, "reading audio from non-regular files is not implemented yet.\n" );
         return 0;
     }
+    if( !h->has_audio )
+        return 0;
     return x264_audio_open_from_file( NULL, h->filename, track );
 }
 
 const cli_input_t lavf_input = { open_file, picture_alloc, read_frame, release_frame, picture_clean, close_file, open_audio };
+#else
+const cli_input_t lavf_input = { open_file, picture_alloc, read_frame, release_frame, picture_clean, close_file };
+#endif

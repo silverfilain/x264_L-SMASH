@@ -53,7 +53,6 @@
 
 typedef struct
 {
-    char *filename;
     AVS_Clip *clip;
     AVS_ScriptEnvironment *env;
     HMODULE library;
@@ -72,6 +71,10 @@ typedef struct
         AVSC_DECLARE_FUNC( avs_release_video_frame );
         AVSC_DECLARE_FUNC( avs_take_clip );
     } func;
+#if HAVE_AUDIO
+    char *filename;
+    int has_audio;
+#endif
 } avs_hnd_t;
 
 /* load the library and functions we require from it */
@@ -139,8 +142,6 @@ static int open_file( char *psz_filename, hnd_t *p_handle, video_info_t *info, c
     AVS_Value res;
     char *filename_ext = get_filename_extension( psz_filename );
 
-    h->filename = strdup( psz_filename );
-
     if( !strcasecmp( filename_ext, "avs" ) )
     {
         res = h->func.avs_invoke( h->env, "Import", arg, NULL );
@@ -190,6 +191,12 @@ static int open_file( char *psz_filename, hnd_t *p_handle, video_info_t *info, c
     h->clip = h->func.avs_take_clip( res, h->env );
     const AVS_VideoInfo *vi = h->func.avs_get_video_info( h->clip );
     FAIL_IF_ERROR( !avs_has_video( vi ), "`%s' has no video data\n", psz_filename )
+
+#if HAVE_AUDIO
+    h->filename = strdup( psz_filename );
+    h->has_audio = !!avs_has_audio( vi );
+#endif
+
     /* if the clip is made of fields instead of frames, call weave to make them frames */
     if( avs_is_field_based( vi ) )
     {
@@ -303,7 +310,9 @@ static int close_file( hnd_t handle )
     if( h->func.avs_delete_script_environment )
         h->func.avs_delete_script_environment( h->env );
     FreeLibrary( h->library );
+#if HAVE_AUDIO
     free( h->filename );
+#endif
     free( h );
     return 0;
 }
@@ -312,6 +321,8 @@ static int close_file( hnd_t handle )
 static hnd_t open_audio( hnd_t handle, int track )
 {
     avs_hnd_t *h = handle;
+    if( !h->has_audio )
+        return NULL;
     return x264_audio_open_from_file( "avs", h->filename, track );
 }
 
