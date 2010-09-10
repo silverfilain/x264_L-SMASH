@@ -69,7 +69,7 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     char **opts = x264_split_options( opt_str, (const char*[]){ AUDIO_CODEC_COMMON_OPTIONS, NULL } );
     assert( opts );
 
-    const char *codecname = strdup( x264_get_option( "codec", opts ) );
+    const char *codecname = x264_get_option( "codec", opts );
     RETURN_IF_ERR( !codecname, "lavc", NULL, "codec not specified" );
 
     avcodec_register_all();
@@ -232,7 +232,6 @@ static void free_packet( hnd_t handle, audio_packet_t *packet )
 static void lavc_close( hnd_t handle )
 {
     enc_lavc_t *h = handle;
-    free( (void*) h->info.codec_name );
 
     avcodec_close( h->ctx );
     av_free( h->ctx );
