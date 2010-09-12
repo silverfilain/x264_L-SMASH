@@ -95,6 +95,7 @@ typedef struct
     char *psz_language;
 #endif
     int brand_3gpp;
+    int brand_m4a;
     uint32_t i_track;
     uint32_t i_sample_entry;
     uint64_t i_time_inc;
@@ -202,6 +203,7 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
             p_audio->has_sbr = aacinfo->has_sbr;
         else
             p_audio->has_sbr = 0; // SBR presence isn't specified, so assume implicit signaling
+        p_mp4->brand_m4a = 1;
     }
     else if( ( !strcmp( info->codec_name, "mp3" ) || !strcmp( info->codec_name, "mp2" ) || !strcmp( info->codec_name, "mp1" ) )
              && info->samplerate >= 16000 ) /* freq <16khz is MPEG-2.5. */
@@ -209,7 +211,10 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
     else if( !strcmp( info->codec_name, "ac3" ) )
         p_audio->codec_type = ISOM_CODEC_TYPE_AC_3_AUDIO;
     else if( !strcmp( info->codec_name, "alac" ) )
+    {
         p_audio->codec_type = ISOM_CODEC_TYPE_ALAC_AUDIO;
+        p_mp4->brand_m4a = 1;
+    }
     else if( !strcmp( info->codec_name, "amrnb" ) )
         p_audio->codec_type = ISOM_CODEC_TYPE_SAMR_AUDIO;
     else if( !strcmp( info->codec_name, "amrwb" ) )
@@ -648,10 +653,20 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
     p_mp4->i_sei_size = sei_size;
 
     /* Write ftyp. */
-    uint32_t brands[5] = { ISOM_BRAND_TYPE_ISOM, ISOM_BRAND_TYPE_MP42, ISOM_BRAND_TYPE_3GP6, ISOM_BRAND_TYPE_3G2A };
+    uint32_t brands[5] = { ISOM_BRAND_TYPE_ISOM, ISOM_BRAND_TYPE_MP42 };
     uint32_t minor_version = 0;
-    if( p_mp4->brand_3gpp == 2 ) minor_version = 0x00010000;
-    MP4_FAIL_IF_ERR( isom_set_brands( p_mp4->p_root, brands[1+p_mp4->brand_3gpp], minor_version, brands, 2+p_mp4->brand_3gpp ) || isom_write_ftyp( p_mp4->p_root ),
+    uint32_t brand_count = 2;
+    if( p_mp4->brand_3gpp == 1 )
+        brands[brand_count++] = ISOM_BRAND_TYPE_3GP6;
+    else if( p_mp4->brand_3gpp == 2 )
+    {
+        brands[brand_count++] = ISOM_BRAND_TYPE_3GP6;
+        brands[brand_count++] = ISOM_BRAND_TYPE_3G2A;
+        minor_version = 0x00010000;
+    }
+    if( p_mp4->brand_m4a )
+        brands[brand_count++] = ISOM_BRAND_TYPE_M4A;
+    MP4_FAIL_IF_ERR( isom_set_brands( p_mp4->p_root, brands[1+p_mp4->brand_3gpp], minor_version, brands, brand_count ) || isom_write_ftyp( p_mp4->p_root ),
                      "failed to set brands / ftyp.\n" );
 
     /* Write mdat header. */
