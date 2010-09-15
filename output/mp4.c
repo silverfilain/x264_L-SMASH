@@ -26,6 +26,7 @@
 
 #include "output.h"
 #include "isom.h"
+#include "mp4sys.h"
 
 /*******************/
 
@@ -417,19 +418,18 @@ static int open_file(
     }
 #endif
 
-    p_mp4->p_root = isom_create_root( psz_filename );
+    p_mp4->p_root = isom_create_movie( psz_filename );
     MP4_FAIL_IF_ERR_EX( !p_mp4->p_root, "failed to create root.\n" );
 
-    /* FIXME: I think this does not make sense at all. track number must be retrieved in some other way.  */
-    p_mp4->i_track = 1 + isom_add_mandatory_boxes( p_mp4->p_root, ISOM_HDLR_TYPE_VISUAL );
-    MP4_FAIL_IF_ERR_EX( !p_mp4->i_track, "failed to add_mandatory_boxes.\n" );
+    p_mp4->i_track = isom_create_track( p_mp4->p_root, ISOM_HDLR_TYPE_VISUAL );
+    MP4_FAIL_IF_ERR_EX( !p_mp4->i_track, "failed to create a video track.\n" );
 #if HAVE_ANY_AUDIO
 #if HAVE_AUDIO
     MP4_FAIL_IF_ERR_EX( audio_init( p_mp4, audio_filters, audio_enc, audio_params ) < 0, "unable to init audio output.\n" );
     if( p_mp4->audio_hnd )
     {
-        isom_add_trak( p_mp4->p_root, ISOM_HDLR_TYPE_AUDIO );
-        p_mp4->audio_hnd->i_track = p_mp4->i_track + 1; /* FIXME: hardcoded, because we cannot retrieve trak_num from L-SMASH. */
+        p_mp4->audio_hnd->i_track = isom_create_track( p_mp4->p_root, ISOM_HDLR_TYPE_AUDIO );
+        MP4_FAIL_IF_ERR_EX( !p_mp4->audio_hnd->i_track, "failed to create a audio track.\n" );
     }
 #else
     mp4_audio_hnd_t* p_audio = p_mp4->audio_hnd = (mp4_audio_hnd_t*)malloc( sizeof(mp4_audio_hnd_t) );
@@ -438,13 +438,8 @@ static int open_file(
     p_audio->p_importer = mp4sys_importer_open( "x264_audio_test.adts", "auto" );
     if( p_audio->p_importer )
     {
-        /*
-         * FIXME: I think isom_add_mandatory_boxes should not create trak automagically.
-         * Also isom_add_trak() should return trak_number of added trak.
-         * Currently L-SMASH seems overaccustomed to the mp4 consisting of single AVC trak.
-         */
-        isom_add_trak( p_mp4->p_root, ISOM_HDLR_TYPE_AUDIO );
-        p_audio->i_track = p_mp4->i_track + 1; /* FIXME: hardcoded, because we cannot retrieve trak_num from L-SMASH. */
+        p_audio->i_track = isom_create_track( p_mp4->p_root, ISOM_HDLR_TYPE_AUDIO );
+        MP4_FAIL_IF_ERR_EX( !p_audio->i_track, "failed to create a audio track.\n" );
     }
     else
     {
@@ -553,7 +548,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
                 break;
             case ISOM_CODEC_TYPE_AC_3_AUDIO :
                 p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_AC_3_AUDIO;
-                MP4_FAIL_IF_ERR( isom_create_dac3_from_syncframe( p_audio->summary, p_audio->info->extradata, p_audio->info->extradata_size ),
+                MP4_FAIL_IF_ERR( mp4sys_create_dac3_from_syncframe( p_audio->summary, p_audio->info->extradata, p_audio->info->extradata_size ),
                                  "failed to create AC-3 specific info.\n" );
                 break;
             case ISOM_CODEC_TYPE_SAMR_AUDIO :

@@ -5,6 +5,7 @@
 #include <inttypes.h>
 
 #include "output/isom.h"
+#include "output/mp4sys.h"
 
 typedef struct lsmash_source_t
 {
