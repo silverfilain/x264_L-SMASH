@@ -1,24 +1,40 @@
-# should have distclean, install, uninstall in the future
-.PHONY: all lib m4amuxer dep depend clean
-
 # for future use
 #include config.mak
 #$(EXE)
+
+UNAME_S:=$(shell uname -s)
+UNAME_M:=$(shell uname -m)
 
 CC=gcc
 AR=ar
 RANLIB=ranlib
 STRIP=strip
 ECHO=echo
-EXE=.exe
+EXE=
 
 CFLAGS=-Wshadow -Wall -std=gnu99 -I.
 #CFLAGS+=-Wsign-conversion
-CFLAGS+=-g -O0
-#CFLAGS+=-O3
-CFLAGS+=-march=i686 -mfpmath=sse -msse
-LDFLAGS=-Wl,--large-address-aware
+LDFLAGS=
 EXTRALIBS=
+
+ifeq ($(DEBUG),YES)
+CFLAGS+=-g -O0
+else
+CFLAGS+=-O3
+endif
+
+ifneq ($(findstring i686, $(UNAME_M)),)
+CFLAGS+=-march=i686 -mfpmath=sse -msse
+endif
+
+ifneq ($(findstring MINGW, $(UNAME_S)),)
+LDFLAGS+=-Wl,--large-address-aware
+EXE=.exe
+endif
+ifneq ($(findstring CYGWIN, $(UNAME_S)),)
+LDFLAGS+=-Wl,--large-address-aware
+EXE=.exe
+endif
 
 SRCS=isom.c isom_util.c mp4sys.c
 OBJS=$(SRCS:%.c=%.o)
@@ -26,19 +42,27 @@ OBJS=$(SRCS:%.c=%.o)
 
 TARGET_LIB=liblsmash.a
 
-SRC_M4AMUXER=m4amuxer.c
-OBJ_M4AMUXER=$(SRC_M4AMUXER:%.c=%.o)
-TARGET_M4AMUXER=$(SRC_M4AMUXER:%.c=%$(EXE))
+SRC_AUDIOMUXER=audiomuxer.c
+OBJ_AUDIOMUXER=$(SRC_AUDIOMUXER:%.c=%.o)
+TARGET_AUDIOMUXER=$(SRC_AUDIOMUXER:%.c=%$(EXE))
 
-SRCS_ALL=$(SRCS) $(SRC_M4AMUXER)
+SRCS_ALL=$(SRCS) $(SRC_AUDIOMUXER)
 OBJS_ALL=$(SRCS_ALL:%.c=%.o)
 
 #### main rules ####
-all: m4amuxer
+
+# should have distclean, install, uninstall in the future
+.PHONY: all lib tools dep depend clean info
+
+all: info tools
+
+info:
+	@echo "CFLAGS : $(CFLAGS)"
+	@echo "LDFLAGS: $(LDFLAGS)"
 
 lib: $(TARGET_LIB)
 
-m4amuxer: $(TARGET_M4AMUXER)
+tools: $(TARGET_AUDIOMUXER)
 
 $(TARGET_LIB): .depend $(OBJS)
 	@$(ECHO) "AR: $@"
@@ -46,9 +70,13 @@ $(TARGET_LIB): .depend $(OBJS)
 	@$(ECHO) "RANLIB: $@"
 	@$(RANLIB) $@
 
-$(TARGET_M4AMUXER): $(OBJ_M4AMUXER) $(TARGET_LIB)
+$(TARGET_AUDIOMUXER): $(OBJ_AUDIOMUXER) $(TARGET_LIB)
 	@$(ECHO) "LINK: $@"
 	@$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $+ $(EXTRALIBS)
+ifneq ($(DEBUG),YES)
+	@$(ECHO) "STRIP: $@"
+	@$(STRIP) $@
+endif
 
 #### type rules ####
 %.o: %.c .depend
@@ -72,4 +100,4 @@ endif
 
 #### clean stuff ####
 clean:
-	rm -f $(OBJS_ALL) $(TARGET_LIB) $(TARGET_M4AMUXER) .depend
+	rm -f $(OBJS_ALL) $(TARGET_LIB) $(TARGET_AUDIOMUXER) .depend
