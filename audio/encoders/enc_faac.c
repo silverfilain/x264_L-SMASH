@@ -122,6 +122,7 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     h->info.samplesize = 4 * h->info.channels;
     h->info.framesize  = h->info.framelen * h->info.samplesize;
     h->info.timebase   = (timebase_t) { 1, h->info.samplerate };
+    h->info.last_delta = h->info.framelen;
 
     h->last_dts = INVALID_DTS;
     h->samplebuffer = NULL;

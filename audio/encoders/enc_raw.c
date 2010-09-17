@@ -56,7 +56,8 @@ static audio_packet_t *get_next_packet( hnd_t handle )
     out->data        = x264_af_interleave2( SMPFMT_S16, smp->samples, smp->channels, smp->samplecount );
     out->size        = smp->samplecount * h->info.samplesize;
     out->dts         = h->last_sample;
-    h->last_sample  += h->info.framelen;
+    out->info.last_delta = smp->samplecount;
+    h->last_sample  += smp->samplecount;
     x264_af_free_packet( smp );
 
     return out;

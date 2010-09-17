@@ -27,6 +27,7 @@ typedef struct lavf_source_t
     AVPacket *pkt;
     audio_packet_t *out;
     int copy;
+    int eof;
 } lavf_source_t;
 
 #define DEFAULT_BUFSIZE AVCODEC_MAX_AUDIO_FRAME_SIZE * 2
@@ -129,7 +130,8 @@ static int init( hnd_t *handle, const char *opt_str )
         .samplesize     = av_get_bits_per_sample_format( h->samplefmt ) * h->ctx->channels / 8,
         .timebase       = /* {1, 1000}, /*/ { 1, h->ctx->sample_rate },
         .extradata      = h->ctx->extradata,
-        .extradata_size = h->ctx->extradata_size
+        .extradata_size = h->ctx->extradata_size,
+        .last_delta     = h->ctx->frame_size
     };
     h->origtb = (timebase_t) { h->lavf->streams[track]->time_base.num, h->lavf->streams[track]->time_base.den };
 
@@ -186,7 +188,10 @@ static struct AVPacket *next_packet( hnd_t handle )
             if( ret != AVERROR_EOF )
                 AF_LOG_ERR( h, "read error: %s\n", strerror( -ret ) );
             else
+            {
                 AF_LOG( h, X264_LOG_INFO, "end of file reached\n" );
+                h->eof = 1;
+            }
             free_avpacket( pkt );
             return NULL;
         }
@@ -299,6 +304,9 @@ static audio_packet_t *get_next_packet( hnd_t handle )
 {
     lavf_source_t *h = handle;
 
+    if( h->eof )
+        return NULL;
+
     if( h->out )
     {
         audio_packet_t *out = h->out;
@@ -309,6 +317,8 @@ static audio_packet_t *get_next_packet( hnd_t handle )
     AVPacket *pkt = next_packet( h );
     if( !pkt )
         return NULL;
+    if( pkt->duration && ( pkt->duration != h->info.framelen ) )
+        h->info.last_delta = pkt->duration;
     return convert_to_audio_packet( h, pkt );
 }
 
