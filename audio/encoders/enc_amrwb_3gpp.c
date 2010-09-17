@@ -47,6 +47,7 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     h->info.framelen        = L_FRAME16k;
     h->info.framesize       = h->info.framelen * h->info.samplesize;
     h->info.timebase        = (timebase_t) { 1, h->info.samplerate };
+    h->info.last_delta      = h->info.framelen;
     h->bufsize              = NB_SERIAL_MAX;
 
     h->info.extradata       = NULL; /* These are created in muxer modules. AMR-WB does not have general structure. */

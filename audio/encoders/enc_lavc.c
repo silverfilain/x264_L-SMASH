@@ -13,6 +13,7 @@ typedef struct enc_lavc_t
     int finishing;
     int64_t last_sample;
     int buf_size;
+    int64_t last_dts;
 
     AVCodecContext *ctx;
     enum SampleFormat smpfmt;
@@ -157,10 +158,12 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     h->info.samplesize      = h->info.chansize * h->info.channels;
     h->info.framesize       = h->info.framelen * h->info.samplesize;
     h->info.timebase        = (timebase_t) { 1, h->ctx->sample_rate };
+    h->info.last_delta      = h->info.framelen;
 
     h->buf_size = !ISCODEC( alac )
                       ? FF_MIN_BUFFER_SIZE * 3 / 2
                       : 2 * (8 + h->info.framesize);
+    h->last_dts = INVALID_DTS;
 
     x264_cli_log( "audio", X264_LOG_INFO, "opened libavcodec's %s encoder (%s%.1f%s, %dbits, %dch, %dhz)\n", codec->name,
                   is_vbr ? "V" : "", brval, is_vbr ? "" : "kbps", h->info.chansize * 8, h->info.channels, h->info.samplerate );
@@ -183,33 +186,69 @@ static audio_packet_t *get_next_packet( hnd_t handle )
     assert( h->ctx );
 
 
+    audio_packet_t *smp = NULL;
     audio_packet_t *out = calloc( 1, sizeof( audio_packet_t ) );
     out->info = h->info;
-    out->dts  = h->last_sample;
     out->data = malloc( h->buf_size );
     while( out->size == 0 )
     {
-        audio_packet_t *smp = x264_af_get_samples( h->filter_chain, h->last_sample, h->last_sample + h->info.framelen );
+        smp = x264_af_get_samples( h->filter_chain, h->last_sample, h->last_sample + h->info.framelen );
         if( !smp )
-            return NULL;
+            goto error; // not an error but need same handling
 
         out->samplecount = smp->samplecount;
         out->channels    = smp->channels;
 
+        /* x264_af_interleave2 allocates only samplecount * channels * bytes per sample per single channel, */
+        /* but lavc expects sample buffer contains h->ctx->frame_size samples (at least, alac encoder does). */
+        /* If codec has capabilitiy to accept samples < default frame length, need to modify frame_size to */
+        /* specify real sample counts in sample buffer, and if not, need to padding buffer. */
+        if( smp->samplecount < h->info.framelen )
+        {
+            h->finishing = 1;
+            if( !(smp->flags & AUDIO_FLAG_EOF) )
+            {
+                x264_cli_log( "lavc", X264_LOG_ERROR, "samples too few but not EOF???\n" );
+                goto error;
+            }
+
+            if( h->ctx->codec->capabilities & CODEC_CAP_SMALL_LAST_FRAME )
+                h->ctx->frame_size = h->info.last_delta = smp->samplecount;
+            else
+            {
+                if( x264_af_resize_fill_buffer( smp->samples, h->info.framelen, h->info.channels, smp->samplecount, 0.0f ) )
+                {
+                    x264_cli_log( "lavc", X264_LOG_ERROR, "failed to expand buffer.\n" );
+                    goto error;
+                }
+                smp->samplecount = h->info.last_delta = h->info.framelen;
+            }
+        }
+
+        if( h->last_dts == INVALID_DTS )
+            h->last_dts = h->last_sample;
+        h->last_sample += smp->samplecount;
+
         void *indata   = x264_af_interleave2( h->smpfmt, smp->samples, smp->channels, smp->samplecount );
         out->size       = avcodec_encode_audio( h->ctx, out->data, h->buf_size, indata );
-        h->last_sample += h->info.framelen;
 
         x264_af_free_packet( smp );
     }
     if( out->size < 0 )
     {
         x264_cli_log( "lavc", X264_LOG_ERROR, "error encoding audio! (%s)\n", strerror( -out->size ) );
-        x264_af_free_packet( out );
-        return NULL;
+        goto error;
     }
 
+    out->dts     = h->last_dts;
+    h->last_dts += h->info.framelen;
     return out;
+
+error:
+    if( smp )
+        x264_af_free_packet( smp );
+    x264_af_free_packet( out );
+    return NULL;
 }
 
 static void skip_samples( hnd_t handle, uint64_t samplecount )
@@ -219,7 +258,26 @@ static void skip_samples( hnd_t handle, uint64_t samplecount )
 
 static audio_packet_t *finish( hnd_t handle )
 {
-    ((enc_lavc_t*)handle)->finishing = 1;
+    enc_lavc_t *h = handle;
+
+    h->finishing = 1;
+
+    audio_packet_t *out = calloc( 1, sizeof( audio_packet_t ) );
+    out->info     = h->info;
+    out->channels = h->info.channels;
+    out->data     = malloc( h->buf_size );
+    out->size     = avcodec_encode_audio( h->ctx, out->data, h->buf_size, NULL );
+
+    if( out->size <= 0 )
+        goto error;
+
+    out->dts = h->last_dts;
+    out->samplecount = h->info.framelen;
+    h->last_dts     += h->info.framelen;
+    return out;
+
+error:
+    x264_af_free_packet( out );
     return NULL;
 }
 

@@ -58,6 +58,7 @@ typedef struct audio_info_t
     uint8_t    *extradata;
     int         extradata_size;
     void       *opaque;
+    uint32_t    last_delta;
 } audio_info_t;
 
 typedef struct audio_aac_info_t
