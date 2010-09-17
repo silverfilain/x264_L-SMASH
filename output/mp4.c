@@ -353,8 +353,13 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
         if( p_audio )
         {
             MP4_LOG_IF_ERR( write_audio_frames( p_mp4, 0, 1 ), "failed to flush audio frame(s).\n" );
+#if HAVE_AUDIO
+            MP4_LOG_IF_ERR( isom_flush_pooled_samples( p_mp4->p_root, p_audio->i_track, p_audio->info->last_delta ),
+                            "failed to set last sample's duration for audio.\n" );
+#else
             MP4_LOG_IF_ERR( isom_flush_pooled_samples( p_mp4->p_root, p_audio->i_track, p_audio->summary->samples_in_frame ),
                             "failed to set last sample's duration for audio.\n" );
+#endif
             MP4_LOG_IF_ERR( isom_create_explicit_timeline_map( p_mp4->p_root, p_audio->i_track, 0, 0, ISOM_NORMAL_EDIT ),
                             "failed to set timeline map for audio.\n" );
             MP4_LOG_IF_ERR( isom_update_bitrate_info( p_mp4->p_root, p_audio->i_track, p_audio->i_sample_entry ),
