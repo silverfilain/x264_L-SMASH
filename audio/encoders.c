@@ -113,14 +113,17 @@ const audio_encoder_t *x264_audio_encoder_by_name( const char *name, int mode, c
     for( int i=0; registered_audio_encoders[i].codec; i++ )
     {
         char ffprefixed_name[32] = { 0 };
+        int is_lavc = 0;
 
         cur = &registered_audio_encoders[i];
-
+#if HAVE_LAVF
+        is_lavc = !!( cur->encoder == &audio_encoder_lavc );
+#endif
         if( !strcmp( name, mode == QUERY_CODEC ? cur->codec : cur->name ) )
             ret = cur->encoder;
-        else if( ( mode == QUERY_ENCODER ) && ( cur->encoder == &audio_encoder_lavc ) )
+        else if( ( mode == QUERY_ENCODER ) && is_lavc )
         {
-            snprintf( &ffprefixed_name[0], 32, "ff%s", cur->name );
+            snprintf( ffprefixed_name, 31, "ff%s", cur->name );
             if( !strcmp( name, ffprefixed_name ) )
                 ret = cur->encoder;
         }
@@ -229,12 +232,17 @@ void x264_audio_encoder_list_encoders( int longhelp )
     for( int i=0; registered_audio_encoders[i].codec; i++ )
     {
         const char *encoder_name = registered_audio_encoders[i].name;
-        const audio_encoder_t *enc = registered_audio_encoders[i].encoder;
+        const audio_encoder_t UNUSED *enc = registered_audio_encoders[i].encoder;
+        int is_lavc = 0;
+
+#if HAVE_LAVF
+        is_lavc = !!( enc == &audio_encoder_lavc );
+#endif
 
         if( x264_audio_encoder_by_name( encoder_name, QUERY_ENCODER, NULL ) )
         {
-            printf( "%s%s", ( enc == &audio_encoder_lavc ? "(ff)" : "" ), encoder_name );
-            len += strlen( encoder_name ) + ( enc == &audio_encoder_lavc ? 4 : 0 );
+            printf( "%s%s", (is_lavc ? "(ff)" : "" ), encoder_name );
+            len += strlen( encoder_name ) + ( is_lavc ? 4 : 0 );
 
             if( registered_audio_encoders[i+1].codec )
             {
