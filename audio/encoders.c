@@ -14,9 +14,6 @@ const audio_encoder_entry_t registered_audio_encoders[] = {
 #if HAVE_LAME
     { "mp3",    "lame",       &audio_encoder_lame, },
 #endif
-#if HAVE_LAVF
-    { "mp3",    "libmp3lame", &audio_encoder_lavc, },
-#endif
 #if HAVE_QT_AAC
     { "aac",    "qtaac",      &audio_encoder_qtaac, },
 #endif
@@ -24,7 +21,6 @@ const audio_encoder_entry_t registered_audio_encoders[] = {
     { "aac",    "faac",       &audio_encoder_faac, },
 #endif
 #if HAVE_LAVF
-    { "aac",    "libfaac",    &audio_encoder_lavc, },
     { "aac",    "aac",        &audio_encoder_lavc, },
     { "ac3",    "ac3",        &audio_encoder_lavc, },
     { "alac",   "alac",       &audio_encoder_lavc, },
