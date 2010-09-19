@@ -817,6 +817,17 @@ else
     define HAVE_GPL 0
 fi
 
+if [ "$nonfree" = "yes" ]; then
+    if [ "$audio_faac" = "yes" -o "$audio_amrwb" = "yes" ]; then
+        define HAVE_NONFREE 1
+    else
+        define HAVE_NONFREE 0
+        nonfree="no"
+    fi
+else
+    define HAVE_NONFREE 0
+fi
+
 rm -f conftest*
 
 # generate config files
@@ -899,6 +910,7 @@ ffms:       $ffms
 audio:      $audio$(test $audio = "yes" && echo " ($audio_encs)")
 gpac:       $gpac
 gpl:        $gpl
+nonfree:    $nonfree
 pthread:    $pthread
 filters:    $filters
 debug:      $debug
