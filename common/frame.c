@@ -1,7 +1,7 @@
 /*****************************************************************************
- * frame.c: h264 encoder library
+ * frame.c: frame handling
  *****************************************************************************
- * Copyright (C) 2003-2008 x264 project
+ * Copyright (C) 2003-2010 x264 project
  *
  * Authors: Laurent Aimar <fenrir@via.ecp.fr>
  *          Loren Merritt <lorenm@u.washington.edu>
@@ -20,6 +20,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02111, USA.
+ *
+ * This program is also available under a commercial proprietary license.
+ * For more information, contact us at licensing@x264.com.
  *****************************************************************************/
 
 #include "common.h"
@@ -265,6 +268,7 @@ int x264_frame_copy_picture( x264_t *h, x264_frame_t *dst, x264_picture_t *src )
     dst->i_pts      = dst->i_reordered_pts = src->i_pts;
     dst->param      = src->param;
     dst->i_pic_struct = src->i_pic_struct;
+    dst->extra_sei  = src->extra_sei;
 
     uint8_t *pix[3];
     int stride[3];
