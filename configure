@@ -11,6 +11,7 @@ echo "  --disable-avs            disables avisynth support (windows only)"
 echo "  --disable-lavf           disables libavformat support"
 echo "  --disable-ffms           disables ffmpegsource support"
 echo "  --disable-gpac           disables gpac support"
+echo "  --disable-gpl            disables GPL-only features"
 echo "  --disable-audio          disables audio support (requires lavf support)"
 echo "  --disable-pthread        disables multithreaded encoding"
 echo "  --disable-swscale        disables swscale support"
@@ -140,6 +141,7 @@ avs="auto"
 lavf="auto"
 ffms="auto"
 gpac="auto"
+gpl="yes"
 audio="auto"
 pthread="auto"
 swscale="auto"
@@ -198,6 +200,9 @@ for opt do
             ;;
         --disable-gpac)
             gpac="no"
+            ;;
+        --disable-gpl)
+            gpl="no"
             ;;
         --disable-audio)
             audio="no"
@@ -368,7 +373,8 @@ case $host_cpu in
         LDFLAGS="$LDFLAGS -arch x86_64"
       fi
     elif [ "$SYS" = MINGW ]; then
-      ASFLAGS="$ASFLAGS -f win32 -m amd64 -DPREFIX"
+      ASFLAGS="$ASFLAGS -f win32 -m amd64"
+      cc_check "" "-S" && grep -q "_main:" conftest && ASFLAGS="$ASFLAGS -DPREFIX"
     else
       ASFLAGS="$ASFLAGS -f elf -m amd64"
     fi
@@ -753,6 +759,12 @@ fi
 
 define BIT_DEPTH $bit_depth
 
+if [ $gpl = yes ]; then
+    define HAVE_GPL 1
+else
+    define HAVE_GPL 0
+fi
+
 rm -f conftest*
 
 # generate config files
@@ -778,6 +790,7 @@ EXE=$EXE
 VIS=$vis
 HAVE_GETOPT_LONG=$HAVE_GETOPT_LONG
 DEVNULL=$DEVNULL
+GPL=$gpl
 EOF
 
 if [ "$shared" = "yes" ]; then
@@ -820,7 +833,9 @@ Cflags: -I$includedir
 EOF
 
 filters="crop select_every"
+gpl_filters=""
 [ $swscale = yes ] && filters="resize $filters"
+[ $gpl = yes ] && filters="$filters $gpl_filters"
 
 cat > conftest.log <<EOF
 Platform:   $ARCH
@@ -831,6 +846,7 @@ lavf:       $lavf
 ffms:       $ffms
 audio:      $audio$(test $audio = "yes" && echo " ($audio_encs)")
 gpac:       $gpac
+gpl:        $gpl
 pthread:    $pthread
 filters:    $filters
 debug:      $debug

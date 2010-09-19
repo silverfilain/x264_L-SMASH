@@ -1,7 +1,7 @@
 /*****************************************************************************
- * x264: h264 encoder
+ * encoder.c: top-level encoder functions
  *****************************************************************************
- * Copyright (C) 2003-2008 x264 project
+ * Copyright (C) 2003-2010 x264 project
  *
  * Authors: Laurent Aimar <fenrir@via.ecp.fr>
  *          Loren Merritt <lorenm@u.washington.edu>
@@ -20,6 +20,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02111, USA.
+ *
+ * This program is also available under a commercial proprietary license.
+ * For more information, contact us at licensing@x264.com.
  *****************************************************************************/
 
 #include <math.h>
@@ -2576,6 +2579,9 @@ int     x264_encoder_encode( x264_t *h,
             h->fdec->i_pir_start_col = h->fdec->f_pir_position+0.5;
             h->fdec->f_pir_position += increment * pocdiff;
             h->fdec->i_pir_end_col = h->fdec->f_pir_position+0.5;
+            /* If our intra refresh has reached the right side of the frame, we're done. */
+            if( h->fdec->i_pir_end_col >= h->mb.i_mb_width - 1 )
+                h->fdec->f_pir_position = h->mb.i_mb_width;
         }
     }
 
@@ -2600,7 +2606,26 @@ int     x264_encoder_encode( x264_t *h,
         }
 
         /* buffering period sei is written in x264_encoder_frame_end */
+    }
 
+    /* write extra sei */
+    for( int i = 0; i < h->fenc->extra_sei.num_payloads; i++ )
+    {
+        x264_nal_start( h, NAL_SEI, NAL_PRIORITY_DISPOSABLE );
+        x264_sei_write( &h->out.bs, h->fenc->extra_sei.payloads[i].payload, h->fenc->extra_sei.payloads[i].payload_size,
+                        h->fenc->extra_sei.payloads[i].payload_type );
+        if( x264_nal_end( h ) )
+            return -1;
+        overhead += h->out.nal[h->out.i_nal-1].i_payload + NALU_OVERHEAD - (h->param.b_annexb && h->out.i_nal-1);
+        if( h->fenc->extra_sei.sei_free && h->fenc->extra_sei.payloads[i].payload )
+            h->fenc->extra_sei.sei_free( h->fenc->extra_sei.payloads[i].payload );
+    }
+
+    if( h->fenc->extra_sei.sei_free && h->fenc->extra_sei.payloads )
+        h->fenc->extra_sei.sei_free( h->fenc->extra_sei.payloads );
+
+    if( h->fenc->b_keyframe )
+    {
         if( h->param.b_repeat_headers && h->fenc->i_frame == 0 )
         {
             /* identify ourself */
@@ -2614,7 +2639,7 @@ int     x264_encoder_encode( x264_t *h,
 
         if( h->fenc->i_type != X264_TYPE_IDR )
         {
-            int time_to_recovery = h->param.i_open_gop ? 0 : X264_MIN( h->mb.i_mb_width - 1, h->param.i_keyint_max ) + h->param.i_bframe;
+            int time_to_recovery = h->param.i_open_gop ? 0 : X264_MIN( h->mb.i_mb_width - 1, h->param.i_keyint_max ) + h->param.i_bframe - 1;
             x264_nal_start( h, NAL_SEI, NAL_PRIORITY_DISPOSABLE );
             x264_sei_recovery_point_write( h, &h->out.bs, time_to_recovery );
             x264_nal_end( h );
