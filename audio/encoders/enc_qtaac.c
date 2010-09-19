@@ -224,8 +224,7 @@ static int get_bitrate_values_range( CFArrayRef config, CFStringRef type, int *v
     return 0;
 }
 
-#define SETVALUE( name, type, value ) \
-{\
+#define SETVALUE( name, type, value ) {\
     CFMutableDictionaryRef paramkey = CFDictionaryCreateMutableCopy( NULL, 0, param );\
     CFNumberRef num = CFNumberCreate( NULL, type, &value );\
     CFDictionarySetValue( paramkey, CFSTR(name), num );\
@@ -246,36 +245,20 @@ static CFArrayRef configure_codec_settings_array( CFArrayRef current_array, Code
     {
         CFDictionaryRef param           = CFArrayGetValueAtIndex( current_params, i );
 
-        if( 0 )
-        {}
-#if 0
-        else if( !CFStringCompare( (CFStringRef)CFDictionaryGetValue( param, CFSTR("key") ), CFSTR("Channel Configuration"), 0 ) )
-        {
-            SETVALUE( "current value", kCFNumberSInt32Type, config->channel_configuration_index );
-        }
-#endif
+        if( !CFStringCompare( (CFStringRef)CFDictionaryGetValue( param, CFSTR("key") ), CFSTR("Channel Configuration"), 0 ) )
+            SETVALUE( "current value", kCFNumberSInt32Type, config->channel_configuration_index )
         else if( !CFStringCompare( (CFStringRef)CFDictionaryGetValue( param, CFSTR("key") ), CFSTR("Sample Rate"), 0 ) )
-        {
-            SETVALUE( "current value", kCFNumberSInt32Type, config->samplerate_index );
-        }
+            SETVALUE( "current value", kCFNumberSInt32Type, config->samplerate_index )
         else if( !CFStringCompare( (CFStringRef)CFDictionaryGetValue( param, CFSTR("key") ), CFSTR("Target Format"), 0 ) )
-        {
-            SETVALUE( "current value", kCFNumberSInt32Type, config->encoder_mode );
-        }
+            SETVALUE( "current value", kCFNumberSInt32Type, config->encoder_mode )
         else if( !CFStringCompare( (CFStringRef)CFDictionaryGetValue( param, CFSTR("key") ), CFSTR("Quality"), 0 ) )
-        {
-            SETVALUE( "current value", kCFNumberSInt32Type, config->encoder_quality );
-        }
+            SETVALUE( "current value", kCFNumberSInt32Type, config->encoder_quality )
         else if( !CFStringCompare( (CFStringRef)CFDictionaryGetValue( param, CFSTR("key") ), CFSTR("Bit Rate"), 0 ) )
         {
             if( !config->is_vbr )
-            {
-                SETVALUE( "current value", kCFNumberSInt32Type, config->bitrate_index );
-            }
+                SETVALUE( "current value", kCFNumberSInt32Type, config->bitrate_index )
             else
-            {
-                SETVALUE( "slider value", kCFNumberSInt32Type, config->vbr_quality );
-            }
+                SETVALUE( "slider value", kCFNumberSInt32Type, config->vbr_quality )
         }
         else
             CFArrayAppendValue( new_params, param );
@@ -322,6 +305,21 @@ OSStatus configure_quicktime_component( enc_qtaac_t *h )
     if( (h->config.samplerate_index = get_samplerate_index( h->info.samplerate, h->config.he_flag )) < 0 ||
         (h->config.channel_configuration_index = get_channel_configuration_index( h->info.channels, h->config.he_flag )) < 0 )
         goto error;
+
+    /* Encoder bitrate control mode should be set before retrieving available bitrate ranges since they depend on mode. */
+    /* So if not TrueVBR, configure with dummy bitrate once and re-configure with validated bitrate again. */
+    if( !h->config.is_vbr )
+    {
+        CodecConfig config_tmp = h->config;
+        config_tmp.bitrate_index = 0;
+
+        if( ( config_array = configure_codec_settings_array( config_array, &h->config ) ) == NULL )
+            goto error;
+        if( QTSetComponentProperty( h->ci, kQTPropertyClass_SCAudio, kQTSCAudioPropertyID_CodecSpecificSettingsArray, sizeof(config_array), &config_array) != noErr )
+            goto error;
+        if( QTGetComponentProperty( h->ci, kQTPropertyClass_SCAudio, kQTSCAudioPropertyID_CodecSpecificSettingsArray, sizeof(config_array), &config_array, NULL ) != noErr )
+        goto error;
+    }
 
     if( !h->config.is_vbr )
     {
