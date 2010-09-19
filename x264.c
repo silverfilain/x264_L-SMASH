@@ -232,19 +232,24 @@ static void print_version_info()
 #endif
     printf( "configuration: --bit-depth=%d\n", BIT_DEPTH );
     printf( "x264 license: " );
-#if HAVE_GPL
+#if HAVE_NONFREE
+    printf( "Non-Free\n" );
+#elif HAVE_GPL
     printf( "GPL version 2 or later\n" );
 #else
     printf( "Non-GPL commercial\n" );
 #endif
+    int redist = !HAVE_NONFREE;
 #if HAVE_LAVF
     const char *license = avformat_license();
     printf( "libavformat license: %s\n", license );
     if( !strcmp( license, "nonfree and unredistributable" ) ||
        (!HAVE_GPL && (!strcmp( license, "GPL version 2 or later" )
                   ||  !strcmp( license, "GPL version 3 or later" ))))
-        printf( "WARNING: This binary is unredistributable!\n" );
+        redist = 0;
 #endif
+    if( !redist )
+        printf( "WARNING: This binary is unredistributable!\n" );
 }
 
 /****************************************************************************
