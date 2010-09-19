@@ -296,13 +296,6 @@ static void lavc_close( hnd_t handle )
     free( h );
 }
 
-static void lavc_help_default( const char * const encoder_name )
-{
-    printf( "      * (ff)%s encoder help\n", encoder_name );
-    printf( "        No detailed help available at present\n" );
-    printf( "\n" );
-}
-
 static void lavc_help_amrnb( const char * const encoder_name )
 {
     printf( "      * (ff)%s encoder help\n", encoder_name );
@@ -321,18 +314,7 @@ static void lavc_help( const char * const encoder_name )
         return;
 
 #define SHOWHELP( encoder, helpname ) if( !strcmp( enc->name, #encoder ) ) lavc_help_##helpname ( #encoder );
-
-#if 0
-    SHOWHELP( libmp3lame, default );
-    SHOWHELP( libfaac, default );
-    SHOWHELP( aac, default );
-    SHOWHELP( ac3, default );
-    SHOWHELP( alac, default );
-    SHOWHELP( libvorbis, default );
-    SHOWHELP( vorbis, default );
-#endif
     SHOWHELP( libopencore_amrnb, amrnb );
-
 #undef SHOWHELP
 
     return;
