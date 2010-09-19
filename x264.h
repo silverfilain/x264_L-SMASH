@@ -1,10 +1,11 @@
 /*****************************************************************************
- * x264.h: h264 encoder library
+ * x264.h: x264 public header
  *****************************************************************************
- * Copyright (C) 2003-2008 x264 Project
+ * Copyright (C) 2003-2010 x264 project
  *
  * Authors: Laurent Aimar <fenrir@via.ecp.fr>
  *          Loren Merritt <lorenm@u.washington.edu>
+ *          Jason Garrett-Glaser <darkshikari@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,6 +20,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02111, USA.
+ *
+ * This program is also available under a commercial proprietary license.
+ * For more information, contact us at licensing@x264.com.
  *****************************************************************************/
 
 #ifndef X264_X264_H
@@ -35,7 +39,7 @@
 
 #include <stdarg.h>
 
-#define X264_BUILD 104
+#define X264_BUILD 105
 
 /* x264_t:
  *      opaque handler for encoder */
@@ -582,6 +586,30 @@ typedef struct
     double dpb_output_time;
 } x264_hrd_t;
 
+/* Arbitrary user SEI:
+ * Payload size is in bytes and the payload pointer must be valid.
+ * Payload types and syntax can be found in Annex D of the H.264 Specification.
+ * SEI payload alignment bits as described in Annex D must be included at the
+ * end of the payload if needed.
+ * The payload should not be NAL-encapsulated.
+ * Payloads are written first in order of input, apart from in the case when HRD
+ * is enabled where payloads are written after the Buffering Period SEI. */
+
+typedef struct
+{
+    int payload_size;
+    int payload_type;
+    uint8_t *payload;
+} x264_sei_payload_t;
+
+typedef struct
+{
+    int num_payloads;
+    x264_sei_payload_t *payloads;
+    /* In: optional callback to free each payload AND x264_sei_payload_t when used. */
+    void (*sei_free)( void* );
+} x264_sei_t;
+
 typedef struct
 {
     int     i_csp;       /* Colorspace */
@@ -641,6 +669,8 @@ typedef struct
     x264_image_properties_t prop;
     /* Out: HRD timing information. Output only when i_nal_hrd is set. */
     x264_hrd_t hrd_timing;
+    /* In: arbitrary user SEI (e.g subtitles, AFDs) */
+    x264_sei_t extra_sei;
     /* private user data. libx264 doesn't touch this,
        not even copy it from input to output frames. */
     void *opaque;

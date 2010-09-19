@@ -26,6 +26,11 @@ SRCSO =
 
 CONFIG := $(shell cat config.h)
 
+# GPL-only files
+ifeq ($(GPL),yes)
+SRCCLI +=
+endif
+
 # Optional module sources
 ifneq ($(findstring HAVE_AVS, $(CONFIG)),)
 SRCCLI += input/avs.c

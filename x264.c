@@ -1,11 +1,12 @@
 /*****************************************************************************
- * x264: h264 encoder testing program.
+ * x264: top-level x264cli functions
  *****************************************************************************
- * Copyright (C) 2003-2008 x264 project
+ * Copyright (C) 2003-2010 x264 project
  *
  * Authors: Loren Merritt <lorenm@u.washington.edu>
  *          Laurent Aimar <fenrir@via.ecp.fr>
  *          Steven Walters <kemuri9@gmail.com>
+ *          Jason Garrett-Glaser <darkshikari@gmail.com>
  *          Kieran Kunhya <kieran@kunhya.com>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -21,6 +22,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02111, USA.
+ *
+ * This program is also available under a commercial proprietary license.
+ * For more information, contact us at licensing@x264.com.
  *****************************************************************************/
 
 #include <stdlib.h>
@@ -46,6 +50,8 @@
 #endif
 
 #if HAVE_LAVF
+#undef DECLARE_ALIGNED
+#include <libavformat/avformat.h>
 #include <libavutil/pixfmt.h>
 #include <libavutil/pixdesc.h>
 #endif
@@ -209,6 +215,36 @@ void x264_cli_printf( int i_level, const char *fmt, ... )
     va_start( arg, fmt );
     vfprintf( stderr, fmt, arg );
     va_end( arg );
+}
+
+static void print_version_info()
+{
+#ifdef X264_POINTVER
+    printf( "x264 "X264_POINTVER"\n" );
+#else
+    printf( "x264 0.%d.X\n", X264_BUILD );
+#endif
+    printf( "built on " __DATE__ ", " );
+#ifdef __GNUC__
+    printf( "gcc: " __VERSION__ "\n" );
+#else
+    printf( "using a non-gcc compiler\n" );
+#endif
+    printf( "configuration: --bit-depth=%d\n", BIT_DEPTH );
+    printf( "x264 license: " );
+#if HAVE_GPL
+    printf( "GPL version 2 or later\n" );
+#else
+    printf( "Non-GPL commercial\n" );
+#endif
+#if HAVE_LAVF
+    const char *license = avformat_license();
+    printf( "libavformat license: %s\n", license );
+    if( !strcmp( license, "nonfree and unredistributable" ) ||
+       (!HAVE_GPL && (!strcmp( license, "GPL version 2 or later" )
+                  ||  !strcmp( license, "GPL version 3 or later" ))))
+        printf( "WARNING: This binary is unredistributable!\n" );
+#endif
 }
 
 /****************************************************************************
@@ -1267,18 +1303,7 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
                 Help( &defaults, 2 );
                 exit(0);
             case 'V':
-#ifdef X264_POINTVER
-                printf( "x264 "X264_POINTVER"\n" );
-#else
-                printf( "x264 0.%d.X\n", X264_BUILD );
-#endif
-                printf( "built on " __DATE__ ", " );
-#ifdef __GNUC__
-                printf( "gcc: " __VERSION__ "\n" );
-#else
-                printf( "using a non-gcc compiler\n" );
-#endif
-                printf( "configuration: --bit-depth=%d\n", BIT_DEPTH );
+                print_version_info();
                 exit(0);
             case OPT_FRAMES:
                 param->i_frame_total = X264_MAX( atoi( optarg ), 0 );
