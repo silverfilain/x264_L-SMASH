@@ -1204,13 +1204,9 @@ static int isom_add_stsd( isom_stbl_t *stbl )
     return 0;
 }
 
-int isom_add_pasp( isom_root_t *root, uint32_t track_ID, uint32_t entry_number )
+static int isom_add_pasp( isom_visual_entry_t *visual )
 {
-    isom_trak_entry_t *trak = isom_get_trak( root, track_ID );
-    if( !trak || !trak->mdia || !trak->mdia->minf || !trak->mdia->minf->stbl || !trak->mdia->minf->stbl->stsd || !trak->mdia->minf->stbl->stsd->list )
-        return -1;
-    isom_visual_entry_t *visual = (isom_visual_entry_t *)isom_get_entry_data( trak->mdia->minf->stbl->stsd->list, entry_number );
-    if( !visual )
+    if( !visual || visual->pasp )
         return -1;
     isom_create_basebox( pasp, ISOM_BOX_TYPE_PASP );
     visual->pasp = pasp;
@@ -2726,7 +2722,7 @@ static uint64_t isom_get_cts( isom_stts_t *stts, isom_ctts_t *ctts, uint32_t sam
 }
 #endif
 
-static int isom_reset_last_sample_delta( isom_stbl_t *stbl, uint32_t sample_delta )
+static int isom_replace_last_sample_delta( isom_stbl_t *stbl, uint32_t sample_delta )
 {
     if( !stbl || !stbl->stts || !stbl->stts->list || !stbl->stts->list->tail || !stbl->stts->list->tail->data )
         return -1;
@@ -2772,7 +2768,7 @@ static int isom_update_mdhd_duration( isom_trak_entry_t *trak, uint32_t last_sam
         if( last_sample_delta )
         {
             mdhd->duration += last_sample_delta;
-            if( isom_reset_last_sample_delta( stbl, last_sample_delta ) )
+            if( isom_replace_last_sample_delta( stbl, last_sample_delta ) )
                 return -1;
         }
         else if( last_stts_data->sample_count > 1 )
@@ -2838,7 +2834,7 @@ static int isom_update_mdhd_duration( isom_trak_entry_t *trak, uint32_t last_sam
             last_sample_delta = mdhd->duration - dts;
         else
             mdhd->duration = dts + last_sample_delta; /* mdhd duration must not less than last dts. */
-        if( isom_reset_last_sample_delta( stbl, last_sample_delta ) )
+        if( isom_replace_last_sample_delta( stbl, last_sample_delta ) )
             return -1;
     }
     if( mdhd->duration > UINT32_MAX )
@@ -3125,45 +3121,6 @@ static int isom_output_cache( isom_root_t *root, uint32_t track_ID )
     if( isom_add_stco_entry( stbl, root->bs->written ) ||
         isom_write_pooled_samples( trak, current->pool ) )
         return -1;
-    return 0;
-}
-
-int isom_set_track_presentation_size( isom_root_t *root, uint32_t track_ID, uint32_t width, uint32_t height )
-{
-    isom_trak_entry_t *trak = isom_get_trak( root, track_ID );
-    if( !trak || !trak->tkhd )
-        return -1;
-    trak->tkhd->width = width;
-    trak->tkhd->height = height;
-    return 0;
-}
-
-int isom_set_sample_resolution( isom_root_t *root, uint32_t track_ID, uint32_t entry_number, uint16_t width, uint16_t height )
-{
-    isom_trak_entry_t *trak = isom_get_trak( root, track_ID );
-    if( !trak || !trak->mdia || !trak->mdia->minf || !trak->mdia->minf->stbl || !trak->mdia->minf->stbl->stsd || !trak->mdia->minf->stbl->stsd->list )
-        return -1;
-    isom_visual_entry_t *data = (isom_visual_entry_t *)isom_get_entry_data( trak->mdia->minf->stbl->stsd->list, entry_number );
-    if( !data )
-        return -1;
-    data->width = width;
-    data->height = height;
-    return 0;
-}
-
-int isom_set_sample_aspect_ratio( isom_root_t *root, uint32_t track_ID, uint32_t entry_number, uint32_t hSpacing, uint32_t vSpacing )
-{
-    isom_trak_entry_t *trak = isom_get_trak( root, track_ID );
-    if( !trak || !trak->mdia || !trak->mdia->minf || !trak->mdia->minf->stbl || !trak->mdia->minf->stbl->stsd || !trak->mdia->minf->stbl->stsd->list )
-        return -1;
-    isom_visual_entry_t *data = (isom_visual_entry_t *)isom_get_entry_data( trak->mdia->minf->stbl->stsd->list, entry_number );
-    if( !data )
-        return -1;
-    isom_pasp_t *pasp = (isom_pasp_t *)data->pasp;
-    if( !pasp )
-        return -1;
-    pasp->hSpacing = hSpacing;
-    pasp->vSpacing = vSpacing;
     return 0;
 }
 
@@ -3865,7 +3822,7 @@ static uint64_t isom_update_mdia_size( isom_mdia_t *mdia )
 {
     if( !mdia )
         return 0;
-    mdia->base_header.size = ISOM_DEFAULT_BOX_HEADER_SIZE 
+    mdia->base_header.size = ISOM_DEFAULT_BOX_HEADER_SIZE
         + isom_update_mdhd_size( mdia->mdhd )
         + isom_update_hdlr_size( mdia->hdlr )
         + isom_update_minf_size( mdia->minf );
@@ -4089,6 +4046,45 @@ int isom_set_track_volume( isom_root_t *root, uint32_t track_ID, int16_t volume 
     if( !trak || !trak->tkhd )
         return -1;
     trak->tkhd->volume = volume;
+    return 0;
+}
+
+int isom_set_track_presentation_size( isom_root_t *root, uint32_t track_ID, uint32_t width, uint32_t height )
+{
+    isom_trak_entry_t *trak = isom_get_trak( root, track_ID );
+    if( !trak || !trak->tkhd )
+        return -1;
+    trak->tkhd->width = width;
+    trak->tkhd->height = height;
+    return 0;
+}
+
+int isom_set_sample_resolution( isom_root_t *root, uint32_t track_ID, uint32_t entry_number, uint16_t width, uint16_t height )
+{
+    isom_trak_entry_t *trak = isom_get_trak( root, track_ID );
+    if( !trak || !trak->mdia || !trak->mdia->minf || !trak->mdia->minf->stbl || !trak->mdia->minf->stbl->stsd || !trak->mdia->minf->stbl->stsd->list )
+        return -1;
+    isom_visual_entry_t *data = (isom_visual_entry_t *)isom_get_entry_data( trak->mdia->minf->stbl->stsd->list, entry_number );
+    if( !data )
+        return -1;
+    data->width = width;
+    data->height = height;
+    return 0;
+}
+
+int isom_set_sample_aspect_ratio( isom_root_t *root, uint32_t track_ID, uint32_t entry_number, uint32_t hSpacing, uint32_t vSpacing )
+{
+    isom_trak_entry_t *trak = isom_get_trak( root, track_ID );
+    if( !trak || !trak->mdia || !trak->mdia->minf || !trak->mdia->minf->stbl || !trak->mdia->minf->stbl->stsd || !trak->mdia->minf->stbl->stsd->list )
+        return -1;
+    isom_visual_entry_t *data = (isom_visual_entry_t *)isom_get_entry_data( trak->mdia->minf->stbl->stsd->list, entry_number );
+    if( !data )
+        return -1;
+    if( !data->pasp && isom_add_pasp( data ) )
+        return -1;
+    isom_pasp_t *pasp = (isom_pasp_t *)data->pasp;
+    pasp->hSpacing = hSpacing;
+    pasp->vSpacing = vSpacing;
     return 0;
 }
 
@@ -4344,7 +4340,7 @@ int isom_set_last_sample_delta( isom_root_t *root, uint32_t track_ID, uint32_t s
         else if( isom_add_stts_entry( stbl, sample_delta ) )
             return -1;
     }
-    else if( sample_count == i && isom_reset_last_sample_delta( stbl, sample_delta ) )
+    else if( sample_count == i && isom_replace_last_sample_delta( stbl, sample_delta ) )
         return -1;
     return isom_update_track_duration( root, track_ID, sample_delta );
 }
