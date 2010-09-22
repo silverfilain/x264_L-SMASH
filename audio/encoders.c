@@ -10,6 +10,7 @@ typedef struct {
 } audio_encoder_entry_t;
 
 const audio_encoder_entry_t registered_audio_encoders[] = {
+#if HAVE_AUDIO
     { "raw",    "raw",        &audio_encoder_raw, },
 #if HAVE_LAME
     { "mp3",    "lame",       &audio_encoder_lame, },
@@ -33,6 +34,7 @@ const audio_encoder_entry_t registered_audio_encoders[] = {
 #if HAVE_AMRWB_3GPP
     { "amrwb",  "amrnb_3gpp", &audio_encoder_amrwb_3gpp, },
 #endif
+#endif /* HAVE_AUDIO */
     { NULL, },
 };
 
@@ -116,7 +118,7 @@ const audio_encoder_t *x264_audio_encoder_by_name( const char *name, int mode, c
         int is_lavc = 0;
 
         cur = &registered_audio_encoders[i];
-#if HAVE_LAVF
+#if HAVE_AUDIO && HAVE_LAVF
         is_lavc = !!( cur->encoder == &audio_encoder_lavc );
 #endif
         if( !strcmp( name, mode == QUERY_CODEC ? cur->codec : cur->name ) )
@@ -235,7 +237,7 @@ void x264_audio_encoder_list_encoders( int longhelp )
         const audio_encoder_t UNUSED *enc = registered_audio_encoders[i].encoder;
         int is_lavc = 0;
 
-#if HAVE_LAVF
+#if HAVE_AUDIO && HAVE_LAVF
         is_lavc = !!( enc == &audio_encoder_lavc );
 #endif
 

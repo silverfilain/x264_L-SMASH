@@ -35,6 +35,10 @@ extern const audio_encoder_t audio_encoder_faac;
 extern const audio_encoder_t audio_encoder_amrwb_3gpp;
 #endif
 
+#endif /* HAVE_AUDIO */
+
+#define AUDIO_CODEC_COMMON_OPTIONS "codec", "is_vbr", "bitrate", "quality"
+
 enum audio_encoder_query
 {
     QUERY_CODEC   = 0,
@@ -42,10 +46,6 @@ enum audio_encoder_query
 };
 
 #define MAX_ARGS 256
-
-#endif /* HAVE_AUDIO */
-
-#define AUDIO_CODEC_COMMON_OPTIONS "codec", "is_vbr", "bitrate", "quality"
 
 /* the first available encoder on allowed_list is the prefered encoder if encoder is "auto"
  * allowed_list = NULL means any valid encoder is allowed
