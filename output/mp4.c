@@ -510,12 +510,8 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
         else
             dh /= sar;
         if( !p_mp4->no_pasp )
-        {
-            MP4_FAIL_IF_ERR( isom_add_pasp( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry ),
-                             "failed to add pasp.\n" );
             MP4_FAIL_IF_ERR( isom_set_sample_aspect_ratio( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry, p_param->vui.i_sar_width, p_param->vui.i_sar_height ),
                              "failed to set sample aspect ratio.\n" );
-        }
     }
     MP4_FAIL_IF_ERR( isom_set_track_presentation_size( p_mp4->p_root, p_mp4->i_track, dw, dh ),
                      "failed to set presentation size.\n" );

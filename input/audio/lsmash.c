@@ -246,4 +246,3 @@ const audio_encoder_t audio_copy_lsmash =
     .free_packet     = free_packet,
     .close           = copy_close
 };
-
