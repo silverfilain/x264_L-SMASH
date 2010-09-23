@@ -75,6 +75,120 @@ fail:
     return -1;
 }
 
+static AVS_Value update_clip( avs_source_t *h, const AVS_VideoInfo **vi, AVS_Value res, AVS_Value release )
+{
+    h->func.avs_release_clip( h->clip );
+    h->clip = h->func.avs_take_clip( res, h->env );
+    h->func.avs_release_value( release );
+    *vi = h->func.avs_get_video_info( h->clip );
+    return res;
+}
+
+static AVS_Value check_avisource( hnd_t handle, const char *filename, int track )
+{
+    avs_source_t *h = handle;
+    AVS_Value arg = avs_new_value_string( filename );
+    AVS_Value res;
+
+    x264_cli_log( "avs", X264_LOG_INFO, "trying AVISource for audio ..." );
+    res = h->func.avs_invoke( h->env, "AVISource", arg, NULL );
+    if( avs_is_error( res ) )
+        x264_cli_printf( X264_LOG_INFO, " failed\n" );
+    else
+        x264_cli_printf( X264_LOG_INFO, " succeeded\n" );
+
+    h->func.avs_release_value( arg );
+    return res;
+}
+
+// FFAudioSource(string source, int track)
+static AVS_Value check_ffms( hnd_t handle, const char *filename, int track )
+{
+    avs_source_t *h = handle;
+    AVS_Value res;
+    x264_cli_log( "avs", X264_LOG_INFO, "trying FFAudioSource for audio ..." );
+    if( !h->func.avs_function_exists( h->env, "FFAudioSource" ) )
+    {
+        x264_cli_printf( X264_LOG_INFO, " not found\n" );
+        res = avs_new_value_error( "not found" );
+        return res;
+    }
+
+    AVS_Value arg_array = avs_new_value_array( (AVS_Value []){ avs_new_value_string( filename ),
+                                                 avs_new_value_int( track ) }, 2);
+    const char *arg_names[2] = { NULL, "track" };
+
+    res = h->func.avs_invoke( h->env, "FFAudioSource", arg_array, arg_names );
+    if( avs_is_error( res ) )
+        x264_cli_printf( X264_LOG_INFO, " failed\n" );
+    else
+        x264_cli_printf( X264_LOG_INFO, " succeeded\n" );
+
+    h->func.avs_release_value( arg_array );
+    return res;
+}
+
+//DirectShowSource (string filename, bool "audio", bool "video" )
+static AVS_Value check_directshowsource( hnd_t handle, const char *filename, int track )
+{
+    avs_source_t *h = handle;
+    AVS_Value res;
+    x264_cli_log( "avs", X264_LOG_INFO, "trying DirectShowSource for audio ..." );
+    if( !h->func.avs_function_exists( h->env, "DirectShowSource" ) )
+    {
+        x264_cli_printf( X264_LOG_INFO, " not found\n" );
+        res = avs_new_value_error( "not found" );
+        return res;
+    }
+
+    AVS_Value arg_array = avs_new_value_array( (AVS_Value []){ avs_new_value_string( filename ),
+                                                 avs_new_value_bool( 0 ),
+                                                 avs_new_value_bool( 1 ) }, 3);
+    const char *arg_names[3] = { NULL, "video", "audio" };
+
+    res = h->func.avs_invoke( h->env, "DirectShowSource", arg_array, arg_names );
+    if( avs_is_error( res ) )
+        x264_cli_printf( X264_LOG_INFO, " failed\n" );
+    else
+        x264_cli_printf( X264_LOG_INFO, " succeeded\n" );
+
+    h->func.avs_release_value( arg_array );
+    return res;
+}
+
+static void avs_audio_build_filter_sequence( const char *ext, int track,
+    AVS_Value (*filters[])( hnd_t handle, const char *filename, int track ) )
+{
+    int i = 0;
+    if( track != TRACK_ANY )
+    {
+        // audio track selection doesn't work except for ffms
+        filters[i++] = check_ffms;
+    }
+    else if( !strcmp( ext, "avi" ) )
+    {
+        // try AVISource first
+        filters[i++] = check_avisource;
+        filters[i++] = check_ffms;
+        filters[i++] = check_directshowsource;
+    }
+    else
+    {
+        filters[i++] = check_ffms;
+        filters[i++] = check_directshowsource;
+    }
+    filters[i] = NULL;
+
+    return;
+}
+
+#define GOTO_IF( cond, label, ... ) \
+if( cond ) \
+{ \
+    x264_cli_log( "avs", X264_LOG_ERROR, __VA_ARGS__ ); \
+    goto label; \
+}
+
 static int init( hnd_t *handle, const char *opt_str )
 {
     assert( opt_str );
@@ -86,62 +200,85 @@ static int init( hnd_t *handle, const char *opt_str )
 
     char *filename = x264_get_option( "filename", opts );
     char *filename_ext = get_filename_extension( filename );
+    int track = x264_otoi( x264_get_option( "track", opts ), TRACK_ANY );
 
-    if( !filename )
-    {
-        x264_cli_log( "avs", X264_LOG_ERROR, "no filename given" );
-        goto fail2;
-    }
-    if( !strcmp( filename, "-" ) || ( filename_ext && strcmp( filename_ext, "avs" ) ) )
-    {
-        x264_cli_log( "avs", X264_LOG_ERROR, "AVS audio input is not available for non-script file" );
-        goto fail2;
-    }
+    GOTO_IF( track == TRACK_NONE, fail2, "no valid track requested ('any', 0 or a positive integer)\n" )
+    GOTO_IF( !filename, fail2, "no filename given\n" )
+    GOTO_IF( !x264_is_regular_file_path( filename ), fail2, "reading audio from non-regular files is not supported\n" )
 
     INIT_FILTER_STRUCT( audio_filter_avs, avs_source_t );
 
-    if( x264_audio_avs_load_library( h ) )
-    {
-        AF_LOG_ERR( h, "failed to load avisynth\n" );
-        goto error;
-    }
+    GOTO_IF( x264_audio_avs_load_library( h ), error, "failed to load avisynth\n" )
 
     h->env = h->func.avs_create_script_environment( AVS_INTERFACE_25 );
-    if( !h->env )
-    {
-        AF_LOG_ERR( h, "failed to initiate avisynth\n" );
-        goto error;
-    }
+    GOTO_IF( !h->env, error, "failed to initiate avisynth\n" )
 
-    AVS_Value arg = avs_new_value_string( filename );
     AVS_Value res;
-
-    res = h->func.avs_invoke( h->env, "Import", arg, NULL );
-    if( avs_is_error( res ) )
+    if( !strcmp( filename_ext, "avs" ) )
     {
-        AF_LOG_ERR( h, "failed to initiate avisynth\n" );
-        goto error;
+        // normal avs script
+        AVS_Value arg = avs_new_value_string( filename );
+        res = h->func.avs_invoke( h->env, "Import", arg, NULL );
+        h->func.avs_release_value( arg );
+        GOTO_IF( avs_is_error( res ), error, "failed to import audio script\n" )
+    }
+    else
+    {
+        AVS_Value (*filters[4])( hnd_t handle, const char *filename, int track );
+        int i;
+
+        avs_audio_build_filter_sequence( filename_ext, track, filters );
+
+        for( i = 0; filters[i]; i++ )
+        {
+            res = filters[i]( h, filename, track );
+            if( !avs_is_error( res ) )
+                break;
+        }
+        GOTO_IF( !filters[i], error, "no working input filter is found for audio input\n" )
     }
 
-    res = h->func.avs_invoke( h->env, "KillVideo", res, NULL );
-    if( avs_is_error( res ) )
-    {
-        AF_LOG_WARN( h, "failed to kill video stream\n" );
-        goto error;
-    }
-
+    GOTO_IF( !avs_is_clip( res ), error, "no valid clip is found\n" )
     h->clip = h->func.avs_take_clip( res, h->env );
-    if( !avs_is_clip( res ) )
-    {
-        AF_LOG_ERR( h, "no valid clip is found\n" );
-        goto error;
-    }
 
     const AVS_VideoInfo *vi = h->func.avs_get_video_info( h->clip );
-    if( !avs_has_audio( vi ) )
+    GOTO_IF( !avs_has_audio( vi ), error, "no valid audio track is found\n" )
+
+    // video is unneeded, so disable it if any
+    if( avs_has_video( vi ) )
     {
-        AF_LOG_ERR( h, "no valid audio track is found\n" );
-        goto error;
+        AVS_Value tmp = h->func.avs_invoke( h->env, "KillVideo", res, NULL );
+        if( !avs_is_error( tmp ) )
+            res = update_clip( h, &vi, tmp, res );
+    }
+
+    switch( avs_sample_type( vi ) )
+    {
+      case AVS_SAMPLE_INT16:
+        h->sample_fmt = SMPFMT_S16;
+        break;
+      case AVS_SAMPLE_INT32:
+        h->sample_fmt = SMPFMT_S32;
+        break;
+      case AVS_SAMPLE_FLOAT:
+        h->sample_fmt = SMPFMT_FLT;
+        break;
+      case AVS_SAMPLE_INT8:
+        h->sample_fmt = SMPFMT_U8;
+        break;
+      case AVS_SAMPLE_INT24:
+      default:
+        h->sample_fmt = SMPFMT_NONE;
+        break;
+    }
+
+    if( h->sample_fmt == SMPFMT_NONE )
+    {
+        x264_cli_log( "avs", X264_LOG_INFO, "audio sample format is automatically converted to float\n" );
+        AVS_Value tmp = h->func.avs_invoke( h->env, "ConvertAudioToFloat", res, NULL );
+        GOTO_IF( avs_is_error( tmp ), error, "failed to convert audio sample format\n" )
+        res = update_clip( h, &vi, tmp, res );
+        h->sample_fmt = SMPFMT_FLT;
     }
 
     h->func.avs_release_value( res );
@@ -156,37 +293,13 @@ static int init( hnd_t *handle, const char *opt_str )
 
     h->num_samples = vi->num_audio_samples;
     h->bufsize = DEFAULT_BUFSIZE;
-    h->buffer  = malloc( h->bufsize );
-
-    switch( avs_sample_type( vi ) )
-    {
-      case AVS_SAMPLE_INT16:
-        h->sample_fmt = SMPFMT_S16;
-        break;
-      case AVS_SAMPLE_INT32:
-        h->sample_fmt = SMPFMT_S32;
-        break;
-      case AVS_SAMPLE_FLOAT:
-        h->sample_fmt = SMPFMT_FLT;
-        break;
-      case AVS_SAMPLE_INT24:
-      case AVS_SAMPLE_INT8:
-      default:
-        h->sample_fmt = SMPFMT_NONE;
-        break;
-    }
-
-    if( h->sample_fmt == SMPFMT_NONE )
-    {
-        AF_LOG_ERR( h, "unsuppported audio sample format\n" );
-        goto error;
-    }
+    h->buffer = malloc( h->bufsize );
 
     x264_free_string_array( opts );
     return 0;
 
 error:
-    AF_LOG_ERR( h, "error opening audio input script\n" );
+    AF_LOG_ERR( h, "error opening audio\n" );
 fail:
     if( h )
         free( h );
@@ -254,7 +367,7 @@ static void avs_close( hnd_t handle )
 const audio_filter_t audio_filter_avs =
 {
         .name        = "avs",
-        .description = "Retrive PCM samples from the first audio track of an AVISynth script",
+        .description = "Retrive PCM samples from specified audio track with AVISynth",
         .help        = "Arguments: filename",
         .init        = init,
         .get_samples = get_samples,
