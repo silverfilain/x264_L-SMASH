@@ -39,7 +39,7 @@
 
 #include <stdarg.h>
 
-#define X264_BUILD 105
+#define X264_BUILD 106
 
 /* x264_t:
  *      opaque handler for encoder */
@@ -180,7 +180,8 @@ static const char * const x264_open_gop_names[] = { "none", "normal", "bluray", 
 #define X264_CSP_YV12           0x0002  /* yvu 4:2:0 planar */
 #define X264_CSP_NV12           0x0003  /* yuv 4:2:0, with one y plane and one packed u+v */
 #define X264_CSP_MAX            0x0004  /* end of list */
-#define X264_CSP_VFLIP          0x1000  /* */
+#define X264_CSP_VFLIP          0x1000  /* the csp is vertically flipped */
+#define X264_CSP_HIGH_DEPTH     0x2000  /* the csp has a depth of 16 bits per pixel component */
 
 /* Slice type */
 #define X264_TYPE_AUTO          0x0000  /* Let x264 choose the right type */
@@ -342,7 +343,7 @@ typedef struct x264_param_t
     {
         int         i_rc_method;    /* X264_RC_* */
 
-        int         i_qp_constant;  /* 0 to (51 + 6*(BIT_DEPTH-8)) */
+        int         i_qp_constant;  /* 0 to (51 + 6*(x264_bit_depth-8)) */
         int         i_qp_min;       /* min allowed QP value */
         int         i_qp_max;       /* max allowed QP value */
         int         i_qp_step;      /* max QP step between frames */
@@ -383,7 +384,9 @@ typedef struct x264_param_t
     int b_annexb;               /* if set, place start codes (4 bytes) before NAL units,
                                  * otherwise place size (4 bytes) before NAL units. */
     int i_sps_id;               /* SPS and PPS id number */
-    int b_vfr_input;            /* VFR input */
+    int b_vfr_input;            /* VFR input.  If 1, use timebase and timestamps for ratecontrol purposes.
+                                 * If 0, use fps only. */
+    int b_pulldown;             /* use explicity set timebase for CFR */
     uint32_t i_fps_num;
     uint32_t i_fps_den;
     uint32_t i_timebase_num;    /* Timebase numerator */
@@ -564,6 +567,15 @@ int     x264_param_apply_profile( x264_param_t *, const char *profile );
  * Picture structures and functions
  ****************************************************************************/
 
+/* x264_bit_depth:
+ *      Specifies the number of bits per pixel that x264 uses. This is also the
+ *      bit depth that x264 encodes in. If this value is > 8, x264 will read
+ *      two bytes of input data for each pixel sample, and expect the upper
+ *      (16-x264_bit_depth) bits to be zero.
+ *      Note: The flag X264_CSP_HIGH_DEPTH must be used to specify the
+ *      colorspace depth as well. */
+extern const int x264_bit_depth;
+
 enum pic_struct_e
 {
     PIC_STRUCT_AUTO              = 0, // automatically decide (default)
@@ -653,7 +665,7 @@ typedef struct
     int     b_keyframe;
     /* In: user pts, Out: pts of encoded picture (user)*/
     int64_t i_pts;
-    /* Out: frame dts. Since the pts of the first frame is always zero,
+    /* Out: frame dts. When the pts of the first frame is close to zero,
      *      initial frames may have a negative dts which must be dealt with by any muxer */
     int64_t i_dts;
     /* In: custom encoding parameters to be set from this frame forwards
