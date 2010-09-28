@@ -121,17 +121,17 @@ void x264_sps_init( x264_sps_t *sps, int i_id, x264_param_t *param )
     sps->b_constraint_set1  = sps->i_profile_idc <= PROFILE_MAIN;
     /* Never set constraint_set2, it is not necessary and not used in real world. */
     sps->b_constraint_set2  = 0;
+    sps->b_constraint_set3  = 0;
 
+    sps->i_level_idc = param->i_level_idc;
     if( param->i_level_idc == 9 && ( sps->i_profile_idc >= PROFILE_BASELINE && sps->i_profile_idc <= PROFILE_EXTENDED ) )
     {
         sps->b_constraint_set3 = 1; /* level 1b with Baseline, Main or Extended profile is signalled via constraint_set3 */
         sps->i_level_idc      = 11;
     }
-    else
-    {
-        sps->b_constraint_set3 = 0;
-        sps->i_level_idc = param->i_level_idc;
-    }
+    /* High 10 Intra profile */
+    if( param->i_keyint_max == 1 && sps->i_profile_idc == PROFILE_HIGH10 )
+        sps->b_constraint_set3 = 1;
 
     sps->vui.i_num_reorder_frames = param->i_bframe_pyramid ? 2 : param->i_bframe ? 1 : 0;
     /* extra slot with pyramid so that we don't have to override the
@@ -140,6 +140,11 @@ void x264_sps_init( x264_sps_t *sps, int i_id, x264_param_t *param )
     sps->i_num_ref_frames = X264_MIN(X264_REF_MAX, X264_MAX4(param->i_frame_reference, 1 + sps->vui.i_num_reorder_frames,
                             param->i_bframe_pyramid ? 4 : 1, param->i_dpb_size));
     sps->i_num_ref_frames -= param->i_bframe_pyramid == X264_B_PYRAMID_STRICT;
+    if( param->i_keyint_max == 1 )
+    {
+        sps->i_num_ref_frames = 0;
+        sps->vui.i_max_dec_frame_buffering = 0;
+    }
 
     /* number of refs + current frame */
     int max_frame_num = sps->vui.i_max_dec_frame_buffering * (!!param->i_bframe_pyramid+1) + 1;
@@ -294,34 +299,21 @@ void x264_sps_write( bs_t *s, x264_sps_t *sps )
     }
     else if( sps->i_poc_type == 1 )
     {
-        int i;
-
         bs_write( s, 1, sps->b_delta_pic_order_always_zero );
         bs_write_se( s, sps->i_offset_for_non_ref_pic );
         bs_write_se( s, sps->i_offset_for_top_to_bottom_field );
         bs_write_ue( s, sps->i_num_ref_frames_in_poc_cycle );
 
-        for( i = 0; i < sps->i_num_ref_frames_in_poc_cycle; i++ )
-        {
+        for( int i = 0; i < sps->i_num_ref_frames_in_poc_cycle; i++ )
             bs_write_se( s, sps->i_offset_for_ref_frame[i] );
-        }
     }
     bs_write_ue( s, sps->i_num_ref_frames );
     bs_write( s, 1, sps->b_gaps_in_frame_num_value_allowed );
     bs_write_ue( s, sps->i_mb_width - 1 );
-    if (sps->b_frame_mbs_only)
-    {
-        bs_write_ue( s, sps->i_mb_height - 1);
-    }
-    else // interlaced
-    {
-        bs_write_ue( s, sps->i_mb_height/2 - 1);
-    }
+    bs_write_ue( s, (sps->i_mb_height >> !sps->b_frame_mbs_only) - 1);
     bs_write( s, 1, sps->b_frame_mbs_only );
     if( !sps->b_frame_mbs_only )
-    {
         bs_write( s, 1, sps->b_mb_adaptive_frame_field );
-    }
     bs_write( s, 1, sps->b_direct8x8_inference );
 
     bs_write( s, 1, sps->b_crop );

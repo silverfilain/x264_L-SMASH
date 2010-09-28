@@ -237,7 +237,7 @@ static void print_version_info()
 #else
     printf( "using a non-gcc compiler\n" );
 #endif
-    printf( "configuration: --bit-depth=%d\n", BIT_DEPTH );
+    printf( "configuration: --bit-depth=%d\n", x264_bit_depth );
     printf( "x264 license: " );
 #if HAVE_GPL
     printf( "GPL version 2 or later\n" );
@@ -398,7 +398,7 @@ static void Help( x264_param_t *defaults, int longhelp )
 #else
         "no",
 #endif
-        BIT_DEPTH
+        x264_bit_depth
       );
     H0( "Example usage:\n" );
     H0( "\n" );
@@ -736,6 +736,7 @@ static void Help( x264_param_t *defaults, int longhelp )
         "                                  - %s\n", demuxer_names[0], stringify_names( buf, demuxer_names ) );
     H1( "      --input-csp <string>    Specify input colorspace format for raw input\n" );
     print_csp_names( longhelp );
+    H1( "      --input-depth <integer> Specify input bit depth for raw input\n" );
     H1( "      --input-res <intxint>   Specify input resolution (width x height)\n" );
     H1( "      --index <string>        Filename for input index file\n" );
     H0( "      --sar width:height      Specify Sample Aspect Ratio\n" );
@@ -809,6 +810,7 @@ enum {
     OPT_VIDEO_FILTER,
     OPT_INPUT_RES,
     OPT_INPUT_CSP,
+    OPT_INPUT_DEPTH,
     OPT_AUDIOFILE,
     OPT_AUDIOCODEC,
     OPT_AUDIOBITRATE,
@@ -966,6 +968,7 @@ static struct option long_options[] =
     { "video-filter", required_argument, NULL, OPT_VIDEO_FILTER },
     { "input-res",   required_argument, NULL, OPT_INPUT_RES },
     { "input-csp",   required_argument, NULL, OPT_INPUT_CSP },
+    { "input-depth", required_argument, NULL, OPT_INPUT_DEPTH },
     { "audiofile",   required_argument, NULL, OPT_AUDIOFILE },
     { "acodec",      required_argument, NULL, OPT_AUDIOCODEC },
     { "abitrate",    required_argument, NULL, OPT_AUDIOBITRATE },
@@ -1133,8 +1136,14 @@ static int init_vid_filters( char *sequence, hnd_t *handle, video_info_t *info, 
     if( csp > X264_CSP_NONE && csp < X264_CSP_MAX )
         param->i_csp = info->csp;
     else
-        param->i_csp = X264_CSP_I420;
+        param->i_csp = X264_CSP_I420 | ( info->csp & X264_CSP_HIGH_DEPTH );
     if( x264_init_vid_filter( "resize", handle, &filter, info, param, NULL ) )
+        return -1;
+
+    char args[20];
+    sprintf( args, "bit_depth=%d", x264_bit_depth );
+
+    if( x264_init_vid_filter( "depth", handle, &filter, info, param, args ) )
         return -1;
 
     return 0;
@@ -1202,6 +1211,7 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
 
     memset( opt, 0, sizeof(cli_opt_t) );
     memset( &input_opt, 0, sizeof(cli_input_opt_t) );
+    input_opt.bit_depth = 8;
     opt->b_progress = 1;
 
     /* Presets are applied before all other options. */
@@ -1346,6 +1356,9 @@ static int Parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
                 break;
             case OPT_INPUT_CSP:
                 input_opt.colorspace = optarg;
+                break;
+            case OPT_INPUT_DEPTH:
+                input_opt.bit_depth = atoi( optarg );
                 break;
             case OPT_AUDIOCODEC:
                 audio_enc = optarg;
@@ -1723,7 +1736,7 @@ static int  Encode( x264_param_t *param, cli_opt_t *opt )
     int64_t second_largest_pts = -1;
     int64_t ticks_per_frame;
     double  duration;
-    int     prev_timebase_den = param->i_timebase_den / gcd( param->i_timebase_num, param->i_timebase_den );
+    int     prev_timebase_den;
     int     dts_compress_multiplier;
     double  pulldown_pts = 0;
 
@@ -1734,6 +1747,7 @@ static int  Encode( x264_param_t *param, cli_opt_t *opt )
     /* set up pulldown */
     if( opt->i_pulldown && !param->b_vfr_input )
     {
+        param->b_pulldown = 1;
         param->b_pic_struct = 1;
         pulldown = &pulldown_values[opt->i_pulldown];
         param->i_timebase_num = param->i_fps_den;
@@ -1741,6 +1755,8 @@ static int  Encode( x264_param_t *param, cli_opt_t *opt )
                        "unsupported framerate for chosen pulldown\n" )
         param->i_timebase_den = param->i_fps_num * pulldown->fps_factor;
     }
+
+    prev_timebase_den = param->i_timebase_den / gcd( param->i_timebase_num, param->i_timebase_den );
 
     if( ( h = x264_encoder_open( param ) ) == NULL )
     {
@@ -1866,6 +1882,8 @@ static int  Encode( x264_param_t *param, cli_opt_t *opt )
     if( pts_warning_cnt >= MAX_PTS_WARNING && cli_log_level < X264_LOG_DEBUG )
         x264_cli_log( "x264", X264_LOG_WARNING, "%d suppressed nonmonotonic pts warnings\n", pts_warning_cnt-MAX_PTS_WARNING );
 
+    largest_pts *= dts_compress_multiplier;
+    second_largest_pts *= dts_compress_multiplier;
     /* duration algorithm fails when only 1 frame is output */
     if( i_frame_output == 1 )
         duration = (double)param->i_fps_den / param->i_fps_num;
@@ -1873,8 +1891,6 @@ static int  Encode( x264_param_t *param, cli_opt_t *opt )
         duration = (double)(2 * last_dts - prev_dts - first_dts) * param->i_timebase_num / param->i_timebase_den;
     else
         duration = (double)(2 * largest_pts - second_largest_pts) * param->i_timebase_num / param->i_timebase_den;
-    if( !(opt->i_pulldown && !param->b_vfr_input) )
-        duration *= dts_compress_multiplier;
 
     i_end = x264_mdate();
     /* Erase progress indicator before printing encoding stats. */
@@ -1893,7 +1909,7 @@ static int  Encode( x264_param_t *param, cli_opt_t *opt )
     }
 
     filter.free( opt->hin );
-    output.close_file( opt->hout, largest_pts * dts_compress_multiplier, second_largest_pts * dts_compress_multiplier );
+    output.close_file( opt->hout, largest_pts, second_largest_pts );
 
     if( i_frame_output > 0 )
     {
