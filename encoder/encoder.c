@@ -439,6 +439,13 @@ static int x264_validate_parameters( x264_t *h )
     if( h->i_thread_frames > 1 )
         h->param.nalu_process = NULL;
 
+    h->param.i_keyint_max = x264_clip3( h->param.i_keyint_max, 1, X264_KEYINT_MAX_INFINITE );
+    if( h->param.i_keyint_max == 1 )
+    {
+        h->param.b_intra_refresh = 0;
+        h->param.analyse.i_weighted_pred = 0;
+    }
+
     if( h->param.b_interlaced )
     {
         if( h->param.analyse.i_me_method >= X264_ME_ESA )
@@ -576,7 +583,6 @@ static int x264_validate_parameters( x264_t *h )
 
     h->param.i_frame_reference = x264_clip3( h->param.i_frame_reference, 1, X264_REF_MAX );
     h->param.i_dpb_size = x264_clip3( h->param.i_dpb_size, 1, X264_REF_MAX );
-    h->param.i_keyint_max = x264_clip3( h->param.i_keyint_max, 1, X264_KEYINT_MAX_INFINITE );
     if( h->param.i_scenecut_threshold < 0 )
         h->param.i_scenecut_threshold = 0;
     if( !h->param.analyse.i_subpel_refine && h->param.analyse.i_direct_mv_pred > X264_DIRECT_PRED_SPATIAL )
@@ -586,8 +592,6 @@ static int x264_validate_parameters( x264_t *h )
     }
     h->param.i_bframe = x264_clip3( h->param.i_bframe, 0, X264_MIN( X264_BFRAME_MAX, h->param.i_keyint_max-1 ) );
     h->param.i_open_gop = x264_clip3( h->param.i_open_gop, X264_OPEN_GOP_NONE, X264_OPEN_GOP_BLURAY );
-    if( h->param.i_keyint_max == 1 )
-        h->param.b_intra_refresh = 0;
     h->param.i_bframe_bias = x264_clip3( h->param.i_bframe_bias, -90, 100 );
     if( h->param.i_bframe <= 1 )
         h->param.i_bframe_pyramid = X264_B_PYRAMID_NONE;
@@ -626,7 +630,7 @@ static int x264_validate_parameters( x264_t *h )
         h->param.rc.i_lookahead = X264_MIN( h->param.rc.i_lookahead, X264_MAX( h->param.i_keyint_max, bufsize*fps ) );
     }
 
-    if( !h->param.i_timebase_num || !h->param.i_timebase_den )
+    if( !h->param.i_timebase_num || !h->param.i_timebase_den || !(h->param.b_vfr_input || h->param.b_pulldown) )
     {
         h->param.i_timebase_num = h->param.i_fps_den;
         h->param.i_timebase_den = h->param.i_fps_num;
@@ -1155,10 +1159,10 @@ x264_t *x264_encoder_open( x264_param_t *param )
         fclose( f );
     }
 
-    const char *profile = h->sps->i_profile_idc == PROFILE_BASELINE ? "Baseline" :
+    const char *profile = h->sps->i_profile_idc == PROFILE_BASELINE ? "Constrained Baseline" :
                           h->sps->i_profile_idc == PROFILE_MAIN ? "Main" :
                           h->sps->i_profile_idc == PROFILE_HIGH ? "High" :
-                          h->sps->i_profile_idc == PROFILE_HIGH10 ? "High 10" :
+                          h->sps->i_profile_idc == PROFILE_HIGH10 ? (h->sps->b_constraint_set3 == 1 ? "High 10 Intra" : "High 10") :
                           "High 4:4:4 Predictive";
     char level[4];
     snprintf( level, sizeof(level), "%d.%d", h->sps->i_level_idc/10, h->sps->i_level_idc%10 );
@@ -1834,10 +1838,12 @@ static int x264_slice_write( x264_t *h )
     uint8_t cabac_prevbyte_bak = 0; /* Shut up GCC. */
     int mv_bits_bak = 0;
     int tex_bits_bak = 0;
-    /* Assume no more than 3 bytes of NALU escaping.
-     * NALUs other than the first use a 3-byte startcode. */
-    int overhead_guess = (NALU_OVERHEAD - (h->param.b_annexb && h->out.i_nal)) + 3;
-    int slice_max_size = h->param.i_slice_max_size > 0 ? (h->param.i_slice_max_size-overhead_guess)*8 : INT_MAX;
+    /* NALUs other than the first use a 3-byte startcode.
+     * Add one extra byte for the rbsp, and one more for the final CABAC putbyte.
+     * Then add an extra 5 bytes just in case, to account for random NAL escapes and
+     * other inaccuracies. */
+    int overhead_guess = (NALU_OVERHEAD - (h->param.b_annexb && h->out.i_nal)) + 1 + h->param.b_cabac + 5;
+    int slice_max_size = h->param.i_slice_max_size > 0 ? (h->param.i_slice_max_size-overhead_guess)*8 : 0;
     int starting_bits = bs_pos(&h->out.bs);
     int b_deblock = h->sh.i_disable_deblocking_filter_idc != 1;
     int b_hpel = h->fdec->b_kept_as_ref;
@@ -1884,7 +1890,7 @@ static int x264_slice_write( x264_t *h )
         if( x264_bitstream_check_buffer( h ) )
             return -1;
 
-        if( h->param.i_slice_max_size > 0 )
+        if( slice_max_size )
         {
             mv_bits_bak = h->stat.frame.i_mv_bits;
             tex_bits_bak = h->stat.frame.i_tex_bits;
@@ -1948,35 +1954,50 @@ static int x264_slice_write( x264_t *h )
         int total_bits = bs_pos(&h->out.bs) + x264_cabac_pos(&h->cabac);
         int mb_size = total_bits - mb_spos;
 
-        /* We'll just re-encode this last macroblock if we go over the max slice size. */
-        if( total_bits - starting_bits > slice_max_size && !h->mb.b_reencode_mb )
+        if( slice_max_size )
         {
-            if( mb_xy != h->sh.i_first_mb )
+            /* Count the skip run, just in case. */
+            if( !h->param.b_cabac )
+                total_bits += bs_size_ue_big( i_skip );
+            /* HACK: we assume no more than 3 bytes of NALU escaping, but
+             * this can fail in CABAC streams with an extremely large number of identical
+             * blocks in sequence (e.g. all-black intra blocks).
+             * Thus, every 64 blocks, pretend we've used a byte.
+             * For reference, a seqeuence of identical empty-CBP i16x16 blocks will use
+             * one byte after 26 macroblocks, assuming a perfectly adapted CABAC.
+             * That's 78 macroblocks to generate the 3-byte sequence to trigger an escape. */
+            else if( ((mb_xy - h->sh.i_first_mb) & 63) == 63 )
+                slice_max_size -= 8;
+            /* We'll just re-encode this last macroblock if we go over the max slice size. */
+            if( total_bits - starting_bits > slice_max_size && !h->mb.b_reencode_mb )
             {
-                h->stat.frame.i_mv_bits = mv_bits_bak;
-                h->stat.frame.i_tex_bits = tex_bits_bak;
-                if( h->param.b_cabac )
+                if( mb_xy != h->sh.i_first_mb )
                 {
-                    memcpy( &h->cabac, &cabac_bak, offsetof(x264_cabac_t, f8_bits_encoded) );
-                    h->cabac.p[-1] = cabac_prevbyte_bak;
+                    h->stat.frame.i_mv_bits = mv_bits_bak;
+                    h->stat.frame.i_tex_bits = tex_bits_bak;
+                    if( h->param.b_cabac )
+                    {
+                        memcpy( &h->cabac, &cabac_bak, offsetof(x264_cabac_t, f8_bits_encoded) );
+                        h->cabac.p[-1] = cabac_prevbyte_bak;
+                    }
+                    else
+                    {
+                        h->out.bs = bs_bak;
+                        i_skip = i_skip_bak;
+                    }
+                    h->mb.b_reencode_mb = 1;
+                    h->sh.i_last_mb = mb_xy-1;
+                    break;
                 }
                 else
                 {
-                    h->out.bs = bs_bak;
-                    i_skip = i_skip_bak;
+                    h->sh.i_last_mb = mb_xy;
+                    h->mb.b_reencode_mb = 0;
                 }
-                h->mb.b_reencode_mb = 1;
-                h->sh.i_last_mb = mb_xy-1;
-                break;
             }
             else
-            {
-                h->sh.i_last_mb = mb_xy;
                 h->mb.b_reencode_mb = 0;
-            }
         }
-        else
-            h->mb.b_reencode_mb = 0;
 
 #if HAVE_VISUALIZE
         if( h->param.b_visualize )
@@ -2329,8 +2350,10 @@ int     x264_encoder_encode( x264_t *h,
 
         fenc->i_frame = h->frames.i_input++;
 
+        if( fenc->i_frame == 0 )
+            h->frames.i_first_pts = fenc->i_pts;
         if( h->frames.i_bframe_delay && fenc->i_frame == h->frames.i_bframe_delay )
-            h->frames.i_bframe_delay_time = fenc->i_pts;
+            h->frames.i_bframe_delay_time = fenc->i_pts - h->frames.i_first_pts;
 
         if( h->param.b_vfr_input && fenc->i_pts <= h->frames.i_largest_pts )
             x264_log( h, X264_LOG_WARNING, "non-strictly-monotonic PTS\n" );
@@ -2495,8 +2518,8 @@ int     x264_encoder_encode( x264_t *h,
             {
                 /* DTS compression */
                 if( h->i_frame == 1 )
-                    thread_current->frames.i_init_delta = h->fenc->i_reordered_pts * h->i_dts_compress_multiplier;
-                h->fdec->i_dts = h->i_frame * thread_current->frames.i_init_delta / h->i_dts_compress_multiplier;
+                    thread_current->frames.i_init_delta = (h->fenc->i_reordered_pts - h->frames.i_first_pts) * h->i_dts_compress_multiplier;
+                h->fdec->i_dts = h->i_frame * thread_current->frames.i_init_delta / h->i_dts_compress_multiplier + h->frames.i_first_pts * h->i_dts_compress_multiplier;
             }
         }
         else
@@ -2758,12 +2781,14 @@ static int x264_encoder_frame_end( x264_t *h, x264_t *thread_current,
         x264_log( h, X264_LOG_WARNING, "invalid DTS: PTS is less than DTS\n" );
 
     pic_out->img.i_csp = X264_CSP_NV12;
+#if X264_HIGH_BIT_DEPTH
+    pic_out->img.i_csp |= X264_CSP_HIGH_DEPTH;
+#endif
     pic_out->img.i_plane = h->fdec->i_plane;
     for( int i = 0; i < 2; i++ )
     {
-        pic_out->img.i_stride[i] = h->fdec->i_stride[i];
-        // FIXME This breaks the API when pixel != uint8_t.
-        pic_out->img.plane[i] = h->fdec->plane[i];
+        pic_out->img.i_stride[i] = h->fdec->i_stride[i] * sizeof(pixel);
+        pic_out->img.plane[i] = (uint8_t*)h->fdec->plane[i];
     }
 
     x264_frame_push_unused( thread_current, h->fenc );
@@ -2924,15 +2949,16 @@ static int x264_encoder_frame_end( x264_t *h, x264_t *thread_current,
 
     /* Remove duplicates, must be done near the end as breaks h->fref0 array
      * by freeing some of its pointers. */
-     for( int i = 0; i < h->i_ref0; i++ )
-         if( h->fref0[i] && h->fref0[i]->b_duplicate )
-         {
-             x264_frame_push_blank_unused( h, h->fref0[i] );
-             h->fref0[i] = 0;
-         }
+    for( int i = 0; i < h->i_ref0; i++ )
+        if( h->fref0[i] && h->fref0[i]->b_duplicate )
+        {
+            x264_frame_push_blank_unused( h, h->fref0[i] );
+            h->fref0[i] = 0;
+        }
 
     if( h->param.psz_dump_yuv )
         x264_frame_dump( h );
+    x264_emms();
 
     return frame_size;
 }
@@ -3110,7 +3136,8 @@ void    x264_encoder_close  ( x264_t *h )
             f_bitrate = fps * SUM3(h->stat.i_frame_size) / i_count / 125;
         else
         {
-            float duration = (float)(2 * h->frames.i_largest_pts - h->frames.i_second_largest_pts) * h->param.i_timebase_num / h->param.i_timebase_den;
+            float duration = (float)(2 * h->frames.i_largest_pts - h->frames.i_second_largest_pts - h->frames.i_first_pts)
+                           * h->i_dts_compress_multiplier * h->param.i_timebase_num / h->param.i_timebase_den;
             f_bitrate = SUM3(h->stat.i_frame_size) / duration / 125;
         }
 
