@@ -136,8 +136,9 @@ const audio_encoder_t *x264_audio_encoder_by_name( const char *name, int mode, c
                 break;
             else
             {
-                if( !ret->is_valid_encoder( cur->name, NULL ) ||
-                    !ret->is_valid_encoder( ffprefixed_name, NULL ) )
+                if( !ret->is_valid_encoder( cur->name, NULL ) )
+                    break;
+                else if( is_lavc && !ret->is_valid_encoder( ffprefixed_name, NULL ) )
                     break;
                 else
                     ret = NULL;

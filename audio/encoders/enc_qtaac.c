@@ -826,6 +826,15 @@ static void qtaac_help( const char * const encoder_name )
     printf( "\n" );
 }
 
+int is_quicktime_available( const char * const encoder_name, void **priv )
+{
+
+    if( !strcmp( encoder_name, "qtaac" ) && check_quicktime_version() == noErr )
+        return 0;
+
+    return -1;
+}
+
 const audio_encoder_t audio_encoder_qtaac =
 {
     .init            = qtaac_init,
@@ -836,5 +845,5 @@ const audio_encoder_t audio_encoder_qtaac =
     .free_packet     = free_packet,
     .close           = qtaac_close,
     .show_help       = qtaac_help,
-    .is_valid_encoder = NULL
+    .is_valid_encoder = is_quicktime_available
 };
