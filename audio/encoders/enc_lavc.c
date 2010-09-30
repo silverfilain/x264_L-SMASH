@@ -31,31 +31,26 @@ static int is_encoder_available( const char *name, void **priv )
         return 0;
     }
 
-    if( name[0] == 'f' && name[1] == 'f' )
-    {
-        enc = avcodec_find_encoder_by_name( &name[2] );
-        if( enc )
-        {
-            if( priv )
-                *priv = enc;
-            return 0;
-        }
-    }
-
     return -1;
 }
+
+#define MODE_VBR     0x01
+#define MODE_BITRATE 0x02
 
 static const struct {
     enum CodecID id;
     const char *name;
-} ffcodecid_to_codecname[] = {
-    { CODEC_ID_MP3,    "mp3", },
-    { CODEC_ID_VORBIS, "vorbis", },
-    { CODEC_ID_AAC,    "aac", },
-    { CODEC_ID_AC3,    "ac3", },
-    { CODEC_ID_ALAC,   "alac", },
-    { CODEC_ID_AMR_NB, "amrnb", },
-    { CODEC_ID_NONE,   NULL, },
+    uint8_t mode;
+    float default_brval;
+} ffcodecs[] = {
+   /* CODEC_ID,         name,      allowed mode,          default quality/bitrate */
+    { CODEC_ID_MP2,     "mp2",     MODE_BITRATE,          112 },
+    { CODEC_ID_VORBIS,  "vorbis",  MODE_VBR,              50 },
+    { CODEC_ID_AAC,     "aac",     MODE_BITRATE,          96 },
+    { CODEC_ID_AC3,     "ac3",     MODE_BITRATE,          96 },
+    { CODEC_ID_ALAC,    "alac",    MODE_VBR|MODE_BITRATE, 64 }, //alac ignores mode & bitrate
+    { CODEC_ID_AMR_NB,  "amrnb",   MODE_BITRATE,          12.2 },
+    { CODEC_ID_NONE,    NULL, },
 };
 
 #define ISCODEC( name ) (!strcmp( h->info.codec_name, #name ))
@@ -79,25 +74,28 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     RETURN_IF_ERR( is_encoder_available( codecname, (void **)&codec ),
                    "lavc", NULL, "codec %s not supported or compiled in\n", codecname );
 
-    int i;
+    int i, j;
     h->info.codec_name = NULL;
-    for( i = 0; ffcodecid_to_codecname[i].id != CODEC_ID_NONE; i++ )
+    for( i = 0; ffcodecs[i].id != CODEC_ID_NONE; i++ )
     {
-        if( codec->id == ffcodecid_to_codecname[i].id )
-            h->info.codec_name = ffcodecid_to_codecname[i].name;
+        if( codec->id == ffcodecs[i].id )
+        {
+            h->info.codec_name = ffcodecs[i].name;
+            break;
+        }
     }
     RETURN_IF_ERR( !h->info.codec_name, "lavc", NULL, "failed to set codec name for muxer\n" );
 
-    for( i = 0; codec->sample_fmts[i] != -1; i++ )
+    for( j = 0; codec->sample_fmts[j] != -1; j++ )
     {
         // Prefer floats...
-        if( codec->sample_fmts[i] == SAMPLE_FMT_FLT )
+        if( codec->sample_fmts[j] == SAMPLE_FMT_FLT )
         {
             h->smpfmt = SAMPLE_FMT_FLT;
             break;
         }
-        else if( h->smpfmt < codec->sample_fmts[i] ) // or the best possible sample format (is this really The Right Thing?)
-            h->smpfmt = codec->sample_fmts[i];
+        else if( h->smpfmt < codec->sample_fmts[j] ) // or the best possible sample format (is this really The Right Thing?)
+            h->smpfmt = codec->sample_fmts[j];
     }
     h->ctx                  = avcodec_alloc_context();
     h->ctx->sample_fmt      = h->smpfmt;
@@ -110,13 +108,13 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     if( ISCODEC( aac ) )
         h->ctx->profile = FF_PROFILE_AAC_LOW; // TODO: decide by bitrate / quality
 
-    int is_vbr  = x264_otob( x264_get_option( "is_vbr", opts ), 1 );
-    float brval;
-    if( is_vbr )
-        brval = x264_otof( x264_get_option( "bitrate", opts ), ISCODEC( aac ) ? 100 : // Should this really be per-codec? /me thinks libavcodec fails at wrapping
-                                                               ISCODEC( mp3 ) ? 6 : 1 );
-    else
-        brval = x264_otof( x264_get_option( "bitrate", opts ), 128 ); // dummy default value, must never be used
+    int is_vbr = x264_otob( x264_get_option( "is_vbr", opts ), ffcodecs[i].mode & MODE_VBR ? 1 : 0 );
+
+    RETURN_IF_ERR( ( !(ffcodecs[i].mode & MODE_BITRATE) && !is_vbr ) || ( !(ffcodecs[i].mode & MODE_VBR) && is_vbr ),
+                   "lavc", NULL, "libavcodec's %s encoder doesn't allow %s mode.\n", codecname, is_vbr ? "VBR" : "bitrate" );
+
+    float default_brval = is_vbr ? ffcodecs[i].default_brval : ffcodecs[i].default_brval * h->ctx->channels;
+    float brval = x264_otof( x264_get_option( "bitrate", opts ), default_brval );
 
     h->ctx->compression_level = x264_otof( x264_get_option( "quality", opts ), FF_COMPRESSION_DEFAULT );
 
@@ -299,8 +297,7 @@ static void lavc_close( hnd_t handle )
 static void lavc_help_amrnb( const char * const encoder_name )
 {
     printf( "      * (ff)%s encoder help\n", encoder_name );
-    printf( "        This encoder accepts only mono (1ch), 8000Hz audio.\n" );
-    printf( "        --aquality        Cannot be used\n" );
+    printf( "        Accepts only mono (1ch), 8000Hz audio and not capable of quality based VBR\n" );
     printf( "        --abitrate        Only one of the values below can be acceptable\n" );
     printf( "                             4.75, 5.15, 5.9, 6.7, 7.4, 7.95, 10.2, 12.2\n" );
     printf( "\n" );

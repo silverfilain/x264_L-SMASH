@@ -25,6 +25,7 @@ const audio_encoder_entry_t registered_audio_encoders[] = {
     { "aac",    "aac",        &audio_encoder_lavc, },
     { "ac3",    "ac3",        &audio_encoder_lavc, },
     { "alac",   "alac",       &audio_encoder_lavc, },
+    { "mp2",    "mp2",        &audio_encoder_lavc, },
 #if 0
     { "vorbis", "libvorbis",  &audio_encoder_lavc, },
     { "vorbis", "vorbis",     &audio_encoder_lavc, },
@@ -107,7 +108,7 @@ void x264_audio_encoder_close( hnd_t encoder )
     free( enc );
 }
 
-const audio_encoder_t *x264_audio_encoder_by_name( const char *name, int mode, char *used_enc )
+const audio_encoder_t *x264_audio_encoder_by_name( const char *name, int mode, const char **used_enc )
 {
     const audio_encoder_entry_t *cur = NULL;
     const audio_encoder_t *ret = NULL;
@@ -134,25 +135,20 @@ const audio_encoder_t *x264_audio_encoder_by_name( const char *name, int mode, c
         {
             if( !ret->is_valid_encoder )
                 break;
+            else if( !ret->is_valid_encoder( cur->name, NULL ) )
+                break;
             else
-            {
-                if( !ret->is_valid_encoder( cur->name, NULL ) )
-                    break;
-                else if( is_lavc && !ret->is_valid_encoder( ffprefixed_name, NULL ) )
-                    break;
-                else
-                    ret = NULL;
-            }
+                ret = NULL;
         }
     }
 
     if( used_enc )
-        strcpy( used_enc, cur->name );
+        *used_enc = cur->name;
 
     return ret;
 }
 
-const audio_encoder_t *x264_select_audio_encoder( const char *encoder, char* allowed_list[], char *used_enc )
+const audio_encoder_t *x264_select_audio_encoder( const char *encoder, char* allowed_list[], const char **used_enc )
 {
     if( !encoder )
         return NULL;
