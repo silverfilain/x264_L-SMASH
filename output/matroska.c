@@ -289,7 +289,8 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
     int ret;
     uint8_t *avcC;
 
-    vtrack->codec_private_size = 5 + 1 + 2 + sps_size + 1 + 2 + pps_size;
+    vtrack->codec_private_size = 5 + 1 + 2 + sps_size + 1 + 2 + pps_size
+                               + 4 * (sps[1] == 100 || sps[1] == 110 || sps[1] == 122 || sps[1] == 144);
     vtrack->codec_private = malloc( vtrack->codec_private_size );
     if( !vtrack->codec_private )
         return -1;
@@ -312,6 +313,14 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
     avcC[10+sps_size] = pps_size;
 
     memcpy( avcC+11+sps_size, pps, pps_size );
+
+    if( sps[1] == 100 || sps[1] == 110 || sps[1] == 122 || sps[1] == 144 )
+    {
+        avcC[10+sps_size+pps_size] = 0xfd; // chroma_format_idc = 1
+        avcC[11+sps_size+pps_size] = (BIT_DEPTH-8) | 0xf8;
+        avcC[12+sps_size+pps_size] = (BIT_DEPTH-8) | 0xf8;
+        avcC[13+sps_size+pps_size] = 0; // zero spsext
+    }
 
     ret = mk_writeHeader( p_mkv->w, "x264" X264_VERSION, 50000,
                           p_mkv->tracks, p_mkv->i_track_count );
