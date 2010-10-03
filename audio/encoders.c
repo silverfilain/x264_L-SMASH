@@ -28,8 +28,8 @@ const audio_encoder_entry_t registered_audio_encoders[] = {
     { "mp2",    "mp2",        &audio_encoder_lavc, },
 #if 0
     { "vorbis", "libvorbis",  &audio_encoder_lavc, },
-    { "vorbis", "vorbis",     &audio_encoder_lavc, },
 #endif
+    { "vorbis", "vorbis",     &audio_encoder_lavc, },
     { "amrnb",  "libopencore_amrnb", &audio_encoder_lavc, },
 #endif
 #if HAVE_AMRWB_3GPP
