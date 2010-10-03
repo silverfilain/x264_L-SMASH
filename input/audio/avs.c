@@ -75,13 +75,12 @@ fail:
     return -1;
 }
 
-static AVS_Value update_clip( avs_source_t *h, const AVS_VideoInfo **vi, AVS_Value res, AVS_Value release )
+static void update_clip( avs_source_t *h, const AVS_VideoInfo **vi, AVS_Value *res )
 {
     h->func.avs_release_clip( h->clip );
-    h->clip = h->func.avs_take_clip( res, h->env );
-    h->func.avs_release_value( release );
+    h->clip = h->func.avs_take_clip( *res, h->env );
     *vi = h->func.avs_get_video_info( h->clip );
-    return res;
+    return;
 }
 
 static AVS_Value check_avisource( hnd_t handle, const char *filename, int track )
@@ -172,6 +171,11 @@ static void avs_audio_build_filter_sequence( const char *ext, int track,
         filters[i++] = check_ffms;
         filters[i++] = check_directshowsource;
     }
+    else if( !strcmp( ext, "wma" ) || !strcmp( ext, "wmv" ) || !strcmp( ext, "asf" ) )
+    {
+        filters[i++] = check_directshowsource;
+        filters[i++] = check_ffms;
+    }
     else
     {
         filters[i++] = check_ffms;
@@ -213,14 +217,14 @@ static int init( hnd_t *handle, const char *opt_str )
     h->env = h->func.avs_create_script_environment( AVS_INTERFACE_25 );
     GOTO_IF( !h->env, error, "failed to initiate avisynth\n" )
 
-    AVS_Value res;
+    AVS_Value res = avs_void;
     if( !strcmp( filename_ext, "avs" ) )
     {
         // normal avs script
         AVS_Value arg = avs_new_value_string( filename );
         res = h->func.avs_invoke( h->env, "Import", arg, NULL );
         h->func.avs_release_value( arg );
-        GOTO_IF( avs_is_error( res ), error, "failed to import audio script\n" )
+        GOTO_IF( avs_is_error( res ), error, "%s\n", avs_as_string( res ) )
     }
     else
     {
@@ -245,12 +249,8 @@ static int init( hnd_t *handle, const char *opt_str )
     GOTO_IF( !avs_has_audio( vi ), error, "no valid audio track is found\n" )
 
     // video is unneeded, so disable it if any
-    if( avs_has_video( vi ) )
-    {
-        AVS_Value tmp = h->func.avs_invoke( h->env, "KillVideo", res, NULL );
-        if( !avs_is_error( tmp ) )
-            res = update_clip( h, &vi, tmp, res );
-    }
+    res = h->func.avs_invoke( h->env, "KillVideo", res, NULL );
+    update_clip( h, &vi, &res );
 
     switch( avs_sample_type( vi ) )
     {
@@ -274,10 +274,10 @@ static int init( hnd_t *handle, const char *opt_str )
 
     if( h->sample_fmt == SMPFMT_NONE )
     {
-        x264_cli_log( "avs", X264_LOG_INFO, "audio sample format is automatically converted to float\n" );
-        AVS_Value tmp = h->func.avs_invoke( h->env, "ConvertAudioToFloat", res, NULL );
-        GOTO_IF( avs_is_error( tmp ), error, "failed to convert audio sample format\n" )
-        res = update_clip( h, &vi, tmp, res );
+        x264_cli_log( "avs", X264_LOG_INFO, "detected %dbit sample format, converting to float\n", avs_bytes_per_channel_sample( vi )*8 );
+        res = h->func.avs_invoke( h->env, "ConvertAudioToFloat", res, NULL );
+        GOTO_IF( avs_is_error( res ), error, "failed to convert audio sample format\n" )
+        update_clip( h, &vi, &res );
         h->sample_fmt = SMPFMT_FLT;
     }
 

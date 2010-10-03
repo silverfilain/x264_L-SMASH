@@ -90,8 +90,9 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
         henc = x264_audio_copy_open( filters );
     else
     {
-        char used_enc[32], audio_params[MAX_ARGS];
-        const audio_encoder_t *encoder = x264_select_audio_encoder( audio_enc, (char*[]){ "mp3", "aac", "raw", NULL }, used_enc );
+        char audio_params[MAX_ARGS];
+        const char *used_enc;
+        const audio_encoder_t *encoder = x264_select_audio_encoder( audio_enc, (char*[]){ "mp3", "aac", "raw", NULL }, &used_enc );
         FAIL_IF_ERR( !encoder, "flv", "unable to select audio encoder\n" );
 
         snprintf( audio_params, MAX_ARGS, "%s,codec=%s", audio_parameters, used_enc );
@@ -108,7 +109,7 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
         a_flv->codecid = FLV_CODECID_RAW;
     else if( !strcmp( info->codec_name, "mp3" ) )
         a_flv->codecid = FLV_CODECID_MP3;
-    else if( !strcmp( info->codec_name, "aac" ) || !strcmp( info->codec_name, "aac_he" ) )
+    else if( !strcmp( info->codec_name, "aac" ) )
         a_flv->codecid = FLV_CODECID_AAC;
     else
     {
@@ -290,7 +291,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
             if( !p_param->b_vfr_input )
                 a_flv->info->framelen = (double)a_flv->info->samplerate * p_param->i_fps_den / p_param->i_fps_num + 0.5;
             else
-                a_flv->info->framelen = (double)a_flv->info->samplerate * p_param->i_timebase_den / p_param->i_timebase_num + 0.5;
+                a_flv->info->framelen = (double)a_flv->info->samplerate * p_param->i_timebase_num / p_param->i_timebase_den + 0.5;
         }
     }
 #endif

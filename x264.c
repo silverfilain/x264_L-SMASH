@@ -1542,7 +1542,7 @@ generic_option:
                 haud = x264_audio_open_from_file( used_demuxer, audio_filename, audio_track );
             else
             {
-                x264_cli_log( "x264", X264_LOG_WARNING, "no suitable audio demuxer is found for --audiofile, disabling audio.\n" );
+                x264_cli_log( "x264", X264_LOG_ERROR, "no audio demuxer was found for --audiofile, disabling audio.\n" );
                 audio_enable = 0;
             }
         }
@@ -1550,7 +1550,7 @@ generic_option:
             haud = input.open_audio( opt->hin, audio_track );
         else
         {
-            x264_cli_log( "x264", X264_LOG_WARNING, "the used input does not support audio and --audiofile was not given, disabling audio.\n" );
+            x264_cli_log( "x264", X264_LOG_INFO, "the used input does not support audio and --audiofile was not given, disabling audio.\n" );
             audio_enable = 0;
         }
 
