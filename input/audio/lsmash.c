@@ -117,8 +117,6 @@ static int lsmash_init( hnd_t *handle, const char *opt_str )
 error:
     AF_LOG_ERR( h, "error opening the L-SMASH importer.\n" );
 fail:
-    if( filename )
-        free( filename );
     if( h->summary )
     {
         mp4sys_cleanup_audio_summary( h->summary );
