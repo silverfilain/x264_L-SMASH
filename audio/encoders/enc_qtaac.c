@@ -237,8 +237,9 @@ static CFArrayRef configure_codec_settings_array( CFArrayRef current_array, Code
 {
     CFMutableDictionaryRef current_settings = CFDictionaryCreateMutableCopy( NULL, 0, (CFDictionaryRef)CFArrayGetValueAtIndex( current_array, 0 ) );
     CFArrayRef               current_params = CFDictionaryGetValue( current_settings, CFSTR("parameters") );
-    CFMutableArrayRef            new_params = CFArrayCreateMutable( NULL, 0, &kCFTypeArrayCallBacks );
+    CFMutableArrayRef            new_params = CFArrayCreateMutableCopy( NULL, 0, current_params );
     CFMutableArrayRef             new_array = CFArrayCreateMutable( NULL, 0, &kCFTypeArrayCallBacks );
+    CFArrayRef                    result;
     CFIndex i;
 
     for( i = 0; i<CFArrayGetCount( current_params ); i++ )
@@ -268,7 +269,10 @@ static CFArrayRef configure_codec_settings_array( CFArrayRef current_array, Code
     CFRelease( new_params );
     CFArrayAppendValue( new_array, current_settings );
     CFRelease( current_settings );
-    return new_array;
+    result = CFArrayCreateCopy( NULL, new_array );
+    CFRelease( new_array );
+    CFRelease( current_array );
+    return result;
 }
 
 OSStatus configure_quicktime_component( enc_qtaac_t *h )
