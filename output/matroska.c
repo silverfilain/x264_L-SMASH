@@ -244,7 +244,7 @@ static int set_audio_track( mkv_hnd_t *p_mkv, x264_param_t *p_param )
 
     if( codec_private_required( atrack->codec_id ) )
     {
-        if( !info->extradata_size || !info->extradata_size )
+        if( !info->extradata_size || !info->extradata )
         {
             x264_cli_log( "mkv", X264_LOG_ERROR, "no extradata found!\n" );
             return -1;
