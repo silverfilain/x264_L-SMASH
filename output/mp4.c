@@ -102,11 +102,16 @@ typedef struct
     int brand_m4a;
     uint32_t i_track;
     uint32_t i_sample_entry;
+    uint64_t i_time_res;
     uint64_t i_time_inc;
     int64_t i_start_offset;
     uint32_t i_sei_size;
     uint8_t *p_sei_buffer;
     int i_numframe;
+    int64_t i_init_delta;
+    int i_delay_frames;
+    int b_dts_compress;
+    int i_dts_compress_multiplier;
     int no_pasp;
 #if HAVE_ANY_AUDIO
     mp4_audio_hnd_t *audio_hnd;
@@ -386,10 +391,11 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
 }
 
 static int open_file(
-    char *psz_filename, hnd_t *p_handle, hnd_t audio_filters, char *audio_enc, char *audio_params
+    char *psz_filename, hnd_t *p_handle
 #if HAVE_MUXER_OPT
     , cli_output_opt_t *opt
 #endif
+    , hnd_t audio_filters, char *audio_enc, char *audio_params
 )
 {
     mp4_hnd_t *p_mp4;
@@ -407,6 +413,8 @@ static int open_file(
     p_mp4 = malloc( sizeof(mp4_hnd_t) );
     MP4_FAIL_IF_ERR( !p_mp4, "failed to allocate memory for muxer information.\n" );
     memset( p_mp4, 0, sizeof(mp4_hnd_t) );
+
+    p_mp4->b_dts_compress = opt->use_dts_compress;
 
 #if HAVE_MUXER_OPT
     if( opt->chapter )
@@ -475,16 +483,21 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
 {
     mp4_hnd_t *p_mp4 = handle;
 
+    p_mp4->i_delay_frames = p_param->i_bframe ? (p_param->i_bframe_pyramid ? 2 : 1) : 0;
+    p_mp4->i_dts_compress_multiplier = p_mp4->b_dts_compress * p_mp4->i_delay_frames + 1;
+
+    p_mp4->i_time_res = p_param->i_timebase_den * p_mp4->i_dts_compress_multiplier;
+    p_mp4->i_time_inc = p_param->i_timebase_num * p_mp4->i_dts_compress_multiplier;
+    FAIL_IF_ERR( p_mp4->i_time_res > UINT32_MAX, "mp4", "MP4 media timescale %"PRIu64" exceeds maximum\n", p_mp4->i_time_res )
+
     /* Set max duration per chunk. */
     MP4_FAIL_IF_ERR( isom_set_max_chunk_duration( p_mp4->p_root, 0.5 ),
                      "failed to set max duration per chunk.\n" );
 
-    p_mp4->i_time_inc = p_param->i_timebase_num;
-
     /* Set timescale. */
     MP4_FAIL_IF_ERR( isom_set_movie_timescale( p_mp4->p_root, 600 ),
                      "failed to set movie timescale.\n" );
-    MP4_FAIL_IF_ERR( isom_set_media_timescale( p_mp4->p_root, p_mp4->i_track, p_param->i_timebase_den ),
+    MP4_FAIL_IF_ERR( isom_set_media_timescale( p_mp4->p_root, p_mp4->i_track, p_mp4->i_time_res ),
                      "failed to set media timescale for video.\n" );
 
     /* Set handler name. */
@@ -602,7 +615,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
             MP4_FAIL_IF_ERR( 1, "Unknown object_type_indication.\n" );
         }
 #endif /* #if HAVE_AUDIO #else */
-        p_audio->i_video_timescale = p_param->i_timebase_den;
+        p_audio->i_video_timescale = p_mp4->i_time_res;
         MP4_FAIL_IF_ERR( isom_set_media_timescale( p_mp4->p_root, p_audio->i_track, p_audio->summary->frequency ),
                          "failed to set media timescale for audio.\n");
         char audio_hdlr_name[24] = "X264 ISOM Audio Handler";
@@ -678,6 +691,7 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
 static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_t *p_picture )
 {
     mp4_hnd_t *p_mp4 = handle;
+    uint64_t dts, cts;
 
     if( !p_mp4->i_numframe )
         p_mp4->i_start_offset = p_picture->i_dts * -1;
@@ -696,8 +710,23 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
     memcpy( p_sample->data + p_mp4->i_sei_size, p_nalu, i_size );
     p_mp4->i_sei_size = 0;
 
-    p_sample->dts = (uint64_t)(p_picture->i_dts + p_mp4->i_start_offset) * p_mp4->i_time_inc;
-    p_sample->cts = (uint64_t)(p_picture->i_pts + p_mp4->i_start_offset) * p_mp4->i_time_inc;
+    if( p_mp4->b_dts_compress )
+    {
+        if( p_mp4->i_numframe == 1 )
+            p_mp4->i_init_delta = (p_picture->i_dts + p_mp4->i_start_offset) * p_mp4->i_time_inc;
+        dts = p_mp4->i_numframe > p_mp4->i_delay_frames
+            ? p_picture->i_dts * p_mp4->i_time_inc
+            : p_mp4->i_numframe * (p_mp4->i_init_delta / p_mp4->i_dts_compress_multiplier);
+        cts = p_picture->i_pts * p_mp4->i_time_inc;
+    }
+    else
+    {
+        dts = (p_picture->i_dts + p_mp4->i_start_offset) * p_mp4->i_time_inc;
+        cts = (p_picture->i_pts + p_mp4->i_start_offset) * p_mp4->i_time_inc;
+    }
+
+    p_sample->dts = dts;
+    p_sample->cts = cts;
     p_sample->prop.sync_point = p_picture->b_keyframe;
     p_sample->index = 1;
 

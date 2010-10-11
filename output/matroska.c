@@ -99,7 +99,7 @@ error:
 }
 #endif
 
-static int open_file( char *psz_filename, hnd_t *p_handle, hnd_t audio_filters, char *audio_enc, char *audio_params, cli_output_opt_t *opt )
+static int open_file( char *psz_filename, hnd_t *p_handle, cli_output_opt_t *opt, hnd_t audio_filters, char *audio_enc, char *audio_params )
 {
     mkv_hnd_t *p_mkv;
 
@@ -322,8 +322,9 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
         avcC[13+sps_size+pps_size] = 0; // zero spsext
     }
 
-    ret = mk_writeHeader( p_mkv->w, "x264" X264_VERSION, 50000,
-                          p_mkv->tracks, p_mkv->i_track_count );
+    ret = mk_write_header( p_mkv->w, "x264" X264_VERSION, 50000,
+                           p_mkv->tracks, p_mkv->i_track_count );
+
     if( ret < 0 )
         return ret;
 

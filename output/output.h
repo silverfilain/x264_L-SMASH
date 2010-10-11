@@ -33,6 +33,7 @@
 
 typedef struct
 {
+    int use_dts_compress;
     char *chapter;
     char *language;
     int no_sar;
@@ -40,7 +41,7 @@ typedef struct
 
 typedef struct
 {
-    int (*open_file)( char *psz_filename, hnd_t *p_handle, hnd_t audio_filters, char *audio_encoder, char *audio_parameters, cli_output_opt_t *opt );
+    int (*open_file)( char *psz_filename, hnd_t *p_handle, cli_output_opt_t *opt, hnd_t audio_filters, char *audio_encoder, char *audio_parameters );
     int (*set_param)( hnd_t handle, x264_param_t *p_param );
     int (*write_headers)( hnd_t handle, x264_nal_t *p_nal );
     int (*write_frame)( hnd_t handle, uint8_t *p_nal, int i_size, x264_picture_t *p_picture );
