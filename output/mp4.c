@@ -100,7 +100,6 @@ typedef struct
     int brand_m4a;
     uint32_t i_track;
     uint32_t i_sample_entry;
-    uint64_t i_time_res;
     uint64_t i_time_inc;
     int64_t i_start_offset;
     uint32_t i_sei_size;
@@ -465,13 +464,14 @@ static int open_file( char *psz_filename, hnd_t *p_handle, cli_output_opt_t *opt
 static int set_param( hnd_t handle, x264_param_t *p_param )
 {
     mp4_hnd_t *p_mp4 = handle;
+    uint64_t i_media_timescale;
 
     p_mp4->i_delay_frames = p_param->i_bframe ? (p_param->i_bframe_pyramid ? 2 : 1) : 0;
     p_mp4->i_dts_compress_multiplier = p_mp4->b_dts_compress * p_mp4->i_delay_frames + 1;
 
-    p_mp4->i_time_res = p_param->i_timebase_den * p_mp4->i_dts_compress_multiplier;
+    i_media_timescale = p_param->i_timebase_den * p_mp4->i_dts_compress_multiplier;
     p_mp4->i_time_inc = p_param->i_timebase_num * p_mp4->i_dts_compress_multiplier;
-    FAIL_IF_ERR( p_mp4->i_time_res > UINT32_MAX, "mp4", "MP4 media timescale %"PRIu64" exceeds maximum\n", p_mp4->i_time_res )
+    FAIL_IF_ERR( i_media_timescale > UINT32_MAX, "mp4", "MP4 media timescale %"PRIu64" exceeds maximum\n", i_media_timescale );
 
     /* Set max duration per chunk. */
     MP4_FAIL_IF_ERR( isom_set_max_chunk_duration( p_mp4->p_root, 0.5 ),
@@ -480,7 +480,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     /* Set timescale. */
     MP4_FAIL_IF_ERR( isom_set_movie_timescale( p_mp4->p_root, 600 ),
                      "failed to set movie timescale.\n" );
-    MP4_FAIL_IF_ERR( isom_set_media_timescale( p_mp4->p_root, p_mp4->i_track, p_mp4->i_time_res ),
+    MP4_FAIL_IF_ERR( isom_set_media_timescale( p_mp4->p_root, p_mp4->i_track, i_media_timescale ),
                      "failed to set media timescale for video.\n" );
 
     /* Set handler name. */
@@ -596,7 +596,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
             MP4_FAIL_IF_ERR( 1, "Unknown object_type_indication.\n" );
         }
 #endif /* #if HAVE_AUDIO #else */
-        p_audio->i_video_timescale = p_mp4->i_time_res;
+        p_audio->i_video_timescale = i_media_timescale;
         MP4_FAIL_IF_ERR( isom_set_media_timescale( p_mp4->p_root, p_audio->i_track, p_audio->summary->frequency ),
                          "failed to set media timescale for audio.\n");
         char audio_hdlr_name[24] = "X264 ISOM Audio Handler";
