@@ -322,7 +322,7 @@ mk_writer *mk_create_writer( const char *filename )
     return w;
 }
 
-int mk_writeTrack( mk_writer *w, mk_context *c, mk_track_t track )
+int mk_write_track( mk_writer *w, mk_context *c, mk_track_t track )
 {
     mk_context  *ti, *t;
 
@@ -373,8 +373,8 @@ int mk_writeTrack( mk_writer *w, mk_context *c, mk_track_t track )
     return 0;
 }
 
-int mk_writeHeader( mk_writer *w, const char *writing_app, int64_t timescale,
-                    mk_track_t *tracks, int track_count )
+int mk_write_header( mk_writer *w, const char *writing_app, int64_t timescale,
+                     mk_track_t *tracks, int track_count )
 {
     mk_context  *c;
     int i;
@@ -416,7 +416,7 @@ int mk_writeHeader( mk_writer *w, const char *writing_app, int64_t timescale,
         return -1;
 
     for( i=1; i<=track_count; i++ )
-        CHECK( mk_writeTrack( w, c, tracks[i] ) );
+        CHECK( mk_write_track( w, c, tracks[i] ) );
 
     CHECK( mk_close_context( c, 0 ) );
 
