@@ -95,9 +95,7 @@ typedef struct
 {
     isom_root_t *p_root;
     char *psz_chapter;
-#if HAVE_MUXER_OPT
     char *psz_language;
-#endif
     int brand_3gpp;
     int brand_m4a;
     uint32_t i_track;
@@ -390,13 +388,7 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
     return 0;
 }
 
-static int open_file(
-    char *psz_filename, hnd_t *p_handle
-#if HAVE_MUXER_OPT
-    , cli_output_opt_t *opt
-#endif
-    , hnd_t audio_filters, char *audio_enc, char *audio_params
-)
+static int open_file( char *psz_filename, hnd_t *p_handle, cli_output_opt_t *opt, hnd_t audio_filters, char *audio_enc, char *audio_params )
 {
     mp4_hnd_t *p_mp4;
 
@@ -416,7 +408,6 @@ static int open_file(
 
     p_mp4->b_dts_compress = opt->use_dts_compress;
 
-#if HAVE_MUXER_OPT
     if( opt->chapter )
     {
         p_mp4->psz_chapter = opt->chapter;
@@ -426,14 +417,6 @@ static int open_file(
     }
     p_mp4->psz_language = opt->language;
     p_mp4->no_pasp = opt->no_sar;
-#else
-    fh = fopen( "x264_chapter_test.txt", "rb" );
-    if( fh )
-    {
-        p_mp4->psz_chapter = "x264_chapter_test.txt";
-        fclose( fh );
-    }
-#endif
 
     p_mp4->p_root = isom_create_movie( psz_filename );
     MP4_FAIL_IF_ERR_EX( !p_mp4->p_root, "failed to create root.\n" );
@@ -530,11 +513,9 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     MP4_FAIL_IF_ERR( isom_set_track_presentation_size( p_mp4->p_root, p_mp4->i_track, dw, dh ),
                      "failed to set presentation size.\n" );
 
-#if HAVE_MUXER_OPT
     if( p_mp4->psz_language )
         MP4_FAIL_IF_ERR( isom_set_language( p_mp4->p_root, p_mp4->i_track, p_mp4->psz_language ),
                          "failed to set language for video.\n");
-#endif
 
 #if HAVE_ANY_AUDIO
     mp4_audio_hnd_t *p_audio = p_mp4->audio_hnd;
@@ -627,11 +608,9 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
         /* MP4AudioSampleEntry does not have btrt */
 //        MP4_FAIL_IF_ERR( isom_add_btrt( p_mp4->p_root, p_audio->i_track, p_audio->i_sample_entry ),
 //                         "failed to add btrt for audio.\n" );
-#if HAVE_MUXER_OPT
         if( p_mp4->psz_language )
             MP4_FAIL_IF_ERR( isom_set_language( p_mp4->p_root, p_audio->i_track, p_mp4->psz_language ),
                              "failed to set language for audio track.\n" );
-#endif
     }
 #endif /* #if HAVE_AUDIO */
 

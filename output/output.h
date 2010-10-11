@@ -29,8 +29,6 @@
 
 #include "x264cli.h"
 
-#define HAVE_MUXER_OPT 1
-
 typedef struct
 {
     int use_dts_compress;
