@@ -81,8 +81,8 @@ typedef struct mk_writer mk_writer;
 
 mk_writer *mk_create_writer( const char *filename );
 
-int mk_writeHeader( mk_writer *w, const char *writing_app, int64_t timescale,
-                    mk_track_t *tracks, int track_count );
+int mk_write_header( mk_writer *w, const char *writing_app, int64_t timescale,
+                     mk_track_t *tracks, int track_count );
 int mk_start_frame( mk_writer *w );
 int mk_end_frame( mk_writer *w, uint32_t track_id );
 int mk_add_frame_data( mk_writer *w, const void *data, unsigned size );
