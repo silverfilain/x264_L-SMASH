@@ -110,6 +110,8 @@ typedef struct
     int b_dts_compress;
     int i_dts_compress_multiplier;
     int no_pasp;
+    int b_use_open_gop;
+    uint64_t i_gop_head_cts;
 #if HAVE_ANY_AUDIO
     mp4_audio_hnd_t *audio_hnd;
 #endif
@@ -517,6 +519,8 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
         MP4_FAIL_IF_ERR( isom_set_language( p_mp4->p_root, p_mp4->i_track, p_mp4->psz_language ),
                          "failed to set language for video.\n");
 
+    p_mp4->b_use_open_gop = !!p_param->i_open_gop;
+
 #if HAVE_ANY_AUDIO
     mp4_audio_hnd_t *p_audio = p_mp4->audio_hnd;
     if( p_audio )
@@ -645,7 +649,7 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
     p_mp4->i_sei_size = sei_size;
 
     /* Write ftyp. */
-    uint32_t brands[5] = { ISOM_BRAND_TYPE_ISOM, ISOM_BRAND_TYPE_MP42 };
+    uint32_t brands[6] = { ISOM_BRAND_TYPE_ISOM, ISOM_BRAND_TYPE_MP42, 0, 0, 0, 0 };
     uint32_t minor_version = 0;
     uint32_t brand_count = 2;
     if( p_mp4->brand_3gpp == 1 )
@@ -658,6 +662,8 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
     }
     if( p_mp4->brand_m4a )
         brands[brand_count++] = ISOM_BRAND_TYPE_M4A;
+    if( p_mp4->b_use_open_gop )
+        brands[brand_count++] = ISOM_BRAND_TYPE_QT;
     MP4_FAIL_IF_ERR( isom_set_brands( p_mp4->p_root, brands[1+p_mp4->brand_3gpp], minor_version, brands, brand_count ) || isom_write_ftyp( p_mp4->p_root ),
                      "failed to set brands / ftyp.\n" );
 
@@ -706,8 +712,19 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
 
     p_sample->dts = dts;
     p_sample->cts = cts;
-    p_sample->prop.sync_point = p_picture->b_keyframe;
     p_sample->index = 1;
+    p_sample->prop.sync_point = p_picture->i_type == X264_TYPE_IDR;
+    if( p_mp4->b_use_open_gop )
+    {
+        p_sample->prop.partial_sync = p_picture->i_type == X264_TYPE_I;
+        p_sample->prop.independent = IS_X264_TYPE_I( p_picture->i_type ) ? ISOM_SAMPLE_IS_INDEPENDENT : ISOM_SAMPLE_IS_NOT_INDEPENDENT;
+        p_sample->prop.disposable = p_picture->i_type == X264_TYPE_B ? ISOM_SAMPLE_IS_DISPOSABLE : ISOM_SAMPLE_IS_NOT_DISPOSABLE;
+        p_sample->prop.redundant = ISOM_SAMPLE_HAS_NO_REDUNDANCY;
+        p_sample->prop.leading = !IS_X264_TYPE_B( p_picture->i_type ) || p_sample->cts >= p_mp4->i_gop_head_cts
+            ? ISOM_SAMPLE_IS_NOT_LEADING : ISOM_SAMPLE_IS_UNDECODABLE_LEADING;
+        if( IS_X264_TYPE_I( p_picture->i_type ) )
+            p_mp4->i_gop_head_cts = p_sample->cts;
+    }
 
     /* Write data per sample. */
     MP4_FAIL_IF_ERR( isom_write_sample( p_mp4->p_root, p_mp4->i_track, p_sample ),
