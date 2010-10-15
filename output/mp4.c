@@ -649,7 +649,7 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
     p_mp4->i_sei_size = sei_size;
 
     /* Write ftyp. */
-    uint32_t brands[6] = { ISOM_BRAND_TYPE_ISOM, ISOM_BRAND_TYPE_MP42, 0, 0, 0, 0 };
+    uint32_t brands[7] = { ISOM_BRAND_TYPE_ISOM, ISOM_BRAND_TYPE_MP42, 0, 0, 0, 0, 0 };
     uint32_t minor_version = 0;
     uint32_t brand_count = 2;
     if( p_mp4->brand_3gpp == 1 )
@@ -663,7 +663,10 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
     if( p_mp4->brand_m4a )
         brands[brand_count++] = ISOM_BRAND_TYPE_M4A;
     if( p_mp4->b_use_open_gop )
+    {
+        brands[brand_count++] = ISOM_BRAND_TYPE_AVC1;
         brands[brand_count++] = ISOM_BRAND_TYPE_QT;
+    }
     MP4_FAIL_IF_ERR( isom_set_brands( p_mp4->p_root, brands[1+p_mp4->brand_3gpp], minor_version, brands, brand_count ) || isom_write_ftyp( p_mp4->p_root ),
                      "failed to set brands / ftyp.\n" );
 
