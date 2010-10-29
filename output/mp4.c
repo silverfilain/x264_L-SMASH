@@ -422,27 +422,15 @@ static int open_file( char *psz_filename, hnd_t *p_handle, cli_output_opt_t *opt
     p_mp4->p_root = isom_create_movie( psz_filename );
     MP4_FAIL_IF_ERR_EX( !p_mp4->p_root, "failed to create root.\n" );
 
-    p_mp4->i_track = isom_create_track( p_mp4->p_root, ISOM_HDLR_TYPE_VISUAL );
-    MP4_FAIL_IF_ERR_EX( !p_mp4->i_track, "failed to create a video track.\n" );
 #if HAVE_ANY_AUDIO
 #if HAVE_AUDIO
     MP4_FAIL_IF_ERR_EX( audio_init( p_mp4, audio_filters, audio_enc, audio_params ) < 0, "unable to init audio output.\n" );
-    if( p_mp4->audio_hnd )
-    {
-        p_mp4->audio_hnd->i_track = isom_create_track( p_mp4->p_root, ISOM_HDLR_TYPE_AUDIO );
-        MP4_FAIL_IF_ERR_EX( !p_mp4->audio_hnd->i_track, "failed to create a audio track.\n" );
-    }
 #else
-    mp4_audio_hnd_t* p_audio = p_mp4->audio_hnd = (mp4_audio_hnd_t*)malloc( sizeof(mp4_audio_hnd_t) );
+    mp4_audio_hnd_t *p_audio = p_mp4->audio_hnd = (mp4_audio_hnd_t *)malloc( sizeof(mp4_audio_hnd_t) );
     MP4_FAIL_IF_ERR_EX( !p_audio, "failed to allocate memory for audio muxing information.\n" );
     memset( p_audio, 0, sizeof(mp4_audio_hnd_t) );
     p_audio->p_importer = mp4sys_importer_open( "x264_audio_test.adts", "auto" );
-    if( p_audio->p_importer )
-    {
-        p_audio->i_track = isom_create_track( p_mp4->p_root, ISOM_HDLR_TYPE_AUDIO );
-        MP4_FAIL_IF_ERR_EX( !p_audio->i_track, "failed to create a audio track.\n" );
-    }
-    else
+    if( !p_audio->p_importer )
     {
         free( p_audio );
         p_mp4->audio_hnd = NULL;
@@ -468,6 +456,8 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     mp4_hnd_t *p_mp4 = handle;
     uint64_t i_media_timescale;
 
+    p_mp4->b_use_open_gop = !!p_param->i_open_gop;
+
     p_mp4->i_delay_frames = p_param->i_bframe ? (p_param->i_bframe_pyramid ? 2 : 1) : 0;
     p_mp4->i_dts_compress_multiplier = p_mp4->b_dts_compress * p_mp4->i_delay_frames + 1;
 
@@ -475,9 +465,35 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     p_mp4->i_time_inc = p_param->i_timebase_num * p_mp4->i_dts_compress_multiplier;
     FAIL_IF_ERR( i_media_timescale > UINT32_MAX, "mp4", "MP4 media timescale %"PRIu64" exceeds maximum\n", i_media_timescale );
 
+    /* Set brands. */
+    uint32_t brands[7] = { ISOM_BRAND_TYPE_ISOM, ISOM_BRAND_TYPE_MP42, 0, 0, 0, 0, 0 };
+    uint32_t minor_version = 0;
+    uint32_t brand_count = 2;
+    if( p_mp4->brand_3gpp == 1 )
+        brands[brand_count++] = ISOM_BRAND_TYPE_3GP6;
+    else if( p_mp4->brand_3gpp == 2 )
+    {
+        brands[brand_count++] = ISOM_BRAND_TYPE_3GP6;
+        brands[brand_count++] = ISOM_BRAND_TYPE_3G2A;
+        minor_version = 0x00010000;
+    }
+    if( p_mp4->brand_m4a )
+        brands[brand_count++] = ISOM_BRAND_TYPE_M4A;
+    if( p_mp4->b_use_open_gop )
+    {
+        brands[brand_count++] = ISOM_BRAND_TYPE_AVC1;
+        brands[brand_count++] = ISOM_BRAND_TYPE_QT;
+    }
+    MP4_FAIL_IF_ERR( isom_set_brands( p_mp4->p_root, brands[1+p_mp4->brand_3gpp], minor_version, brands, brand_count ),
+                     "failed to set brands / ftyp.\n" );
+
     /* Set max duration per chunk. */
     MP4_FAIL_IF_ERR( isom_set_max_chunk_duration( p_mp4->p_root, 0.5 ),
                      "failed to set max duration per chunk.\n" );
+
+    /* Create a video track. */
+    p_mp4->i_track = isom_create_track( p_mp4->p_root, ISOM_MEDIA_HANDLER_TYPE_VISUAL );
+    MP4_FAIL_IF_ERR_EX( !p_mp4->i_track, "failed to create a video track.\n" );
 
     /* Set timescale. */
     MP4_FAIL_IF_ERR( isom_set_movie_timescale( p_mp4->p_root, 600 ),
@@ -486,9 +502,11 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
                      "failed to set media timescale for video.\n" );
 
     /* Set handler name. */
-    char hdlr_name[24] = "X264 ISOM Video Handler";
-    MP4_FAIL_IF_ERR( isom_set_handler_name( p_mp4->p_root, p_mp4->i_track, hdlr_name ),
-                     "failed to set hander name for video.\n" );
+    MP4_FAIL_IF_ERR( isom_set_media_handler_name( p_mp4->p_root, p_mp4->i_track, "X264 Video Media Handler" ),
+                     "failed to set media hander name for video.\n" );
+    if( p_mp4->b_use_open_gop )
+        MP4_FAIL_IF_ERR( isom_set_data_handler_name( p_mp4->p_root, p_mp4->i_track, "X264 URL Data Handler" ),
+                         "failed to set data hander name for video.\n" );
 
     /* Add a sample entry. */
     /* FIXME: I think these sample_entry relative stuff should be more encapsulated, by using video_summary. */
@@ -519,12 +537,14 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
         MP4_FAIL_IF_ERR( isom_set_language( p_mp4->p_root, p_mp4->i_track, p_mp4->psz_language ),
                          "failed to set language for video.\n");
 
-    p_mp4->b_use_open_gop = !!p_param->i_open_gop;
-
 #if HAVE_ANY_AUDIO
     mp4_audio_hnd_t *p_audio = p_mp4->audio_hnd;
     if( p_audio )
     {
+        /* Create a audio track. */
+        p_audio->i_track = isom_create_track( p_mp4->p_root, ISOM_MEDIA_HANDLER_TYPE_AUDIO );
+        MP4_FAIL_IF_ERR_EX( !p_audio->i_track, "failed to create a audio track.\n" );
+
 #if HAVE_AUDIO
         p_audio->summary->stream_type      = MP4SYS_STREAM_TYPE_AudioStream;
         p_audio->summary->max_au_length    = ( 1 << 13 ) - 1;
@@ -603,9 +623,11 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
         p_audio->i_video_timescale = i_media_timescale;
         MP4_FAIL_IF_ERR( isom_set_media_timescale( p_mp4->p_root, p_audio->i_track, p_audio->summary->frequency ),
                          "failed to set media timescale for audio.\n");
-        char audio_hdlr_name[24] = "X264 ISOM Audio Handler";
-        MP4_FAIL_IF_ERR( isom_set_handler_name( p_mp4->p_root, p_audio->i_track, audio_hdlr_name ),
-                         "failed to set handler name for audio.\n" );
+        MP4_FAIL_IF_ERR( isom_set_media_handler_name( p_mp4->p_root, p_audio->i_track, "X264 Audio Media Handler" ),
+                         "failed to set media handler name for audio.\n" );
+        if( p_mp4->b_use_open_gop )
+            MP4_FAIL_IF_ERR( isom_set_data_handler_name( p_mp4->p_root, p_audio->i_track, "X264 URL Data Handler" ),
+                             "failed to set data hander name for audio.\n" );
         p_audio->i_sample_entry = isom_add_sample_entry( p_mp4->p_root, p_audio->i_track, p_audio->codec_type, p_audio->summary );
         MP4_FAIL_IF_ERR( !p_audio->i_sample_entry,
                          "failed to add sample_entry for audio.\n" );
@@ -616,7 +638,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
             MP4_FAIL_IF_ERR( isom_set_language( p_mp4->p_root, p_audio->i_track, p_mp4->psz_language ),
                              "failed to set language for audio track.\n" );
     }
-#endif /* #if HAVE_AUDIO */
+#endif /* #if HAVE_ANY_AUDIO */
 
     return 0;
 }
@@ -649,26 +671,8 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
     p_mp4->i_sei_size = sei_size;
 
     /* Write ftyp. */
-    uint32_t brands[7] = { ISOM_BRAND_TYPE_ISOM, ISOM_BRAND_TYPE_MP42, 0, 0, 0, 0, 0 };
-    uint32_t minor_version = 0;
-    uint32_t brand_count = 2;
-    if( p_mp4->brand_3gpp == 1 )
-        brands[brand_count++] = ISOM_BRAND_TYPE_3GP6;
-    else if( p_mp4->brand_3gpp == 2 )
-    {
-        brands[brand_count++] = ISOM_BRAND_TYPE_3GP6;
-        brands[brand_count++] = ISOM_BRAND_TYPE_3G2A;
-        minor_version = 0x00010000;
-    }
-    if( p_mp4->brand_m4a )
-        brands[brand_count++] = ISOM_BRAND_TYPE_M4A;
-    if( p_mp4->b_use_open_gop )
-    {
-        brands[brand_count++] = ISOM_BRAND_TYPE_AVC1;
-        brands[brand_count++] = ISOM_BRAND_TYPE_QT;
-    }
-    MP4_FAIL_IF_ERR( isom_set_brands( p_mp4->p_root, brands[1+p_mp4->brand_3gpp], minor_version, brands, brand_count ) || isom_write_ftyp( p_mp4->p_root ),
-                     "failed to set brands / ftyp.\n" );
+    MP4_FAIL_IF_ERR( isom_write_ftyp( p_mp4->p_root ),
+                     "failed to write brands / ftyp.\n" );
 
     /* Write mdat header. */
     MP4_FAIL_IF_ERR( isom_add_mdat( p_mp4->p_root ), "failed to add mdat.\n" );
