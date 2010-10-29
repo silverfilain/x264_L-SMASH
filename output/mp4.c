@@ -466,9 +466,9 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     FAIL_IF_ERR( i_media_timescale > UINT32_MAX, "mp4", "MP4 media timescale %"PRIu64" exceeds maximum\n", i_media_timescale );
 
     /* Set brands. */
-    uint32_t brands[7] = { ISOM_BRAND_TYPE_ISOM, ISOM_BRAND_TYPE_MP42, 0, 0, 0, 0, 0 };
+    uint32_t brands[8] = { ISOM_BRAND_TYPE_ISOM, ISOM_BRAND_TYPE_MP41, ISOM_BRAND_TYPE_MP42, 0, 0, 0, 0, 0 };
     uint32_t minor_version = 0;
-    uint32_t brand_count = 2;
+    uint32_t brand_count = 3;
     if( p_mp4->brand_3gpp == 1 )
         brands[brand_count++] = ISOM_BRAND_TYPE_3GP6;
     else if( p_mp4->brand_3gpp == 2 )
@@ -484,7 +484,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
         brands[brand_count++] = ISOM_BRAND_TYPE_AVC1;
         brands[brand_count++] = ISOM_BRAND_TYPE_QT;
     }
-    MP4_FAIL_IF_ERR( isom_set_brands( p_mp4->p_root, brands[1+p_mp4->brand_3gpp], minor_version, brands, brand_count ),
+    MP4_FAIL_IF_ERR( isom_set_brands( p_mp4->p_root, brands[2+p_mp4->brand_3gpp], minor_version, brands, brand_count ),
                      "failed to set brands / ftyp.\n" );
 
     /* Set max duration per chunk. */
