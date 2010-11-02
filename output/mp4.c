@@ -534,7 +534,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     }
     MP4_FAIL_IF_ERR( isom_set_track_presentation_size( p_mp4->p_root, p_mp4->i_track, dw, dh ),
                      "failed to set presentation size.\n" );
-    if( qt_compatible )
+    if( qt_compatible && !p_mp4->no_pasp )
         MP4_FAIL_IF_ERR( isom_set_track_aperture_modes( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry ),
                          "failed to set track aperture mode.\n" );
 
