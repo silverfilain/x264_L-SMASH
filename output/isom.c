@@ -2819,7 +2819,7 @@ static int isom_write_mvhd( isom_root_t *root )
     return isom_bs_write_data( bs );
 }
 
-static int isom_bs_write_largesize_reserver( isom_bs_t *bs )
+static int isom_bs_write_largesize_placeholder( isom_bs_t *bs )
 {
     isom_bs_put_be32( bs, ISOM_DEFAULT_BOX_HEADER_SIZE );
     isom_bs_put_be32( bs, ISOM_BOX_TYPE_FREE );
@@ -2832,11 +2832,12 @@ static int isom_write_mdat_header( isom_root_t *root )
         return -1;
     isom_mdat_t *mdat = root->mdat;
     isom_bs_t *bs = root->bs;
-    mdat->base_header.size = 2 * ISOM_DEFAULT_BOX_HEADER_SIZE;
-    mdat->header_pos = ftell( bs->stream );
-    mdat->large_flag = 0;
+    mdat->placeholder_pos = ftell( bs->stream );
+    if( isom_bs_write_largesize_placeholder( bs ) )
+        return -1;
+    mdat->base_header.size = ISOM_DEFAULT_BOX_HEADER_SIZE;
     isom_bs_put_base_header( bs, &mdat->base_header );
-    return isom_bs_write_largesize_reserver( bs );
+    return isom_bs_write_data( bs );
 }
 
 static uint32_t isom_get_sample_count( isom_trak_entry_t *trak )
@@ -3449,9 +3450,15 @@ int isom_update_bitrate_info( isom_root_t *root, uint32_t track_ID, uint32_t ent
 
 static int isom_check_compatibility( isom_root_t *root )
 {
-    /* Check brand to decide mandatory boxes. */
-    if( !root || !root->ftyp || !root->ftyp->brand_count )
+    if( !root )
         return -1;
+    /* Check brand to decide mandatory boxes. */
+    if( !root->ftyp || !root->ftyp->brand_count )
+    {
+        /* We assume this file is not a QuickTime but MP4 version 1 format file. */
+        root->request_iods = 1;
+        return 0;
+    }
     for( uint32_t i = 0; i < root->ftyp->brand_count; i++ )
     {
         if( root->ftyp->compatible_brands[i] == ISOM_BRAND_TYPE_QT )
@@ -3464,7 +3471,7 @@ static int isom_check_compatibility( isom_root_t *root )
 
 static int isom_check_mandatory_boxes( isom_root_t *root )
 {
-    if( !root || !root->ftyp || !root->ftyp->brand_count )
+    if( !root )
         return -1;
     if( !root->moov || !root->moov->mvhd )
         return -1;
@@ -4559,8 +4566,20 @@ uint32_t isom_get_movie_timescale( isom_root_t *root )
 
 int isom_set_brands( isom_root_t *root, uint32_t major_brand, uint32_t minor_version, uint32_t *brands, uint32_t brand_count )
 {
-    if( !root || !brand_count )
+    if( !root )
         return -1;
+    if( !brand_count )
+    {
+        /* Absence of ftyp box means this file is a QuickTime or MP4 version 1 format file. */
+        if( root->ftyp )
+        {
+            if( root->ftyp->compatible_brands )
+                free( root->ftyp->compatible_brands );
+            free( root->ftyp );
+            root->ftyp = NULL;
+        }
+        return 0;
+    }
     if( !root->ftyp && isom_add_ftyp( root ) )
         return -1;
     isom_ftyp_t *ftyp = root->ftyp;
@@ -4588,8 +4607,12 @@ int isom_set_max_chunk_duration( isom_root_t *root, double max_chunk_duration )
 
 int isom_write_ftyp( isom_root_t *root )
 {
-    isom_bs_t *bs = root->bs;
+    if( !root )
+        return -1;
     isom_ftyp_t *ftyp = root->ftyp;
+    if( !ftyp || !ftyp->brand_count )
+        return 0;
+    isom_bs_t *bs = root->bs;
     isom_bs_put_base_header( bs, &ftyp->base_header );
     isom_bs_put_be32( bs, ftyp->major_brand );
     isom_bs_put_be32( bs, ftyp->minor_version );
@@ -4635,20 +4658,20 @@ int isom_write_mdat_size( isom_root_t *root )
     if( !root || !root->bs || !root->bs->stream || !root->mdat )
         return -1;
     isom_mdat_t *mdat = root->mdat;
-    if( mdat->base_header.size > UINT32_MAX )
-        mdat->large_flag = 1;
+    uint8_t large_flag = mdat->base_header.size > UINT32_MAX;
     isom_bs_t *bs = root->bs;
     FILE *stream = bs->stream;
     uint64_t current_pos = ftell( stream );
-    fseek( stream, mdat->header_pos, SEEK_SET );
-    if( mdat->large_flag )
+    if( large_flag )
     {
+        fseek( stream, mdat->placeholder_pos, SEEK_SET );
         isom_bs_put_be32( bs, 1 );
         isom_bs_put_be32( bs, ISOM_BOX_TYPE_MDAT );
-        isom_bs_put_be64( bs, mdat->base_header.size );
+        isom_bs_put_be64( bs, mdat->base_header.size + ISOM_DEFAULT_BOX_HEADER_SIZE );
     }
     else
     {
+        fseek( stream, mdat->placeholder_pos + ISOM_DEFAULT_BOX_HEADER_SIZE, SEEK_SET );
         isom_bs_put_be32( bs, mdat->base_header.size );
         isom_bs_put_be32( bs, ISOM_BOX_TYPE_MDAT );
     }
