@@ -728,7 +728,7 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
     p_sample->prop.sync_point = p_picture->i_type == X264_TYPE_IDR;
     if( p_mp4->b_use_open_gop )
     {
-        p_sample->prop.partial_sync = p_picture->i_type == X264_TYPE_I;
+        p_sample->prop.partial_sync = p_picture->b_keyframe && p_picture->i_type == X264_TYPE_I;
         p_sample->prop.independent = IS_X264_TYPE_I( p_picture->i_type ) ? ISOM_SAMPLE_IS_INDEPENDENT : ISOM_SAMPLE_IS_NOT_INDEPENDENT;
         p_sample->prop.disposable = p_picture->i_type == X264_TYPE_B ? ISOM_SAMPLE_IS_DISPOSABLE : ISOM_SAMPLE_IS_NOT_DISPOSABLE;
         p_sample->prop.redundant = ISOM_SAMPLE_HAS_NO_REDUNDANCY;
