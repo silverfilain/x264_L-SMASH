@@ -628,7 +628,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
         p_audio->i_video_timescale = i_media_timescale;
         MP4_FAIL_IF_ERR( isom_set_media_timescale( p_mp4->p_root, p_audio->i_track, p_audio->summary->frequency ),
                          "failed to set media timescale for audio.\n");
-        MP4_FAIL_IF_ERR( isom_set_media_handler_name( p_mp4->p_root, p_audio->i_track, "X264 Audio Media Handler" ),
+        MP4_FAIL_IF_ERR( isom_set_media_handler_name( p_mp4->p_root, p_audio->i_track, "X264 Sound Media Handler" ),
                          "failed to set media handler name for audio.\n" );
         if( qt_compatible )
             MP4_FAIL_IF_ERR( isom_set_data_handler_name( p_mp4->p_root, p_audio->i_track, "X264 URL Data Handler" ),
