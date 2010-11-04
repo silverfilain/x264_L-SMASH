@@ -252,7 +252,7 @@ error:
 #endif /* #if HAVE_AUDIO */
 
 #if HAVE_ANY_AUDIO
-static int write_audio_frames( mp4_hnd_t *p_mp4, double video_cts, int finish )
+static int write_audio_frames( mp4_hnd_t *p_mp4, double video_dts, int finish )
 {
     mp4_audio_hnd_t *p_audio = p_mp4->audio_hnd;
     assert( p_audio );
@@ -266,10 +266,10 @@ static int write_audio_frames( mp4_hnd_t *p_mp4, double video_cts, int finish )
     {
         uint64_t audio_timestamp = (uint64_t)p_audio->i_numframe * p_audio->summary->samples_in_frame;
         /*
-         * means while( audio_cts < video_cts )
+         * means while( audio_dts < video_dts )
          * FIXME: I wonder if there's any way more effective.
          */
-        if( !finish && audio_timestamp / (double)p_audio->summary->frequency > video_cts )
+        if( !finish && audio_timestamp / (double)p_audio->summary->frequency > video_dts )
             break;
 
         /* read a audio frame */
@@ -345,9 +345,10 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
          */
         uint32_t mvhd_timescale = isom_get_movie_timescale( p_mp4->p_root );
         uint32_t mdhd_timescale = isom_get_media_timescale( p_mp4->p_root, p_mp4->i_track );
+        double actual_duration  = 0;
         if( mdhd_timescale != 0 ) /* avoid zero division */
         {
-            uint64_t actual_duration = (uint64_t)( (double)((largest_pts + last_delta) * p_mp4->i_time_inc) * mvhd_timescale / mdhd_timescale );
+            actual_duration = (double)((largest_pts + last_delta) * p_mp4->i_time_inc) * mvhd_timescale / mdhd_timescale;
             MP4_LOG_IF_ERR( isom_create_explicit_timeline_map( p_mp4->p_root, p_mp4->i_track, actual_duration, p_mp4->i_start_offset * p_mp4->i_time_inc, ISOM_NORMAL_EDIT ),
                             "failed to set timeline map for video.\n" );
         }
@@ -360,7 +361,9 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
         mp4_audio_hnd_t *p_audio = p_mp4->audio_hnd;
         if( p_audio )
         {
-            MP4_LOG_IF_ERR( write_audio_frames( p_mp4, 0, 1 ), "failed to flush audio frame(s).\n" );
+            MP4_LOG_IF_ERR( ( write_audio_frames( p_mp4, actual_duration / mvhd_timescale, 0 ) ||
+                              write_audio_frames( p_mp4, 0, 1 ) ),
+                            "failed to flush audio frame(s).\n" );
 #if HAVE_AUDIO
             MP4_LOG_IF_ERR( isom_flush_pooled_samples( p_mp4->p_root, p_audio->i_track, p_audio->info->last_delta ),
                             "failed to set last sample's duration for audio.\n" );
@@ -748,7 +751,7 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
     mp4_audio_hnd_t *p_audio = p_mp4->audio_hnd;
     if( p_audio )
     {
-        MP4_FAIL_IF_ERR( write_audio_frames( p_mp4, p_sample->cts / (double)p_audio->i_video_timescale, 0 ),
+        MP4_FAIL_IF_ERR( write_audio_frames( p_mp4, p_sample->dts / (double)p_audio->i_video_timescale, 0 ),
                          "failed to write audio frame(s).\n" );
     }
 #endif
