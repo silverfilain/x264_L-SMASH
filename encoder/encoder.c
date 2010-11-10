@@ -2760,6 +2760,8 @@ static int x264_encoder_frame_end( x264_t *h, x264_t *thread_current,
 
     pic_out->b_keyframe = h->fenc->b_keyframe;
 
+    pic_out->i_frame_num = h->fdec->i_frame_num;
+
     pic_out->i_pts = h->fdec->i_pts;
     pic_out->i_dts = h->fdec->i_dts;
 

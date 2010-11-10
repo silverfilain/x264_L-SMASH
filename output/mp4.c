@@ -110,7 +110,9 @@ typedef struct
     int b_dts_compress;
     int i_dts_compress_multiplier;
     int no_pasp;
-    int b_use_open_gop;
+    int b_use_recovery;
+    int i_recovery_frame_cnt;
+    int i_max_frame_num;
     uint64_t i_gop_head_cts;
 #if HAVE_ANY_AUDIO
     mp4_audio_hnd_t *audio_hnd;
@@ -118,6 +120,34 @@ typedef struct
 } mp4_hnd_t;
 
 /*******************/
+
+static void set_recovery_param( mp4_hnd_t *p_mp4, x264_param_t *p_param )
+{
+    p_mp4->b_use_recovery = p_param->i_open_gop || p_param->b_intra_refresh;
+    if( !p_mp4->b_use_recovery )
+        return;
+
+    /* almost copied from x264_sps_init in encoder/set.c */
+    int i_num_reorder_frames = p_param->i_bframe_pyramid ? 2 : p_param->i_bframe ? 1 : 0;
+    int i_num_ref_frames = X264_MIN(X264_REF_MAX, X264_MAX4(p_param->i_frame_reference, 1 + i_num_reorder_frames,
+                           p_param->i_bframe_pyramid ? 4 : 1, p_param->i_dpb_size));
+    i_num_ref_frames -= p_param->i_bframe_pyramid == X264_B_PYRAMID_STRICT;
+    if( p_param->i_keyint_max == 1 )
+        i_num_ref_frames = 0;
+
+    p_mp4->i_max_frame_num = i_num_ref_frames * (!!p_param->i_bframe_pyramid+1) + 1;
+    if( p_param->b_intra_refresh )
+    {
+        p_mp4->i_recovery_frame_cnt = X264_MIN( ( p_param->i_width + 15 ) / 16 - 1, p_param->i_keyint_max ) + p_param->i_bframe - 1;
+        p_mp4->i_max_frame_num = X264_MAX( p_mp4->i_max_frame_num, p_mp4->i_recovery_frame_cnt + 1 );
+    }
+
+    int i_log2_max_frame_num = 4;
+    while( (1 << i_log2_max_frame_num) <= p_mp4->i_max_frame_num )
+        i_log2_max_frame_num++;
+
+    p_mp4->i_max_frame_num = 1 << i_log2_max_frame_num;
+}
 
 static void remove_mp4_hnd( hnd_t handle )
 {
@@ -459,7 +489,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     mp4_hnd_t *p_mp4 = handle;
     uint64_t i_media_timescale;
 
-    p_mp4->b_use_open_gop = !!p_param->i_open_gop;
+    set_recovery_param( p_mp4, p_param );
 
     p_mp4->i_delay_frames = p_param->i_bframe ? (p_param->i_bframe_pyramid ? 2 : 1) : 0;
     p_mp4->i_dts_compress_multiplier = p_mp4->b_dts_compress * p_mp4->i_delay_frames + 1;
@@ -483,7 +513,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     }
     if( p_mp4->brand_m4a )
         brands[brand_count++] = ISOM_BRAND_TYPE_M4A;
-    if( p_mp4->b_use_open_gop )
+    if( p_mp4->b_use_recovery )
     {
         brands[brand_count++] = ISOM_BRAND_TYPE_AVC1;
         brands[brand_count++] = ISOM_BRAND_TYPE_QT;
@@ -512,6 +542,10 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     if( qt_compatible )
         MP4_FAIL_IF_ERR( isom_set_data_handler_name( p_mp4->p_root, p_mp4->i_track, "X264 URL Data Handler" ),
                          "failed to set data hander name for video.\n" );
+
+    if( p_mp4->b_use_recovery )
+        MP4_FAIL_IF_ERR( isom_create_grouping( p_mp4->p_root, p_mp4->i_track, ISOM_GROUP_TYPE_ROLL ),
+                         "failed to create roll recovery grouping\n" );
 
     /* Add a sample entry. */
     /* FIXME: I think these sample_entry relative stuff should be more encapsulated, by using video_summary. */
@@ -727,19 +761,31 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
 
     p_sample->dts = dts;
     p_sample->cts = cts;
-    p_sample->index = 1;
+    p_sample->index = p_mp4->i_sample_entry;
     p_sample->prop.sync_point = p_picture->i_type == X264_TYPE_IDR;
-    if( p_mp4->b_use_open_gop )
+    if( p_mp4->b_use_recovery )
     {
-        p_sample->prop.partial_sync = p_picture->b_keyframe && p_picture->i_type == X264_TYPE_I;
+        p_sample->prop.partial_sync = (p_picture->i_type == X264_TYPE_I) && (p_mp4->i_recovery_frame_cnt == 0);
         p_sample->prop.independent = IS_X264_TYPE_I( p_picture->i_type ) ? ISOM_SAMPLE_IS_INDEPENDENT : ISOM_SAMPLE_IS_NOT_INDEPENDENT;
         p_sample->prop.disposable = p_picture->i_type == X264_TYPE_B ? ISOM_SAMPLE_IS_DISPOSABLE : ISOM_SAMPLE_IS_NOT_DISPOSABLE;
         p_sample->prop.redundant = ISOM_SAMPLE_HAS_NO_REDUNDANCY;
-        p_sample->prop.leading = !IS_X264_TYPE_B( p_picture->i_type ) || p_sample->cts >= p_mp4->i_gop_head_cts
-            ? ISOM_SAMPLE_IS_NOT_LEADING : ISOM_SAMPLE_IS_UNDECODABLE_LEADING;
-        if( IS_X264_TYPE_I( p_picture->i_type ) )
+        p_sample->prop.leading = !IS_X264_TYPE_B( p_picture->i_type ) || p_sample->cts >= p_mp4->i_gop_head_cts ? ISOM_SAMPLE_IS_NOT_LEADING : ISOM_SAMPLE_IS_UNDECODABLE_LEADING;
+        p_sample->prop.recovery.start_point = p_picture->b_keyframe && p_picture->i_type != X264_TYPE_IDR;   /* A picture with Recovery Point SEI */
+        p_sample->prop.recovery.identifier = p_picture->i_frame_num % p_mp4->i_max_frame_num;
+        if( p_sample->prop.recovery.start_point )
+            p_sample->prop.recovery.complete = (p_sample->prop.recovery.identifier + p_mp4->i_recovery_frame_cnt) % p_mp4->i_max_frame_num;
+        if( IS_X264_TYPE_I( p_picture->i_type ) && (p_mp4->i_recovery_frame_cnt == 0) )
             p_mp4->i_gop_head_cts = p_sample->cts;
     }
+
+    x264_cli_log( "mp4", X264_LOG_DEBUG, "coded: %d, frame_num: %d, key: %s, type: %s, independ: %s, dispose: %s, lead: %s\n",
+                  p_mp4->i_numframe, p_picture->i_frame_num, p_picture->b_keyframe ? "yes" : "no",
+                  p_picture->i_type == X264_TYPE_P ? "P" : p_picture->i_type == X264_TYPE_B ? "b" :
+                  p_picture->i_type == X264_TYPE_BREF ? "B" : p_picture->i_type == X264_TYPE_IDR ? "I" :
+                  p_picture->i_type == X264_TYPE_I ? "i" : p_picture->i_type == X264_TYPE_KEYFRAME ? "K" : "N",
+                  p_sample->prop.independent == ISOM_SAMPLE_IS_INDEPENDENT ? "yes" : "no",
+                  p_sample->prop.disposable == ISOM_SAMPLE_IS_DISPOSABLE ? "yes" : "no",
+                  p_sample->prop.leading == ISOM_SAMPLE_IS_UNDECODABLE_LEADING || p_sample->prop.leading == ISOM_SAMPLE_IS_DECODABLE_LEADING ? "yes" : "no" );
 
     /* Write data per sample. */
     MP4_FAIL_IF_ERR( isom_write_sample( p_mp4->p_root, p_mp4->i_track, p_sample ),
