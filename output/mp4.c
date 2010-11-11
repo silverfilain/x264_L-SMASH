@@ -499,7 +499,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     FAIL_IF_ERR( i_media_timescale > UINT32_MAX, "mp4", "MP4 media timescale %"PRIu64" exceeds maximum\n", i_media_timescale );
 
     /* Set brands. */
-    uint32_t brands[8] = { ISOM_BRAND_TYPE_ISOM, ISOM_BRAND_TYPE_MP41, ISOM_BRAND_TYPE_MP42, 0, 0, 0, 0, 0 };
+    uint32_t brands[9] = { ISOM_BRAND_TYPE_ISOM, ISOM_BRAND_TYPE_MP41, ISOM_BRAND_TYPE_MP42, 0, 0, 0, 0, 0, 0 };
     uint32_t minor_version = 0;
     uint32_t brand_count = 3;
     int qt_compatible = 0;
@@ -515,8 +515,9 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
         brands[brand_count++] = ISOM_BRAND_TYPE_M4A;
     if( p_mp4->b_use_recovery )
     {
-        brands[brand_count++] = ISOM_BRAND_TYPE_AVC1;
-        brands[brand_count++] = ISOM_BRAND_TYPE_QT;
+        brands[brand_count++] = ISOM_BRAND_TYPE_AVC1;   /* sdtp/sgpd/sbgp */
+        brands[brand_count++] = ISOM_BRAND_TYPE_ISO4;   /* cslg */
+        brands[brand_count++] = ISOM_BRAND_TYPE_QT;     /* tapt/cslg/stps/sdtp */
         qt_compatible = 1;
     }
     MP4_FAIL_IF_ERR( isom_set_brands( p_mp4->p_root, brands[2+p_mp4->brand_3gpp], minor_version, brands, brand_count ),
