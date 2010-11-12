@@ -307,8 +307,8 @@ static audio_packet_t *get_next_packet( hnd_t handle )
     AVPacket *pkt = next_packet( h );
     if( !pkt )
         return NULL;
-    if( pkt->duration && ( pkt->duration != h->info.framelen ) )
-        h->info.last_delta = pkt->duration;
+    if( pkt->duration && ( h->info.framelen != x264_from_timebase( pkt->duration, h->origtb, h->info.timebase.den ) ) )
+        h->info.last_delta = x264_from_timebase( pkt->duration, h->origtb, h->info.timebase.den );
     return convert_to_audio_packet( h, pkt );
 }
 
