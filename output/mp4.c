@@ -766,7 +766,7 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
     p_sample->prop.sync_point = p_picture->i_type == X264_TYPE_IDR;
     if( p_mp4->b_use_recovery )
     {
-        p_sample->prop.partial_sync = (p_picture->i_type == X264_TYPE_I) && (p_mp4->i_recovery_frame_cnt == 0);
+        p_sample->prop.partial_sync = (p_picture->i_type == X264_TYPE_I) && p_picture->b_keyframe && (p_mp4->i_recovery_frame_cnt == 0);
         p_sample->prop.independent = IS_X264_TYPE_I( p_picture->i_type ) ? ISOM_SAMPLE_IS_INDEPENDENT : ISOM_SAMPLE_IS_NOT_INDEPENDENT;
         p_sample->prop.disposable = p_picture->i_type == X264_TYPE_B ? ISOM_SAMPLE_IS_DISPOSABLE : ISOM_SAMPLE_IS_NOT_DISPOSABLE;
         p_sample->prop.redundant = ISOM_SAMPLE_HAS_NO_REDUNDANCY;
@@ -775,7 +775,7 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
         p_sample->prop.recovery.identifier = p_picture->i_frame_num % p_mp4->i_max_frame_num;
         if( p_sample->prop.recovery.start_point )
             p_sample->prop.recovery.complete = (p_sample->prop.recovery.identifier + p_mp4->i_recovery_frame_cnt) % p_mp4->i_max_frame_num;
-        if( IS_X264_TYPE_I( p_picture->i_type ) && (p_mp4->i_recovery_frame_cnt == 0) )
+        if( p_sample->prop.sync_point || p_sample->prop.partial_sync )
             p_mp4->i_gop_head_cts = p_sample->cts;
     }
 
