@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <inttypes.h>
 
-#include "output/importer.h"
+#include "output/mp4/importer.h"
 
 typedef struct lsmash_source_t
 {

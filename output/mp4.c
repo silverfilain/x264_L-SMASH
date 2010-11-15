@@ -28,8 +28,8 @@
  *****************************************************************************/
 
 #include "output.h"
-#include "isom.h"
-#include "importer.h" /* FIXME: will be replaced with summary.h */
+#include "mp4/isom.h"
+#include "mp4/importer.h" /* FIXME: will be replaced with summary.h */
 
 /*******************/
 
