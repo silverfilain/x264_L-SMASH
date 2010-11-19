@@ -1460,6 +1460,7 @@ static int parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
                 break;
             case OPT_LANGUAGE:
                 output_opt.language = optarg;
+                break;
             case OPT_NO_CONTAINER_SAR:
                 output_opt.no_sar = 1;
                 break;
