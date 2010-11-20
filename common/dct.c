@@ -421,7 +421,16 @@ void x264_dct_init( int cpu, x264_dct_function_t *dctf )
     dctf->dct4x4dc  = dct4x4dc;
     dctf->idct4x4dc = idct4x4dc;
 
-#if !X264_HIGH_BIT_DEPTH
+#if HIGH_BIT_DEPTH
+#if HAVE_MMX
+    if( cpu&X264_CPU_MMX )
+    {
+        dctf->sub4x4_dct    = x264_sub4x4_dct_mmx;
+        dctf->sub8x8_dct    = x264_sub8x8_dct_mmx;
+        dctf->sub16x16_dct  = x264_sub16x16_dct_mmx;
+    }
+#endif // HAVE_MMX
+#else // !HIGH_BIT_DEPTH
 #if HAVE_MMX
     if( cpu&X264_CPU_MMX )
     {
@@ -519,7 +528,7 @@ void x264_dct_init( int cpu, x264_dct_function_t *dctf )
         dctf->add16x16_idct8= x264_add16x16_idct8_neon;
     }
 #endif
-#endif // !X264_HIGH_BIT_DEPTH
+#endif // HIGH_BIT_DEPTH
 }
 
 void x264_dct_init_weights( void )
@@ -713,7 +722,7 @@ void x264_zigzag_init( int cpu, x264_zigzag_function_t *pf, int b_interlaced )
         pf->sub_8x8    = zigzag_sub_8x8_field;
         pf->sub_4x4    = zigzag_sub_4x4_field;
         pf->sub_4x4ac  = zigzag_sub_4x4ac_field;
-#if !X264_HIGH_BIT_DEPTH
+#if !HIGH_BIT_DEPTH
 #if HAVE_MMX
         if( cpu&X264_CPU_MMXEXT )
         {
@@ -731,7 +740,7 @@ void x264_zigzag_init( int cpu, x264_zigzag_function_t *pf, int b_interlaced )
         if( cpu&X264_CPU_ALTIVEC )
             pf->scan_4x4   = x264_zigzag_scan_4x4_field_altivec;
 #endif
-#endif // !X264_HIGH_BIT_DEPTH
+#endif // !HIGH_BIT_DEPTH
     }
     else
     {
@@ -740,7 +749,7 @@ void x264_zigzag_init( int cpu, x264_zigzag_function_t *pf, int b_interlaced )
         pf->sub_8x8    = zigzag_sub_8x8_frame;
         pf->sub_4x4    = zigzag_sub_4x4_frame;
         pf->sub_4x4ac  = zigzag_sub_4x4ac_frame;
-#if !X264_HIGH_BIT_DEPTH
+#if !HIGH_BIT_DEPTH
 #if HAVE_MMX
         if( cpu&X264_CPU_MMX )
             pf->scan_4x4 = x264_zigzag_scan_4x4_frame_mmx;
@@ -766,16 +775,16 @@ void x264_zigzag_init( int cpu, x264_zigzag_function_t *pf, int b_interlaced )
         if( cpu&X264_CPU_NEON )
             pf->scan_4x4 = x264_zigzag_scan_4x4_frame_neon;
 #endif
-#endif // !X264_HIGH_BIT_DEPTH
+#endif // !HIGH_BIT_DEPTH
     }
 
     pf->interleave_8x8_cavlc = zigzag_interleave_8x8_cavlc;
-#if !X264_HIGH_BIT_DEPTH
+#if !HIGH_BIT_DEPTH
 #if HAVE_MMX
     if( cpu&X264_CPU_MMX )
         pf->interleave_8x8_cavlc = x264_zigzag_interleave_8x8_cavlc_mmx;
     if( cpu&X264_CPU_SHUFFLE_IS_FAST )
         pf->interleave_8x8_cavlc = x264_zigzag_interleave_8x8_cavlc_sse2;
 #endif
-#endif // !X264_HIGH_BIT_DEPTH
+#endif // !HIGH_BIT_DEPTH
 }

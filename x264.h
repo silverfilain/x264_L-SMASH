@@ -379,6 +379,15 @@ typedef struct x264_param_t
         char        *psz_zones;     /* alternate method of specifying zones */
     } rc;
 
+    /* Cropping Rectangle parameters: added to those implicitly defined by
+       non-mod16 video resolutions. */
+    struct {
+        unsigned int i_left;
+        unsigned int i_top;
+        unsigned int i_right;
+        unsigned int i_bottom;
+    } crop_rect;
+
     /* Muxing parameters */
     int b_aud;                  /* generate access unit delimiters */
     int b_repeat_headers;       /* put SPS/PPS before each keyframe */
