@@ -28,60 +28,60 @@ SRCSO =
 CONFIG := $(shell cat config.h)
 
 # GPL-only files
-ifeq ($(GPL),yes)
+ifneq ($(findstring HAVE_GPL 1, $(CONFIG)),)
 SRCCLI +=
 endif
 
 # Optional module sources
-ifneq ($(findstring HAVE_AVS, $(CONFIG)),)
+ifneq ($(findstring HAVE_AVS 1, $(CONFIG)),)
 SRCCLI += input/avs.c
 endif
 
-ifneq ($(findstring HAVE_PTHREAD, $(CONFIG)),)
+ifneq ($(findstring HAVE_PTHREAD 1, $(CONFIG)),)
 SRCCLI += input/thread.c
 SRCS   += common/threadpool.c
 endif
 
-ifneq ($(findstring HAVE_LAVF, $(CONFIG)),)
+ifneq ($(findstring HAVE_LAVF 1, $(CONFIG)),)
 SRCCLI += input/lavf.c
 endif
 
-ifneq ($(findstring HAVE_FFMS, $(CONFIG)),)
+ifneq ($(findstring HAVE_FFMS 1, $(CONFIG)),)
 SRCCLI += input/ffms.c
 endif
 
-ifneq ($(findstring HAVE_AUDIO, $(CONFIG)),)
+ifneq ($(findstring HAVE_AUDIO 1, $(CONFIG)),)
 SRCCLI += audio/encoders/enc_raw.c
-ifneq ($(findstring HAVE_LAVF, $(CONFIG)),)
+ifneq ($(findstring HAVE_LAVF 1, $(CONFIG)),)
 SRCCLI += input/audio/lavf.c
 SRCCLI += audio/encoders/enc_lavc.c
 endif
-ifneq ($(findstring HAVE_AVS, $(CONFIG)),)
+ifneq ($(findstring HAVE_AVS 1, $(CONFIG)),)
 SRCCLI += input/audio/avs.c
 endif
-ifneq ($(findstring HAVE_LSMASH, $(CONFIG)),)
+ifneq ($(findstring HAVE_LSMASH 1, $(CONFIG)),)
 SRCCLI += input/audio/lsmash.c
 endif
 endif
 
-ifneq ($(findstring HAVE_LAME, $(CONFIG)),)
+ifneq ($(findstring HAVE_LAME 1, $(CONFIG)),)
 SRCCLI += audio/encoders/enc_mp3lame.c
 endif
 
-ifneq ($(findstring HAVE_QT_AAC, $(CONFIG)),)
+ifneq ($(findstring HAVE_QT_AAC 1, $(CONFIG)),)
 SRCCLI += audio/encoders/enc_qtaac.c
 endif
 
-ifneq ($(findstring HAVE_FAAC, $(CONFIG)),)
+ifneq ($(findstring HAVE_FAAC 1, $(CONFIG)),)
 SRCCLI += audio/encoders/enc_faac.c
 endif
 
-ifneq ($(findstring HAVE_AMRWB_3GPP, $(CONFIG)),)
+ifneq ($(findstring HAVE_AMRWB_3GPP 1, $(CONFIG)),)
 SRCCLI += audio/encoders/enc_amrwb_3gpp.c
 endif
 
 # Visualization sources
-ifeq ($(VIS),yes)
+ifneq ($(findstring HAVE_VISUALIZE 1, $(CONFIG)),)
 SRCS   += common/visualize.c common/display-x11.c
 endif
 
@@ -139,8 +139,10 @@ endif
 
 # VIS optims
 ifeq ($(ARCH),UltraSparc)
+ifeq ($(findstring HIGH_BIT_DEPTH, $(CONFIG)),)
 ASMSRC += common/sparc/pixel.asm
 OBJASM  = $(ASMSRC:%.asm=%.o)
+endif
 endif
 
 ifneq ($(HAVE_GETOPT_LONG),1)
