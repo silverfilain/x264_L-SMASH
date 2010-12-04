@@ -27,6 +27,7 @@
  * For more information, contact us at licensing@x264.com.
  *****************************************************************************/
 
+#include "common/common.h"
 #include "output.h"
 #include "mp4/isom.h"
 #include "mp4/importer.h" /* FIXME: will be replaced with summary.h */
@@ -115,6 +116,7 @@ typedef struct
     int i_recovery_frame_cnt;
     int i_max_frame_num;
     uint64_t i_gop_head_cts;
+    int b_no_remux;
 #if HAVE_ANY_AUDIO
     mp4_audio_hnd_t *audio_hnd;
 #endif
@@ -346,6 +348,26 @@ static int write_audio_frames( mp4_hnd_t *p_mp4, double video_dts, int finish )
 }
 #endif /* #if HAVE_ANY_AUDIO */
 
+int remux_callback( void* param, uint64_t done, uint64_t total )
+{
+    int64_t elapsed = x264_mdate() - *(int64_t*)param;
+    double byterate = done / ( elapsed / 1000000. );
+    fprintf( stderr, "remux [%5.2lf%%], %"PRIu64"/%"PRIu64" KiB, %u KiB/s, ",
+        done*100./total, done/1024, total/1024, (unsigned)byterate/1024 );
+    if( done == total )
+    {
+        unsigned sec = (unsigned)( elapsed / 1000000 );
+        fprintf( stderr, "total elapsed %u:%02u:%02u\n\n", sec/3600, (sec/60)%60, sec%60 );
+    }
+    else
+    {
+        unsigned eta = (unsigned)( (total - done) / byterate );
+        fprintf( stderr, "eta %u:%02u:%02u\r", eta/3600, (eta/60)%60, eta%60 );
+    }
+    fflush( stderr ); // needed in windows
+    return 0;
+}
+
 /*******************/
 
 static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest_pts )
@@ -412,7 +434,17 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
         if( p_mp4->psz_chapter )
             MP4_LOG_IF_ERR( isom_set_tyrant_chapter( p_mp4->p_root, p_mp4->psz_chapter ), "failed to set chapter list.\n" );
 
-        MP4_LOG_IF_ERR( isom_finish_movie( p_mp4->p_root ), "failed to finish movie.\n" );
+        if( !p_mp4->b_no_remux )
+        {
+            int64_t start = x264_mdate();
+            isom_adhoc_remux_t remux_info;
+            remux_info.func = remux_callback;
+            remux_info.buffer_size = 4*1024*1024; // 4MiB
+            remux_info.param = &start;
+            MP4_LOG_IF_ERR( isom_finish_movie( p_mp4->p_root, &remux_info ), "failed to finish movie.\n" );
+        }
+        else
+            MP4_LOG_IF_ERR( isom_finish_movie( p_mp4->p_root, NULL ), "failed to finish movie.\n" );
 
         /* Write media data size here. */
         MP4_LOG_IF_ERR( isom_write_mdat_size( p_mp4->p_root ), "failed to write mdat size.\n" );
@@ -452,6 +484,7 @@ static int open_file( char *psz_filename, hnd_t *p_handle, cli_output_opt_t *opt
     }
     p_mp4->psz_language = opt->language;
     p_mp4->no_pasp = opt->no_sar;
+    p_mp4->b_no_remux = opt->no_remux;
 
     p_mp4->p_root = isom_create_movie( psz_filename );
     MP4_FAIL_IF_ERR_EX( !p_mp4->p_root, "failed to create root.\n" );

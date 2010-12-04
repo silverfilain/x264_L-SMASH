@@ -35,6 +35,7 @@ typedef struct
     char *chapter;
     char *language;
     int no_sar;
+    int no_remux;
 } cli_output_opt_t;
 
 typedef struct

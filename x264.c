@@ -852,7 +852,8 @@ enum
     OPT_AUDIOEXTRAOPT,
     OPT_CHAPTER,
     OPT_LANGUAGE,
-    OPT_NO_CONTAINER_SAR
+    OPT_NO_CONTAINER_SAR,
+    OPT_NO_REMUX
 } OptionsOPT;
 
 static char short_options[] = "8A:B:b:f:hI:i:m:o:p:q:r:t:Vvw";
@@ -1019,6 +1020,7 @@ static struct option long_options[] =
     { "chapter",     required_argument, NULL, OPT_CHAPTER },
     { "language",    required_argument, NULL, OPT_LANGUAGE },
     { "no-container-sar",  no_argument, NULL, OPT_NO_CONTAINER_SAR },
+    { "no-remux",    no_argument, NULL, OPT_NO_REMUX },
     {0, 0, 0, 0}
 };
 
@@ -1484,6 +1486,9 @@ static int parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
                 break;
             case OPT_NO_CONTAINER_SAR:
                 output_opt.no_sar = 1;
+                break;
+            case OPT_NO_REMUX:
+                output_opt.no_remux = 1;
                 break;
             default:
 generic_option:
