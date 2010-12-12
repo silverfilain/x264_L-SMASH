@@ -98,6 +98,7 @@ typedef struct
     char *psz_language;
     int brand_3gpp;
     int brand_m4a;
+    int brand_qt;
     uint32_t i_track;
     uint32_t i_sample_entry;
     uint64_t i_time_inc;
@@ -409,7 +410,7 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
 #endif
 
         if( p_mp4->psz_chapter )
-            MP4_LOG_IF_ERR( isom_set_tyrant_chapter( p_mp4->p_root, p_mp4->psz_chapter ), "failed to set chapter.\n" );
+            MP4_LOG_IF_ERR( isom_set_tyrant_chapter( p_mp4->p_root, p_mp4->psz_chapter ), "failed to set chapter list.\n" );
 
         MP4_LOG_IF_ERR( isom_finish_movie( p_mp4->p_root ), "failed to finish movie.\n" );
 
@@ -502,7 +503,6 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     uint32_t brands[9] = { ISOM_BRAND_TYPE_ISOM, ISOM_BRAND_TYPE_MP41, ISOM_BRAND_TYPE_MP42, 0, 0, 0, 0, 0, 0 };
     uint32_t minor_version = 0;
     uint32_t brand_count = 3;
-    int qt_compatible = 0;
     if( p_mp4->brand_3gpp == 1 )
         brands[brand_count++] = ISOM_BRAND_TYPE_3GP6;
     else if( p_mp4->brand_3gpp == 2 )
@@ -518,7 +518,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
         brands[brand_count++] = ISOM_BRAND_TYPE_AVC1;   /* sdtp/sgpd/sbgp */
         brands[brand_count++] = ISOM_BRAND_TYPE_ISO4;   /* cslg */
         brands[brand_count++] = ISOM_BRAND_TYPE_QT;     /* tapt/cslg/stps/sdtp */
-        qt_compatible = 1;
+        p_mp4->brand_qt = 1;
     }
     MP4_FAIL_IF_ERR( isom_set_brands( p_mp4->p_root, brands[2+p_mp4->brand_3gpp], minor_version, brands, brand_count ),
                      "failed to set brands / ftyp.\n" );
@@ -540,7 +540,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     /* Set handler name. */
     MP4_FAIL_IF_ERR( isom_set_media_handler_name( p_mp4->p_root, p_mp4->i_track, "X264 Video Media Handler" ),
                      "failed to set media hander name for video.\n" );
-    if( qt_compatible )
+    if( p_mp4->brand_qt )
         MP4_FAIL_IF_ERR( isom_set_data_handler_name( p_mp4->p_root, p_mp4->i_track, "X264 URL Data Handler" ),
                          "failed to set data hander name for video.\n" );
 
@@ -572,7 +572,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     }
     MP4_FAIL_IF_ERR( isom_set_track_presentation_size( p_mp4->p_root, p_mp4->i_track, dw, dh ),
                      "failed to set presentation size.\n" );
-    if( qt_compatible && !p_mp4->no_pasp )
+    if( p_mp4->brand_qt && !p_mp4->no_pasp )
         MP4_FAIL_IF_ERR( isom_set_track_aperture_modes( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry ),
                          "failed to set track aperture mode.\n" );
 
@@ -668,7 +668,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
                          "failed to set media timescale for audio.\n");
         MP4_FAIL_IF_ERR( isom_set_media_handler_name( p_mp4->p_root, p_audio->i_track, "X264 Sound Media Handler" ),
                          "failed to set media handler name for audio.\n" );
-        if( qt_compatible )
+        if( p_mp4->brand_qt )
             MP4_FAIL_IF_ERR( isom_set_data_handler_name( p_mp4->p_root, p_audio->i_track, "X264 URL Data Handler" ),
                              "failed to set data hander name for audio.\n" );
         p_audio->i_sample_entry = isom_add_sample_entry( p_mp4->p_root, p_audio->i_track, p_audio->codec_type, p_audio->summary );
@@ -729,7 +729,12 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
     uint64_t dts, cts;
 
     if( !p_mp4->i_numframe )
+    {
         p_mp4->i_start_offset = p_picture->i_dts * -1;
+        if( p_mp4->psz_chapter && p_mp4->brand_qt )
+            MP4_FAIL_IF_ERR( isom_create_reference_chapter_track( p_mp4->p_root, p_mp4->i_track, p_mp4->psz_chapter ),
+                             "failed to create reference chapter track.\n" );
+    }
 
     isom_sample_t *p_sample = isom_create_sample( i_size + p_mp4->i_sei_size );
     MP4_FAIL_IF_ERR( !p_sample,
