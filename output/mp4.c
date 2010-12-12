@@ -577,7 +577,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
                          "failed to set track aperture mode.\n" );
 
     if( p_mp4->psz_language )
-        MP4_FAIL_IF_ERR( isom_set_language( p_mp4->p_root, p_mp4->i_track, p_mp4->psz_language ),
+        MP4_FAIL_IF_ERR( isom_set_media_language( p_mp4->p_root, p_mp4->i_track, p_mp4->psz_language, 0 ),
                          "failed to set language for video.\n");
 
 #if HAVE_ANY_AUDIO
@@ -678,7 +678,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
 //        MP4_FAIL_IF_ERR( isom_add_btrt( p_mp4->p_root, p_audio->i_track, p_audio->i_sample_entry ),
 //                         "failed to add btrt for audio.\n" );
         if( p_mp4->psz_language )
-            MP4_FAIL_IF_ERR( isom_set_language( p_mp4->p_root, p_audio->i_track, p_mp4->psz_language ),
+            MP4_FAIL_IF_ERR( isom_set_media_language( p_mp4->p_root, p_audio->i_track, p_mp4->psz_language, 0 ),
                              "failed to set language for audio track.\n" );
     }
 #endif /* #if HAVE_ANY_AUDIO */
