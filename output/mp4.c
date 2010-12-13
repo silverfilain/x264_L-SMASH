@@ -731,7 +731,7 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
     if( !p_mp4->i_numframe )
     {
         p_mp4->i_start_offset = p_picture->i_dts * -1;
-        if( p_mp4->psz_chapter && (p_mp4->brand_3gpp || p_mp4->brand_qt) )
+        if( p_mp4->psz_chapter && p_mp4->brand_qt )
             MP4_FAIL_IF_ERR( isom_create_reference_chapter_track( p_mp4->p_root, p_mp4->i_track, p_mp4->psz_chapter ),
                              "failed to create reference chapter track.\n" );
     }
