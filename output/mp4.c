@@ -528,7 +528,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
                      "failed to set max duration per chunk.\n" );
 
     /* Create a video track. */
-    p_mp4->i_track = isom_create_track( p_mp4->p_root, ISOM_MEDIA_HANDLER_TYPE_VISUAL );
+    p_mp4->i_track = isom_create_track( p_mp4->p_root, ISOM_MEDIA_HANDLER_TYPE_VIDEO );
     MP4_FAIL_IF_ERR_EX( !p_mp4->i_track, "failed to create a video track.\n" );
 
     /* Set timescale. */
