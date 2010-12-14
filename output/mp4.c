@@ -111,7 +111,7 @@ typedef struct
     int i_delay_frames;
     int b_dts_compress;
     int i_dts_compress_multiplier;
-    int no_pasp;
+    int b_no_pasp;
     int b_use_recovery;
     int i_recovery_frame_cnt;
     int i_max_frame_num;
@@ -483,7 +483,7 @@ static int open_file( char *psz_filename, hnd_t *p_handle, cli_output_opt_t *opt
         fclose( fh );
     }
     p_mp4->psz_language = opt->language;
-    p_mp4->no_pasp = opt->no_sar;
+    p_mp4->b_no_pasp = opt->no_sar;
     p_mp4->b_no_remux = opt->no_remux;
 
     p_mp4->p_root = isom_create_movie( psz_filename );
@@ -599,13 +599,13 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
             dw *= sar;
         else
             dh /= sar;
-        if( !p_mp4->no_pasp )
+        if( !p_mp4->b_no_pasp )
             MP4_FAIL_IF_ERR( isom_set_sample_aspect_ratio( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry, p_param->vui.i_sar_width, p_param->vui.i_sar_height ),
                              "failed to set sample aspect ratio.\n" );
     }
     MP4_FAIL_IF_ERR( isom_set_track_presentation_size( p_mp4->p_root, p_mp4->i_track, dw, dh ),
                      "failed to set presentation size.\n" );
-    if( p_mp4->brand_qt && !p_mp4->no_pasp )
+    if( p_mp4->brand_qt && !p_mp4->b_no_pasp )
         MP4_FAIL_IF_ERR( isom_set_track_aperture_modes( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry ),
                          "failed to set track aperture mode.\n" );
 
