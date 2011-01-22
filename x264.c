@@ -799,6 +799,8 @@ static void help( x264_param_t *defaults, int longhelp )
         "                              Valid only with the mp4/3gp/3g2 muxer\n" );
     H2( "      --no-remux              Inhibit auto-remuxing for progressive download\n"
         "                              Valid only with the mp4/3gp/3g2 muxer\n" );
+    H2( "      --force-display-size    Force display region size for video\n"
+        "                              Valid only with the mp4/3gp/3g2 muxer\n" );
     H0( "\n" );
     H0( "Filtering:\n" );
     H0( "\n" );
@@ -854,7 +856,8 @@ enum
     OPT_CHAPTER,
     OPT_LANGUAGE,
     OPT_NO_CONTAINER_SAR,
-    OPT_NO_REMUX
+    OPT_NO_REMUX,
+    OPT_FORCE_DISPLAY_SIZE
 } OptionsOPT;
 
 static char short_options[] = "8A:B:b:f:hI:i:m:o:p:q:r:t:Vvw";
@@ -1023,6 +1026,7 @@ static struct option long_options[] =
     { "language",    required_argument, NULL, OPT_LANGUAGE },
     { "no-container-sar",  no_argument, NULL, OPT_NO_CONTAINER_SAR },
     { "no-remux",    no_argument, NULL, OPT_NO_REMUX },
+    { "force-display-size", required_argument, NULL, OPT_FORCE_DISPLAY_SIZE },
     {0, 0, 0, 0}
 };
 
@@ -1491,6 +1495,11 @@ static int parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
                 break;
             case OPT_NO_REMUX:
                 output_opt.no_remux = 1;
+                break;
+            case OPT_FORCE_DISPLAY_SIZE:
+                FAIL_IF_ERROR( 2 != sscanf( optarg, "%lfx%lf", &output_opt.display_width, &output_opt.display_height ),
+                               "invalid syntax for specifying display size: %s", optarg );
+                FAIL_IF_ERROR( output_opt.display_width <= 0 || output_opt.display_height <= 0, "display size must be positive.\n" );
                 break;
             default:
 generic_option:

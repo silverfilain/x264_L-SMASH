@@ -117,6 +117,8 @@ typedef struct
     int i_max_frame_num;
     uint64_t i_gop_head_cts;
     int b_no_remux;
+    uint32_t i_display_width;
+    uint32_t i_display_height;
 #if HAVE_ANY_AUDIO
     mp4_audio_hnd_t *audio_hnd;
 #endif
@@ -485,6 +487,8 @@ static int open_file( char *psz_filename, hnd_t *p_handle, cli_output_opt_t *opt
     p_mp4->psz_language = opt->language;
     p_mp4->b_no_pasp = opt->no_sar;
     p_mp4->b_no_remux = opt->no_remux;
+    p_mp4->i_display_width = opt->display_width * (1<<16);
+    p_mp4->i_display_height = opt->display_height * (1<<16);
 
     p_mp4->p_root = isom_create_movie( psz_filename );
     MP4_FAIL_IF_ERR_EX( !p_mp4->p_root, "failed to create root.\n" );
@@ -590,15 +594,18 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
                      "failed to add btrt.\n" );
     MP4_FAIL_IF_ERR( isom_set_sample_resolution( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry, (uint16_t)p_param->i_width, (uint16_t)p_param->i_height ),
                      "failed to set sample resolution.\n" );
-    uint64_t dw = p_param->i_width << 16;
-    uint64_t dh = p_param->i_height << 16;
+    if( !p_mp4->i_display_width && !p_mp4->i_display_height )
+    {
+        p_mp4->i_display_width = p_param->i_width << 16;
+        p_mp4->i_display_height = p_param->i_height << 16;
+    }
     if( p_param->vui.i_sar_width && p_param->vui.i_sar_height )
     {
         double sar = (double)p_param->vui.i_sar_width / p_param->vui.i_sar_height;
         if( sar > 1.0 )
-            dw *= sar;
+            p_mp4->i_display_width *= sar;
         else
-            dh /= sar;
+            p_mp4->i_display_height /= sar;
         if( !p_mp4->b_no_pasp )
         {
             MP4_FAIL_IF_ERR( isom_set_sample_aspect_ratio( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry, p_param->vui.i_sar_width, p_param->vui.i_sar_height ),
@@ -607,7 +614,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
                              "failed to set scaling method.\n" );
         }
     }
-    MP4_FAIL_IF_ERR( isom_set_track_presentation_size( p_mp4->p_root, p_mp4->i_track, dw, dh ),
+    MP4_FAIL_IF_ERR( isom_set_track_presentation_size( p_mp4->p_root, p_mp4->i_track, p_mp4->i_display_width, p_mp4->i_display_height ),
                      "failed to set presentation size.\n" );
     if( p_mp4->brand_qt && !p_mp4->b_no_pasp )
         MP4_FAIL_IF_ERR( isom_set_track_aperture_modes( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry ),

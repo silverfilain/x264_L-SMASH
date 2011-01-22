@@ -36,6 +36,8 @@ typedef struct
     char *language;
     int no_sar;
     int no_remux;
+    double display_width;
+    double display_height;
 } cli_output_opt_t;
 
 typedef struct
