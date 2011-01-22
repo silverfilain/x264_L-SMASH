@@ -119,6 +119,8 @@ typedef struct
     int b_no_remux;
     uint32_t i_display_width;
     uint32_t i_display_height;
+    int b_force_display_size;
+    int i_scaling_method;
 #if HAVE_ANY_AUDIO
     mp4_audio_hnd_t *audio_hnd;
 #endif
@@ -489,6 +491,8 @@ static int open_file( char *psz_filename, hnd_t *p_handle, cli_output_opt_t *opt
     p_mp4->b_no_remux = opt->no_remux;
     p_mp4->i_display_width = opt->display_width * (1<<16);
     p_mp4->i_display_height = opt->display_height * (1<<16);
+    p_mp4->b_force_display_size = p_mp4->i_display_height || p_mp4->i_display_height;
+    p_mp4->i_scaling_method = p_mp4->b_force_display_size ? ISOM_SCALING_METHOD_FILL : ISOM_SCALING_METHOD_MEET;
 
     p_mp4->p_root = isom_create_movie( psz_filename );
     MP4_FAIL_IF_ERR_EX( !p_mp4->p_root, "failed to create root.\n" );
@@ -594,23 +598,26 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
                      "failed to add btrt.\n" );
     MP4_FAIL_IF_ERR( isom_set_sample_resolution( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry, (uint16_t)p_param->i_width, (uint16_t)p_param->i_height ),
                      "failed to set sample resolution.\n" );
-    if( !p_mp4->i_display_width && !p_mp4->i_display_height )
+    if( !p_mp4->b_force_display_size )
     {
         p_mp4->i_display_width = p_param->i_width << 16;
         p_mp4->i_display_height = p_param->i_height << 16;
     }
     if( p_param->vui.i_sar_width && p_param->vui.i_sar_height )
     {
-        double sar = (double)p_param->vui.i_sar_width / p_param->vui.i_sar_height;
-        if( sar > 1.0 )
-            p_mp4->i_display_width *= sar;
-        else
-            p_mp4->i_display_height /= sar;
+        if( !p_mp4->b_force_display_size )
+        {
+            double sar = (double)p_param->vui.i_sar_width / p_param->vui.i_sar_height;
+            if( sar > 1.0 )
+                p_mp4->i_display_width *= sar;
+            else
+                p_mp4->i_display_height /= sar;
+        }
         if( !p_mp4->b_no_pasp )
         {
             MP4_FAIL_IF_ERR( isom_set_sample_aspect_ratio( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry, p_param->vui.i_sar_width, p_param->vui.i_sar_height ),
                              "failed to set sample aspect ratio.\n" );
-            MP4_FAIL_IF_ERR( isom_set_scaling_method( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry, ISOM_SCALING_METHOD_MEET, 0, 0 ),
+            MP4_FAIL_IF_ERR( isom_set_scaling_method( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry, p_mp4->i_scaling_method, 0, 0 ),
                              "failed to set scaling method.\n" );
         }
     }
