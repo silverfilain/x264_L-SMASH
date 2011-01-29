@@ -382,6 +382,7 @@ static void help( x264_param_t *defaults, int longhelp )
         " .264 -> Raw bytestream\n"
         " .mkv -> Matroska\n"
         " .flv -> Flash Video\n"
+        " .mov -> QuickTime File Format\n"
         " .mp4 -> MP4\n"
         " .3gp -> MP4 (branded '3gp6')\n"
         " .3g2 -> MP4 (branded '3gp6' and '3g2a')\n"
@@ -1046,13 +1047,13 @@ static struct option long_options[] =
     {0, 0, 0, 0}
 };
 
-static int select_output( const char *muxer, char *filename, x264_param_t *param )
+static int select_output( const char *muxer, char *filename, x264_param_t *param, cli_output_opt_t *opt )
 {
     const char *ext = get_filename_extension( filename );
     if( !strcmp( filename, "-" ) || strcasecmp( muxer, "auto" ) )
         ext = muxer;
 
-    if( !strcasecmp( ext, "mp4" ) || !strcasecmp( ext, "3gp" ) || !strcasecmp( ext, "3g2" ) )
+    if( !strcasecmp( ext, "mp4" ) || !strcasecmp( ext, "3gp" ) || !strcasecmp( ext, "3g2" ) || !strcasecmp( ext, "mov" ) )
     {
         output = mp4_output;
         param->b_annexb = 0;
@@ -1062,6 +1063,12 @@ static int select_output( const char *muxer, char *filename, x264_param_t *param
             x264_cli_log( "x264", X264_LOG_WARNING, "cbr nal-hrd is not compatible with mp4\n" );
             param->i_nal_hrd = X264_NAL_HRD_VBR;
         }
+        if( !strcasecmp( ext, "3gp" ) )
+            opt->mux_3gp = 1;
+        else if( !strcasecmp( ext, "3g2" ) )
+            opt->mux_3g2 = 1;
+        else if( !strcasecmp( ext, "mov" ) )
+            opt->mux_mov = 1;
     }
     else if( !strcasecmp( ext, "mkv" ) )
     {
@@ -1561,7 +1568,7 @@ generic_option:
     FAIL_IF_ERROR( optind > argc - 1 || !output_filename, "No %s file. Run x264 --help for a list of options.\n",
                    optind > argc - 1 ? "input" : "output" )
 
-    if( select_output( muxer, output_filename, param ) )
+    if( select_output( muxer, output_filename, param, &output_opt ) )
         return -1;
 
     input_filename = argv[optind++];
@@ -1586,7 +1593,12 @@ generic_option:
 
     if( audio_enable )
     {
-        if( audio_filename )
+        if( output_opt.mux_mov )
+        {
+            x264_cli_log( "x264", X264_LOG_INFO, "mov muxer doesn't support any audio formats yet.\n" );
+            audio_enable = 0;
+        }
+        else if( audio_filename )
         {
             char used_demuxer[8];
             if( !select_audio_demuxer( audio_demuxer, used_demuxer, &audio_enc, audio_filename ) )

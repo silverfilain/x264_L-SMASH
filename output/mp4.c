@@ -97,9 +97,10 @@ typedef struct
     isom_root_t *p_root;
     char *psz_chapter;
     char *psz_language;
-    int brand_3gpp;
-    int brand_m4a;
-    int brand_qt;
+    int i_brand_3gpp;
+    int b_brand_m4a;
+    int b_brand_qt;
+    uint32_t i_major_brand;
     uint32_t i_track;
     uint32_t i_sample_entry;
     uint64_t i_time_inc;
@@ -249,7 +250,7 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
             p_audio->has_sbr = aacinfo->has_sbr;
         else
             p_audio->has_sbr = 0; // SBR presence isn't specified, so assume implicit signaling
-        p_mp4->brand_m4a = 1;
+        p_mp4->b_brand_m4a = 1;
     }
     else if( ( !strcmp( info->codec_name, "mp3" ) || !strcmp( info->codec_name, "mp2" ) || !strcmp( info->codec_name, "mp1" ) )
              && info->samplerate >= 16000 ) /* freq <16khz is MPEG-2.5. */
@@ -259,7 +260,7 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
     else if( !strcmp( info->codec_name, "alac" ) )
     {
         p_audio->codec_type = ISOM_CODEC_TYPE_ALAC_AUDIO;
-        p_mp4->brand_m4a = 1;
+        p_mp4->b_brand_m4a = 1;
     }
     else if( !strcmp( info->codec_name, "amrnb" ) )
         p_audio->codec_type = ISOM_CODEC_TYPE_SAMR_AUDIO;
@@ -497,6 +498,24 @@ static int open_file( char *psz_filename, hnd_t *p_handle, cli_output_opt_t *opt
     p_mp4->p_root = isom_create_movie( psz_filename );
     MP4_FAIL_IF_ERR_EX( !p_mp4->p_root, "failed to create root.\n" );
 
+    if( opt->mux_mov )
+    {
+        p_mp4->i_major_brand = ISOM_BRAND_TYPE_QT;
+        p_mp4->b_brand_qt = 1;
+    }
+    else if( opt->mux_3gp )
+    {
+        p_mp4->i_major_brand = ISOM_BRAND_TYPE_3GP6;
+        p_mp4->i_brand_3gpp = 1;
+    }
+    else if( opt->mux_3g2 )
+    {
+        p_mp4->i_major_brand = ISOM_BRAND_TYPE_3G2A;
+        p_mp4->i_brand_3gpp = 2;
+    }
+    else
+        p_mp4->i_major_brand = ISOM_BRAND_TYPE_MP42;
+
 #if HAVE_ANY_AUDIO
 #if HAVE_AUDIO
     MP4_FAIL_IF_ERR_EX( audio_init( p_mp4, audio_filters, audio_enc, audio_params ) < 0, "unable to init audio output.\n" );
@@ -514,12 +533,6 @@ static int open_file( char *psz_filename, hnd_t *p_handle, cli_output_opt_t *opt
     if( !p_mp4->audio_hnd )
         MP4_LOG_INFO( "audio muxing feature is disabled.\n" );
 #endif
-
-    char* ext = get_filename_extension( psz_filename );
-    if( !strcmp( ext, "3gp" ) )
-        p_mp4->brand_3gpp = 1;
-    else if( !strcmp( ext, "3g2" ) )
-        p_mp4->brand_3gpp = 2;
 
     *p_handle = p_mp4;
 
@@ -541,27 +554,37 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     FAIL_IF_ERR( i_media_timescale > UINT32_MAX, "mp4", "MP4 media timescale %"PRIu64" exceeds maximum\n", i_media_timescale );
 
     /* Set brands. */
-    uint32_t brands[9] = { ISOM_BRAND_TYPE_ISOM, ISOM_BRAND_TYPE_MP41, ISOM_BRAND_TYPE_MP42, 0, 0, 0, 0, 0, 0 };
+    uint32_t brands[9] = { 0 };
     uint32_t minor_version = 0;
-    uint32_t brand_count = 3;
-    if( p_mp4->brand_3gpp == 1 )
-        brands[brand_count++] = ISOM_BRAND_TYPE_3GP6;
-    else if( p_mp4->brand_3gpp == 2 )
+    uint32_t brand_count = 0;
+    if( p_mp4->b_brand_qt )
     {
-        brands[brand_count++] = ISOM_BRAND_TYPE_3GP6;
-        brands[brand_count++] = ISOM_BRAND_TYPE_3G2A;
-        minor_version = 0x00010000;
+        brands[brand_count++] = ISOM_BRAND_TYPE_QT;
+        p_mp4->b_use_recovery = 0;      /* Disable roll recovery. */
     }
-    if( p_mp4->brand_m4a )
-        brands[brand_count++] = ISOM_BRAND_TYPE_M4A;
-    if( p_mp4->b_use_recovery )
+    else
     {
-        brands[brand_count++] = ISOM_BRAND_TYPE_AVC1;   /* sdtp/sgpd/sbgp */
-        brands[brand_count++] = ISOM_BRAND_TYPE_ISO4;   /* cslg */
-        brands[brand_count++] = ISOM_BRAND_TYPE_QT;     /* tapt/cslg/stps/sdtp */
-        p_mp4->brand_qt = 1;
+        brands[brand_count++] = ISOM_BRAND_TYPE_ISOM;
+        brands[brand_count++] = ISOM_BRAND_TYPE_MP41;
+        brands[brand_count++] = ISOM_BRAND_TYPE_MP42;
+        if( p_mp4->i_brand_3gpp >= 1 )
+            brands[brand_count++] = ISOM_BRAND_TYPE_3GP6;
+        if( p_mp4->i_brand_3gpp == 2 )
+        {
+            brands[brand_count++] = ISOM_BRAND_TYPE_3G2A;
+            minor_version = 0x00010000;
+        }
+        if( p_mp4->b_brand_m4a )
+            brands[brand_count++] = ISOM_BRAND_TYPE_M4A;
+        if( p_mp4->b_use_recovery )
+        {
+            brands[brand_count++] = ISOM_BRAND_TYPE_AVC1;   /* sdtp/sgpd/sbgp */
+            brands[brand_count++] = ISOM_BRAND_TYPE_ISO4;   /* cslg */
+            brands[brand_count++] = ISOM_BRAND_TYPE_QT;     /* tapt/cslg/stps/sdtp */
+            p_mp4->b_brand_qt = 1;
+        }
     }
-    MP4_FAIL_IF_ERR( isom_set_brands( p_mp4->p_root, brands[2+p_mp4->brand_3gpp], minor_version, brands, brand_count ),
+    MP4_FAIL_IF_ERR( isom_set_brands( p_mp4->p_root, p_mp4->i_major_brand, minor_version, brands, brand_count ),
                      "failed to set brands / ftyp.\n" );
 
     /* Set max duration per chunk. */
@@ -581,7 +604,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     /* Set handler name. */
     MP4_FAIL_IF_ERR( isom_set_media_handler_name( p_mp4->p_root, p_mp4->i_track, "X264 Video Media Handler" ),
                      "failed to set media hander name for video.\n" );
-    if( p_mp4->brand_qt )
+    if( p_mp4->b_brand_qt )
         MP4_FAIL_IF_ERR( isom_set_data_handler_name( p_mp4->p_root, p_mp4->i_track, "X264 URL Data Handler" ),
                          "failed to set data hander name for video.\n" );
 
@@ -594,8 +617,9 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     p_mp4->i_sample_entry = isom_add_sample_entry( p_mp4->p_root, p_mp4->i_track, ISOM_CODEC_TYPE_AVC1_VIDEO, NULL );
     MP4_FAIL_IF_ERR( !p_mp4->i_sample_entry,
                      "failed to add sample entry for video.\n" );
-    MP4_FAIL_IF_ERR( isom_add_btrt( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry ),
-                     "failed to add btrt.\n" );
+    if( p_mp4->i_major_brand != ISOM_BRAND_TYPE_QT )
+        MP4_FAIL_IF_ERR( isom_add_btrt( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry ),
+                         "failed to add btrt.\n" );
     MP4_FAIL_IF_ERR( isom_set_sample_resolution( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry, (uint16_t)p_param->i_width, (uint16_t)p_param->i_height ),
                      "failed to set sample resolution.\n" );
     if( !p_mp4->b_force_display_size )
@@ -617,13 +641,14 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
         {
             MP4_FAIL_IF_ERR( isom_set_sample_aspect_ratio( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry, p_param->vui.i_sar_width, p_param->vui.i_sar_height ),
                              "failed to set sample aspect ratio.\n" );
-            MP4_FAIL_IF_ERR( isom_set_scaling_method( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry, p_mp4->i_scaling_method, 0, 0 ),
-                             "failed to set scaling method.\n" );
+            if( p_mp4->i_major_brand != ISOM_BRAND_TYPE_QT )
+                MP4_FAIL_IF_ERR( isom_set_scaling_method( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry, p_mp4->i_scaling_method, 0, 0 ),
+                                 "failed to set scaling method.\n" );
         }
     }
     MP4_FAIL_IF_ERR( isom_set_track_presentation_size( p_mp4->p_root, p_mp4->i_track, p_mp4->i_display_width, p_mp4->i_display_height ),
                      "failed to set presentation size.\n" );
-    if( p_mp4->brand_qt && !p_mp4->b_no_pasp )
+    if( p_mp4->b_brand_qt && !p_mp4->b_no_pasp )
         MP4_FAIL_IF_ERR( isom_set_track_aperture_modes( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry ),
                          "failed to set track aperture mode.\n" );
 
@@ -719,7 +744,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
                          "failed to set media timescale for audio.\n");
         MP4_FAIL_IF_ERR( isom_set_media_handler_name( p_mp4->p_root, p_audio->i_track, "X264 Sound Media Handler" ),
                          "failed to set media handler name for audio.\n" );
-        if( p_mp4->brand_qt )
+        if( p_mp4->b_brand_qt )
             MP4_FAIL_IF_ERR( isom_set_data_handler_name( p_mp4->p_root, p_audio->i_track, "X264 URL Data Handler" ),
                              "failed to set data hander name for audio.\n" );
         p_audio->i_sample_entry = isom_add_sample_entry( p_mp4->p_root, p_audio->i_track, p_audio->codec_type, p_audio->summary );
@@ -782,7 +807,7 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
     if( !p_mp4->i_numframe )
     {
         p_mp4->i_start_offset = p_picture->i_dts * -1;
-        if( p_mp4->psz_chapter && p_mp4->brand_qt )
+        if( p_mp4->psz_chapter && p_mp4->b_brand_qt )
             MP4_FAIL_IF_ERR( isom_create_reference_chapter_track( p_mp4->p_root, p_mp4->i_track, p_mp4->psz_chapter ),
                              "failed to create reference chapter track.\n" );
     }
@@ -820,19 +845,25 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
     p_sample->cts = cts;
     p_sample->index = p_mp4->i_sample_entry;
     p_sample->prop.sync_point = p_picture->i_type == X264_TYPE_IDR;
-    if( p_mp4->b_use_recovery )
+    if( p_mp4->b_use_recovery || p_mp4->b_brand_qt )
     {
         p_sample->prop.partial_sync = (p_picture->i_type == X264_TYPE_I) && p_picture->b_keyframe && (p_mp4->i_recovery_frame_cnt == 0);
         p_sample->prop.independent = IS_X264_TYPE_I( p_picture->i_type ) ? ISOM_SAMPLE_IS_INDEPENDENT : ISOM_SAMPLE_IS_NOT_INDEPENDENT;
         p_sample->prop.disposable = p_picture->i_type == X264_TYPE_B ? ISOM_SAMPLE_IS_DISPOSABLE : ISOM_SAMPLE_IS_NOT_DISPOSABLE;
         p_sample->prop.redundant = ISOM_SAMPLE_HAS_NO_REDUNDANCY;
-        p_sample->prop.leading = !IS_X264_TYPE_B( p_picture->i_type ) || p_sample->cts >= p_mp4->i_gop_head_cts ? ISOM_SAMPLE_IS_NOT_LEADING : ISOM_SAMPLE_IS_UNDECODABLE_LEADING;
-        p_sample->prop.recovery.start_point = p_picture->b_keyframe && p_picture->i_type != X264_TYPE_IDR;   /* A picture with Recovery Point SEI */
-        p_sample->prop.recovery.identifier = p_picture->i_frame_num % p_mp4->i_max_frame_num;
-        if( p_sample->prop.recovery.start_point )
-            p_sample->prop.recovery.complete = (p_sample->prop.recovery.identifier + p_mp4->i_recovery_frame_cnt) % p_mp4->i_max_frame_num;
-        if( p_sample->prop.sync_point || p_sample->prop.partial_sync )
-            p_mp4->i_gop_head_cts = p_sample->cts;
+        if( p_mp4->b_use_recovery )
+        {
+            p_sample->prop.leading = !IS_X264_TYPE_B( p_picture->i_type ) || p_sample->cts >= p_mp4->i_gop_head_cts ? ISOM_SAMPLE_IS_NOT_LEADING : ISOM_SAMPLE_IS_UNDECODABLE_LEADING;
+            if( p_sample->prop.sync_point || p_sample->prop.partial_sync )
+                p_mp4->i_gop_head_cts = p_sample->cts;
+            p_sample->prop.recovery.start_point = p_picture->b_keyframe && p_picture->i_type != X264_TYPE_IDR;   /* A picture with Recovery Point SEI */
+            p_sample->prop.recovery.identifier = p_picture->i_frame_num % p_mp4->i_max_frame_num;
+            if( p_sample->prop.recovery.start_point )
+                p_sample->prop.recovery.complete = (p_sample->prop.recovery.identifier + p_mp4->i_recovery_frame_cnt) % p_mp4->i_max_frame_num;
+        }
+        else if( p_picture->i_type != X264_TYPE_IDR && p_picture->i_type != X264_TYPE_B )
+            if( p_picture->i_type == X264_TYPE_I || p_picture->i_type == X264_TYPE_P || p_picture->i_type == X264_TYPE_BREF )
+                p_sample->prop.allow_earlier = QT_SAMPLE_EARLIER_PTS_ALLOWED;
     }
 
     x264_cli_log( "mp4", X264_LOG_DEBUG, "coded: %d, frame_num: %d, key: %s, type: %s, independ: %s, dispose: %s, lead: %s\n",
