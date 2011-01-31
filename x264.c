@@ -116,6 +116,7 @@ static const char * const muxer_names[] =
     "mkv",
     "flv",
     "mov",
+    "qt",
     "mp4",
     "3gp",
     "3g2",
@@ -385,10 +386,10 @@ static void help( x264_param_t *defaults, int longhelp )
         " .264 -> Raw bytestream\n"
         " .mkv -> Matroska\n"
         " .flv -> Flash Video\n"
-        " .mov -> QuickTime File Format\n"
         " .mp4 -> MP4\n"
         " .3gp -> MP4 (branded '3gp6')\n"
         " .3g2 -> MP4 (branded '3gp6' and '3g2a')\n"
+        " .mov or .qt -> QuickTime File Format\n"
         "Output bit depth: %d (configured at compile time)\n"
         "\n"
         "Options:\n"
@@ -1056,7 +1057,8 @@ static int select_output( const char *muxer, char *filename, x264_param_t *param
     if( !strcmp( filename, "-" ) || strcasecmp( muxer, "auto" ) )
         ext = muxer;
 
-    if( !strcasecmp( ext, "mp4" ) || !strcasecmp( ext, "3gp" ) || !strcasecmp( ext, "3g2" ) || !strcasecmp( ext, "mov" ) )
+    if( !strcasecmp( ext, "mp4" ) || !strcasecmp( ext, "3gp" ) || !strcasecmp( ext, "3g2" ) ||
+        !strcasecmp( ext, "mov" ) || !strcasecmp( ext, "qt" ) )
     {
         output = mp4_output;
         param->b_annexb = 0;
@@ -1070,7 +1072,7 @@ static int select_output( const char *muxer, char *filename, x264_param_t *param
             opt->mux_3gp = 1;
         else if( !strcasecmp( ext, "3g2" ) )
             opt->mux_3g2 = 1;
-        else if( !strcasecmp( ext, "mov" ) )
+        else if( !strcasecmp( ext, "mov" ) || !strcasecmp( ext, "qt" ) )
             opt->mux_mov = 1;
     }
     else if( !strcasecmp( ext, "mkv" ) )
