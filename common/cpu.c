@@ -1,7 +1,7 @@
 /*****************************************************************************
  * cpu.c: cpu detection
  *****************************************************************************
- * Copyright (C) 2003-2010 x264 project
+ * Copyright (C) 2003-2011 x264 project
  *
  * Authors: Loren Merritt <lorenm@u.washington.edu>
  *          Laurent Aimar <fenrir@via.ecp.fr>
@@ -59,6 +59,7 @@ const x264_cpu_name_t x264_cpu_names[] = {
     {"FastShuffle",   X264_CPU_MMX|X264_CPU_MMXEXT|X264_CPU_SSE|X264_CPU_SSE2|X264_CPU_SHUFFLE_IS_FAST},
     {"SSE4.1",  X264_CPU_MMX|X264_CPU_MMXEXT|X264_CPU_SSE|X264_CPU_SSE2|X264_CPU_SSE3|X264_CPU_SSSE3|X264_CPU_SSE4},
     {"SSE4.2",  X264_CPU_MMX|X264_CPU_MMXEXT|X264_CPU_SSE|X264_CPU_SSE2|X264_CPU_SSE3|X264_CPU_SSSE3|X264_CPU_SSE4|X264_CPU_SSE42},
+    {"AVX", X264_CPU_AVX},
     {"Cache32", X264_CPU_CACHELINE_32},
     {"Cache64", X264_CPU_CACHELINE_64},
     {"SSEMisalign", X264_CPU_SSE_MISALIGN},
@@ -93,7 +94,8 @@ static void sigill_handler( int sig )
 
 #if HAVE_MMX
 int x264_cpu_cpuid_test( void );
-uint32_t x264_cpu_cpuid( uint32_t op, uint32_t *eax, uint32_t *ebx, uint32_t *ecx, uint32_t *edx );
+void x264_cpu_cpuid( uint32_t op, uint32_t *eax, uint32_t *ebx, uint32_t *ecx, uint32_t *edx );
+void x264_cpu_xgetbv( uint32_t op, uint32_t *eax, uint32_t *edx );
 
 uint32_t x264_cpu_detect( void )
 {
@@ -129,6 +131,14 @@ uint32_t x264_cpu_detect( void )
         cpu |= X264_CPU_SSE4;
     if( ecx&0x00100000 )
         cpu |= X264_CPU_SSE42;
+    /* Check OXSAVE and AVX bits */
+    if( (ecx&0x18000000) == 0x18000000 )
+    {
+        /* Check for OS support */
+        x264_cpu_xgetbv( 0, &eax, &edx );
+        if( (eax&0x6) == 0x6 )
+            cpu |= X264_CPU_AVX;
+    }
 
     if( cpu & X264_CPU_SSSE3 )
         cpu |= X264_CPU_SSE2_IS_FAST;

@@ -1,7 +1,7 @@
 ;*****************************************************************************
 ;* pixel.asm: x86 pixel metrics
 ;*****************************************************************************
-;* Copyright (C) 2003-2010 x264 project
+;* Copyright (C) 2003-2011 x264 project
 ;*
 ;* Authors: Loren Merritt <lorenm@u.washington.edu>
 ;*          Holger Lubitz <holger@lubitz.org>
@@ -34,8 +34,18 @@
 SECTION_RODATA 32
 mask_ff:   times 16 db 0xff
            times 16 db 0
-ssim_c1:   times 4 dd 416    ; .01*.01*255*255*64
-ssim_c2:   times 4 dd 235963 ; .03*.03*255*255*64*63
+%if BIT_DEPTH == 10
+ssim_c1:   times 4 dd 6697.7856    ; .01*.01*1023*1023*64
+ssim_c2:   times 4 dd 3797644.4352 ; .03*.03*1023*1023*64*63
+pf_64:     times 4 dd 64.0
+pf_128:    times 4 dd 128.0
+%elif BIT_DEPTH == 9
+ssim_c1:   times 4 dd 1671         ; .01*.01*511*511*64
+ssim_c2:   times 4 dd 947556       ; .03*.03*511*511*64*63
+%else ; 8-bit
+ssim_c1:   times 4 dd 416          ; .01*.01*255*255*64
+ssim_c2:   times 4 dd 235963       ; .03*.03*255*255*64*63
+%endif
 mask_ac4:  dw 0, -1, -1, -1, 0, -1, -1, -1
 mask_ac4b: dw 0, -1, 0, -1, -1, -1, -1, -1
 mask_ac8:  dw 0, -1, -1, -1, -1, -1, -1, -1
@@ -377,7 +387,7 @@ SSD  4,  8, ssse3
 ;                           int width, int height, uint64_t *ssd_u, uint64_t *ssd_v )
 ;
 ; The maximum width this function can handle without risk of overflow is given
-; in the following equation:
+; in the following equation: (mmsize in bits)
 ;
 ;   2 * mmsize/32 * (2^32 - 1) / (2^BIT_DEPTH - 1)^2
 ;
@@ -394,7 +404,7 @@ cglobal pixel_ssd_nv12_core_%1, 6,7,7*(mmsize/16)
     xor         r6, r6
     pxor        m4, m4
     pxor        m5, m5
-    mova        m6, [sq_0f]
+    pxor        m6, m6
 .loopy:
     mov         r6, r4
     neg         r6
@@ -405,7 +415,7 @@ cglobal pixel_ssd_nv12_core_%1, 6,7,7*(mmsize/16)
     mova        m1, [r0+r6+mmsize]
     psubw       m0, [r2+r6]
     psubw       m1, [r2+r6+mmsize]
-%if mmsize == 8
+%if mmsize==8
     pshufw      m0, m0, 11011000b
     pshufw      m1, m1, 11011000b
 %else
@@ -420,27 +430,52 @@ cglobal pixel_ssd_nv12_core_%1, 6,7,7*(mmsize/16)
     paddd       m3, m1
     add         r6, 2*mmsize
     jl .loopx
-%if mmsize == 8
-    SBUTTERFLY dq, 2, 3, 1
-%else
-    mova        m1, m2
-    shufps      m2, m3, 10001000b
-    shufps      m3, m1, 11011101b
+%if mmsize==16 ; using HADDD would remove the mmsize/32 part from the
+               ; equation above, putting the width limit at 8208
+    mova        m0, m2
+    mova        m1, m3
+    punpckldq   m2, m6
+    punpckldq   m3, m6
+    punpckhdq   m0, m6
+    punpckhdq   m1, m6
+    paddq       m3, m2
+    paddq       m1, m0
+    paddq       m4, m3
+    paddq       m4, m1
+%else ; unfortunately paddq is sse2
+      ; emulate 48 bit precision for mmxext instead
+    mova        m0, m2
+    mova        m1, m3
+    punpcklwd   m2, m6
+    punpcklwd   m3, m6
+    punpckhwd   m0, m6
+    punpckhwd   m1, m6
+    paddd       m3, m2
+    paddd       m1, m0
+    paddd       m4, m3
+    paddd       m5, m1
 %endif
-    HADDD       m2, m1
-    HADDD       m3, m1
-    pand        m2, m6
-    pand        m3, m6
-    paddq       m4, m2
-    paddq       m5, m3
     add         r0, r1
     add         r2, r3
     dec        r5d
     jg .loopy
     mov         r3, r6m
     mov         r4, r7m
+%if mmsize==16
     movq      [r3], m4
+    movhps    [r4], m4
+%else ; fixup for mmxext
+    SBUTTERFLY dq, 4, 5, 0
+    mova        m0, m4
+    psrld       m4, 16
+    paddd       m5, m4
+    pslld       m0, 16
+    SBUTTERFLY dq, 0, 5, 4
+    psrlq       m0, 16
+    psrlq       m5, 16
+    movq      [r3], m0
     movq      [r4], m5
+%endif
     RET
 %endmacro ; SSD_NV12
 %endif ; HIGH_BIT_DEPTH
@@ -2461,10 +2496,15 @@ HADAMARD_AC_SSE2 sse4
 ;-----------------------------------------------------------------------------
 
 %macro SSIM_ITER 1
+%ifdef HIGH_BIT_DEPTH
+    movdqu    m5, [r0+(%1&1)*r1]
+    movdqu    m6, [r2+(%1&1)*r3]
+%else
     movq      m5, [r0+(%1&1)*r1]
     movq      m6, [r2+(%1&1)*r3]
     punpcklbw m5, m0
     punpcklbw m6, m0
+%endif
 %if %1==1
     lea       r0, [r0+r1*2]
     lea       r2, [r2+r3*2]
@@ -2491,6 +2531,7 @@ HADAMARD_AC_SSE2 sse4
 %endmacro
 
 cglobal pixel_ssim_4x4x2_core_sse2, 4,4,8
+    FIX_STRIDES r1, r3
     pxor      m0, m0
     SSIM_ITER 0
     SSIM_ITER 1
@@ -2548,6 +2589,26 @@ cglobal pixel_ssim_end4_sse2, 3,3,7
     TRANSPOSE4x4D  0, 1, 2, 3, 4
 
 ;   s1=m0, s2=m1, ss=m2, s12=m3
+%if BIT_DEPTH == 10
+    cvtdq2ps  m0, m0
+    cvtdq2ps  m1, m1
+    cvtdq2ps  m2, m2
+    cvtdq2ps  m3, m3
+    mulps     m2, [pf_64] ; ss*64
+    mulps     m3, [pf_128] ; s12*128
+    movdqa    m4, m1
+    mulps     m4, m0      ; s1*s2
+    mulps     m1, m1      ; s2*s2
+    mulps     m0, m0      ; s1*s1
+    addps     m4, m4      ; s1*s2*2
+    addps     m0, m1      ; s1*s1 + s2*s2
+    subps     m2, m0      ; vars
+    subps     m3, m4      ; covar*2
+    addps     m4, m5      ; s1*s2*2 + ssim_c1
+    addps     m0, m5      ; s1*s1 + s2*s2 + ssim_c1
+    addps     m2, m6      ; vars + ssim_c2
+    addps     m3, m6      ; covar*2 + ssim_c2
+%else
     movdqa    m4, m1
     pslld     m1, 16
     pmaddwd   m4, m0  ; s1*s2
@@ -2566,6 +2627,7 @@ cglobal pixel_ssim_end4_sse2, 3,3,7
     cvtdq2ps  m4, m4  ; (float)(s1*s2*2 + ssim_c1)
     cvtdq2ps  m3, m3  ; (float)(covar*2 + ssim_c2)
     cvtdq2ps  m2, m2  ; (float)(vars + ssim_c2)
+%endif
     mulps     m4, m3
     mulps     m0, m2
     divps     m4, m0  ; ssim

@@ -1,7 +1,7 @@
 /*****************************************************************************
  * x264.h: x264 public header
  *****************************************************************************
- * Copyright (C) 2003-2010 x264 project
+ * Copyright (C) 2003-2011 x264 project
  *
  * Authors: Laurent Aimar <fenrir@via.ecp.fr>
  *          Loren Merritt <lorenm@u.washington.edu>
@@ -41,7 +41,7 @@
 
 #include "x264_config.h"
 
-#define X264_BUILD 112
+#define X264_BUILD 113
 
 /* x264_t:
  *      opaque handler for encoder */
@@ -122,6 +122,8 @@ typedef struct
 #define X264_CPU_FAST_NEON_MRC  0x080000  /* Transfer from NEON to ARM register is fast (Cortex-A9) */
 #define X264_CPU_SLOW_CTZ       0x100000  /* BSR/BSF x86 instructions are really slow on some CPUs */
 #define X264_CPU_SLOW_ATOM      0x200000  /* The Atom just sucks */
+#define X264_CPU_AVX            0x400000  /* AVX support: requires OS support even if YMM registers
+                                           * aren't used. */
 
 /* Analyse flags
  */
@@ -675,7 +677,7 @@ typedef struct
     int     i_type;
     /* In: force quantizer for != X264_QP_AUTO */
     int     i_qpplus1;
-    /* In: pic_struct, for pulldown/doubling/etc...used only if b_pic_timing_sei=1.
+    /* In: pic_struct, for pulldown/doubling/etc...used only if b_pic_struct=1.
      *     use pic_struct_e for pic_struct inputs */
     int     i_pic_struct;
     /* Out: whether this frame is a keyframe.  Important when using modes that result in

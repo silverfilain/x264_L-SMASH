@@ -1,7 +1,7 @@
 /*****************************************************************************
  * osdep.h: platform-specific code
  *****************************************************************************
- * Copyright (C) 2007-2010 x264 project
+ * Copyright (C) 2007-2011 x264 project
  *
  * Authors: Loren Merritt <lorenm@u.washington.edu>
  *          Laurent Aimar <fenrir@via.ecp.fr>
@@ -88,6 +88,8 @@
 #define ALIGNED_ARRAY_16( type, name, sub1, ... )\
     ALIGNED_16( type name sub1 __VA_ARGS__ )
 #endif
+
+#define UNINIT(x) x=x
 
 #if defined(__GNUC__) && (__GNUC__ > 3 || __GNUC__ == 3 && __GNUC_MINOR__ > 0)
 #define UNUSED __attribute__((unused))

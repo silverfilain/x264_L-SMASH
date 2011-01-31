@@ -1,7 +1,7 @@
 /*****************************************************************************
  * predict.c: intra prediction
  *****************************************************************************
- * Copyright (C) 2003-2010 x264 project
+ * Copyright (C) 2003-2011 x264 project
  *
  * Authors: Laurent Aimar <fenrir@via.ecp.fr>
  *          Loren Merritt <lorenm@u.washington.edu>
@@ -119,7 +119,7 @@ void x264_predict_16x16_v_c( pixel *src )
         src += FDEC_STRIDE;
     }
 }
-static void x264_predict_16x16_p_c( pixel *src )
+void x264_predict_16x16_p_c( pixel *src )
 {
     int H = 0, V = 0;
 
@@ -269,7 +269,7 @@ void x264_predict_8x8c_v_c( pixel *src )
         src += FDEC_STRIDE;
     }
 }
-static void x264_predict_8x8c_p_c( pixel *src )
+void x264_predict_8x8c_p_c( pixel *src )
 {
     int H = 0, V = 0;
 
