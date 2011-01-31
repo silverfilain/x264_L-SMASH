@@ -266,7 +266,9 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
         p_audio->codec_type = ISOM_CODEC_TYPE_SAMR_AUDIO;
     else if( !strcmp( info->codec_name, "amrwb" ) )
         p_audio->codec_type = ISOM_CODEC_TYPE_SAWB_AUDIO;
-    else
+
+    if( !p_audio->codec_type ||
+        (p_mp4->i_major_brand == ISOM_BRAND_TYPE_QT && p_audio->codec_type != ISOM_CODEC_TYPE_MP4A_AUDIO) )
     {
         MP4_LOG_ERROR( "unsupported audio codec '%s'.\n", info->codec_name );
         goto error;
@@ -560,6 +562,8 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     if( p_mp4->b_brand_qt )
     {
         brands[brand_count++] = ISOM_BRAND_TYPE_QT;
+        p_mp4->i_brand_3gpp = 0;
+        p_mp4->b_brand_m4a = 0;
         p_mp4->b_use_recovery = 0;      /* Disable roll recovery. */
     }
     else

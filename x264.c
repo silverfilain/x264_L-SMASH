@@ -1596,12 +1596,7 @@ generic_option:
 
     if( audio_enable )
     {
-        if( output_opt.mux_mov )
-        {
-            x264_cli_log( "x264", X264_LOG_INFO, "mov muxer doesn't support any audio formats yet.\n" );
-            audio_enable = 0;
-        }
-        else if( audio_filename )
+        if( audio_filename )
         {
             char used_demuxer[8];
             if( !select_audio_demuxer( audio_demuxer, used_demuxer, &audio_enc, audio_filename ) )
