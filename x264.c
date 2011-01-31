@@ -1566,10 +1566,7 @@ generic_option:
         else if( input.open_audio )
             haud = input.open_audio( opt->hin, audio_track );
         else
-        {
-            x264_cli_log( "x264", X264_LOG_INFO, "the used input does not support audio and --audiofile was not given, disabling audio.\n" );
             audio_enable = 0;
-        }
 
         if( audio_filename && ( audio_enable && !haud ) )
             return -1;
