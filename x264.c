@@ -115,11 +115,11 @@ static const char * const muxer_names[] =
     "raw",
     "mkv",
     "flv",
-    "mov",
-    "qt",
     "mp4",
     "3gp",
     "3g2",
+    "mov",
+    "qt",
     0
 };
 
