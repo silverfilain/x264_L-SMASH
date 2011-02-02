@@ -438,7 +438,7 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
         }
 #endif
 
-        if( p_mp4->psz_chapter )
+        if( p_mp4->psz_chapter && (p_mp4->i_major_brand != ISOM_BRAND_TYPE_QT) )
             MP4_LOG_IF_ERR( isom_set_tyrant_chapter( p_mp4->p_root, p_mp4->psz_chapter ), "failed to set chapter list.\n" );
 
         if( !p_mp4->b_no_remux )
@@ -811,7 +811,7 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
     if( !p_mp4->i_numframe )
     {
         p_mp4->i_start_offset = p_picture->i_dts * -1;
-        if( p_mp4->psz_chapter && p_mp4->b_brand_qt )
+        if( p_mp4->psz_chapter && (p_mp4->b_brand_qt || p_mp4->b_brand_m4a) )
             MP4_FAIL_IF_ERR( isom_create_reference_chapter_track( p_mp4->p_root, p_mp4->i_track, p_mp4->psz_chapter ),
                              "failed to create reference chapter track.\n" );
     }
