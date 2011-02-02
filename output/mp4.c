@@ -556,7 +556,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     FAIL_IF_ERR( i_media_timescale > UINT32_MAX, "mp4", "MP4 media timescale %"PRIu64" exceeds maximum\n", i_media_timescale );
 
     /* Set brands. */
-    uint32_t brands[9] = { 0 };
+    uint32_t brands[10] = { 0 };
     uint32_t minor_version = 0;
     uint32_t brand_count = 0;
     if( p_mp4->b_brand_qt )
@@ -579,7 +579,10 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
             minor_version = 0x00010000;
         }
         if( p_mp4->b_brand_m4a )
+        {
+            brands[brand_count++] = ISOM_BRAND_TYPE_M4V;
             brands[brand_count++] = ISOM_BRAND_TYPE_M4A;
+        }
         if( p_mp4->b_use_recovery )
         {
             brands[brand_count++] = ISOM_BRAND_TYPE_AVC1;   /* sdtp/sgpd/sbgp */
