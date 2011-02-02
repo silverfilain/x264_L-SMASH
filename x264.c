@@ -1601,21 +1601,13 @@ generic_option:
         if( audio_filename )
         {
             char used_demuxer[8];
-            if( !select_audio_demuxer( audio_demuxer, used_demuxer, &audio_enc, audio_filename ) )
-                haud = x264_audio_open_from_file( used_demuxer, audio_filename, audio_track );
-            else
-            {
-                x264_cli_log( "x264", X264_LOG_ERROR, "no audio demuxer was found for --audiofile, disabling audio.\n" );
-                audio_enable = 0;
-            }
+            FAIL_IF_ERROR( select_audio_demuxer( audio_demuxer, used_demuxer, &audio_enc, audio_filename ), "no audio demuxer was found for --audiofile.\n" )
+            haud = x264_audio_open_from_file( used_demuxer, audio_filename, audio_track );
         }
         else if( input.open_audio )
             haud = input.open_audio( opt->hin, audio_track );
         else
-        {
-            x264_cli_log( "x264", X264_LOG_INFO, "the used input does not support audio and --audiofile was not given, disabling audio.\n" );
             audio_enable = 0;
-        }
 
         if( audio_filename && ( audio_enable && !haud ) )
             return -1;
