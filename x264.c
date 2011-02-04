@@ -810,16 +810,16 @@ static void help( x264_param_t *defaults, int longhelp )
     H2( "      --timebase <int/int>    Specify timebase numerator and denominator\n"
         "                 <integer>    Specify timebase numerator for input timecode file\n"
         "                              or specify timebase denominator for other input\n" );
+    H2( "Muxer specific:\n" );
+    H2( " [mp4/3gp/3g2/mov/flv]\n" );
     H2( "      --dts-compress          Eliminate initial delay with container DTS hack\n" );
+    H2( " [mp4/3gp/3g2/mov]\n" );
     H2( "      --chapter <string>      Set the chapter list from chapter format file\n"
         "                              Format of each line: hours:minutes:seconds.milliseconds chaptername\n" );
-    H2( "      --language <string>     Set the language by ISO639-2 language codes\n" );
-    H2( "      --no-container-sar      Disable sample aspect ratio within the container\n"
-        "                              Valid only with the mp4/3gp/3g2 muxer\n" );
-    H2( "      --no-remux              Inhibit auto-remuxing for progressive download\n"
-        "                              Valid only with the mp4/3gp/3g2 muxer\n" );
-    H2( "      --force-display-size    Force display region size for video\n"
-        "                              Valid only with the mp4/3gp/3g2 muxer\n" );
+    H2( "      --language <string>     Set the language by ISO639-2/T language codes\n" );
+    H2( "      --no-container-sar      Disable sample aspect ratio within the container\n" );
+    H2( "      --no-remux              Inhibit auto-remuxing for progressive download\n" );
+    H2( "      --force-display-size    Force display region size for video\n" );
     H0( "\n" );
     H0( "Filtering:\n" );
     H0( "\n" );
