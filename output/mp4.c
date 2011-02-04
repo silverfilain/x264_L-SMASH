@@ -655,9 +655,14 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     }
     MP4_FAIL_IF_ERR( isom_set_track_presentation_size( p_mp4->p_root, p_mp4->i_track, p_mp4->i_display_width, p_mp4->i_display_height ),
                      "failed to set presentation size.\n" );
-    if( p_mp4->b_brand_qt && !p_mp4->b_no_pasp )
-        MP4_FAIL_IF_ERR( isom_set_track_aperture_modes( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry ),
-                         "failed to set track aperture mode.\n" );
+    if( p_mp4->b_brand_qt )
+    {
+        MP4_FAIL_IF_ERR( isom_set_color_parameter( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry, p_param->vui.i_colorprim, p_param->vui.i_transfer, p_param->vui.i_colmatrix ),
+                         "failed to set color parameter.\n" );
+        if( !p_mp4->b_no_pasp )
+            MP4_FAIL_IF_ERR( isom_set_track_aperture_modes( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry ),
+                             "failed to set track aperture mode.\n" );
+    }
 
     if( p_mp4->psz_language )
         MP4_FAIL_IF_ERR( isom_set_media_language( p_mp4->p_root, p_mp4->i_track, p_mp4->psz_language, 0 ),
