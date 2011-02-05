@@ -768,6 +768,9 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
         if( p_mp4->psz_language )
             MP4_FAIL_IF_ERR( isom_set_media_language( p_mp4->p_root, p_audio->i_track, p_mp4->psz_language, 0 ),
                              "failed to set language for audio track.\n" );
+        if( p_mp4->i_major_brand == ISOM_BRAND_TYPE_QT )
+            MP4_FAIL_IF_ERR( isom_set_channel_layout( p_mp4->p_root, p_audio->i_track, p_audio->i_sample_entry, QT_CHANNEL_LAYOUT_USE_CHANNEL_BITMAP, p_audio->info->chanlayout ),
+                             "failed to set channel layout for audio.\n" );
     }
 #endif /* #if HAVE_ANY_AUDIO */
 
