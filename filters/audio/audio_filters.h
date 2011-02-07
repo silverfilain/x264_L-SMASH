@@ -92,6 +92,8 @@ typedef struct audio_filter_t
 
 static inline int64_t x264_convert_timebase( int64_t i, timebase_t from, timebase_t to )
 {
+    if( !from.den || !to.num )
+        return 0;
     double j = i;
     if( from.den > to.num )
         return (int64_t)( j * from.num * to.den / to.num / from.den );
