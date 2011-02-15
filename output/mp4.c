@@ -497,7 +497,7 @@ static int open_file( char *psz_filename, hnd_t *p_handle, cli_output_opt_t *opt
     p_mp4->b_force_display_size = p_mp4->i_display_height || p_mp4->i_display_height;
     p_mp4->i_scaling_method = p_mp4->b_force_display_size ? ISOM_SCALING_METHOD_FILL : ISOM_SCALING_METHOD_MEET;
 
-    p_mp4->p_root = isom_create_movie( psz_filename );
+    p_mp4->p_root = isom_open_movie( psz_filename, ISOM_FILE_MODE_WRITE );
     MP4_FAIL_IF_ERR_EX( !p_mp4->p_root, "failed to create root.\n" );
 
     if( opt->mux_mov )
