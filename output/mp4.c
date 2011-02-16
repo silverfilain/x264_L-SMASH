@@ -344,7 +344,7 @@ static int write_audio_frames( mp4_hnd_t *p_mp4, double video_dts, int finish )
 
         p_sample->dts = audio_timestamp;
         p_sample->cts = audio_timestamp;
-        p_sample->prop.sync_point = 0; /* means, every sample can be random access point. */
+        p_sample->prop.sync_point = 1;
         p_sample->index = p_audio->i_sample_entry;
         MP4_FAIL_IF_ERR( isom_write_sample( p_mp4->p_root, p_audio->i_track, p_sample ),
                          "failed to write a audio sample.\n" );
