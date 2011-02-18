@@ -29,7 +29,7 @@
 
 #include "common/common.h"
 #include "output.h"
-#include "mp4/isom.h"
+#include "mp4/lsmash.h"
 #include "mp4/importer.h" /* FIXME: will be replaced with summary.h */
 
 /*******************/
@@ -409,7 +409,7 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
         if( mdhd_timescale != 0 ) /* avoid zero division */
         {
             actual_duration = (double)((largest_pts + last_delta) * p_mp4->i_time_inc) * mvhd_timescale / mdhd_timescale;
-            MP4_LOG_IF_ERR( isom_create_explicit_timeline_map( p_mp4->p_root, p_mp4->i_track, actual_duration, p_mp4->i_start_offset * p_mp4->i_time_inc, ISOM_NORMAL_EDIT ),
+            MP4_LOG_IF_ERR( isom_create_explicit_timeline_map( p_mp4->p_root, p_mp4->i_track, actual_duration, p_mp4->i_start_offset * p_mp4->i_time_inc, ISOM_EDIT_MODE_NORMAL ),
                             "failed to set timeline map for video.\n" );
         }
         else
@@ -431,7 +431,7 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
             MP4_LOG_IF_ERR( isom_flush_pooled_samples( p_mp4->p_root, p_audio->i_track, p_audio->summary->samples_in_frame ),
                             "failed to set last sample's duration for audio.\n" );
 #endif
-            MP4_LOG_IF_ERR( isom_create_explicit_timeline_map( p_mp4->p_root, p_audio->i_track, 0, 0, ISOM_NORMAL_EDIT ),
+            MP4_LOG_IF_ERR( isom_create_explicit_timeline_map( p_mp4->p_root, p_audio->i_track, 0, 0, ISOM_EDIT_MODE_NORMAL ),
                             "failed to set timeline map for audio.\n" );
             MP4_LOG_IF_ERR( isom_update_bitrate_info( p_mp4->p_root, p_audio->i_track, p_audio->i_sample_entry ),
                             "failed to update bitrate information for audio.\n" );
