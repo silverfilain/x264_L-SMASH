@@ -386,42 +386,47 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
 
     if( p_mp4->p_root )
     {
-        /* Flush the rest of samples and add the last sample_delta. */
-        uint32_t last_delta = largest_pts - second_largest_pts;
-        MP4_LOG_IF_ERR( isom_flush_pooled_samples( p_mp4->p_root, p_mp4->i_track, (last_delta ? last_delta : 1) * p_mp4->i_time_inc ),
-                        "failed to flush the rest of samples.\n" );
-
-        /*
-         * Declare the explicit time-line mapping.
-         * A segment_duration is given by movie timescale, while a media_time that is the start time of this segment
-         * is given by not the movie timescale but rather the media timescale.
-         * The reason is that ISO media have two time-lines, presentation and media time-line,
-         * and an edit maps the presentation time-line to the media time-line.
-         * According to QuickTime file format specification and the actual playback in QuickTime Player,
-         * if the Edit Box doesn't exist in the track, the ratio of the summation of sample durations and track's duration becomes
-         * the track's media_rate so that the entire media can be used by the track.
-         * So, we add Edit Box here to avoid this implicit media_rate could distort track's presentation timestamps slightly.
-         * Note: Any demuxers should follow the Edit List Box if it exists.
-         */
-        uint32_t mvhd_timescale = isom_get_movie_timescale( p_mp4->p_root );
-        uint32_t mdhd_timescale = isom_get_media_timescale( p_mp4->p_root, p_mp4->i_track );
-        double actual_duration  = 0;
-        if( mdhd_timescale != 0 ) /* avoid zero division */
+        double actual_duration  = 0; /* FIXME: This may be inside block of "if( p_mp4->i_track )" if audio does not use this. */
+        uint32_t mvhd_timescale = 1; /* FIXME: This may be inside block of "if( p_mp4->i_track )" if audio does not use this.
+                                               And to avoid devision by zero, use 1 as default. */
+        if( p_mp4->i_track )
         {
-            actual_duration = (double)((largest_pts + last_delta) * p_mp4->i_time_inc) * mvhd_timescale / mdhd_timescale;
-            MP4_LOG_IF_ERR( isom_create_explicit_timeline_map( p_mp4->p_root, p_mp4->i_track, actual_duration, p_mp4->i_start_offset * p_mp4->i_time_inc, ISOM_EDIT_MODE_NORMAL ),
-                            "failed to set timeline map for video.\n" );
-        }
-        else
-            MP4_LOG_ERROR( "mdhd timescale is broken.\n" );
+            /* Flush the rest of samples and add the last sample_delta. */
+            uint32_t last_delta = largest_pts - second_largest_pts;
+            MP4_LOG_IF_ERR( isom_flush_pooled_samples( p_mp4->p_root, p_mp4->i_track, (last_delta ? last_delta : 1) * p_mp4->i_time_inc ),
+                            "failed to flush the rest of samples.\n" );
 
-        MP4_LOG_IF_ERR( isom_update_bitrate_info( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry ),
-                        "failed to update bitrate information for video.\n" );
+            /*
+             * Declare the explicit time-line mapping.
+             * A segment_duration is given by movie timescale, while a media_time that is the start time of this segment
+             * is given by not the movie timescale but rather the media timescale.
+             * The reason is that ISO media have two time-lines, presentation and media time-line,
+             * and an edit maps the presentation time-line to the media time-line.
+             * According to QuickTime file format specification and the actual playback in QuickTime Player,
+             * if the Edit Box doesn't exist in the track, the ratio of the summation of sample durations and track's duration becomes
+             * the track's media_rate so that the entire media can be used by the track.
+             * So, we add Edit Box here to avoid this implicit media_rate could distort track's presentation timestamps slightly.
+             * Note: Any demuxers should follow the Edit List Box if it exists.
+             */
+                     mvhd_timescale = isom_get_movie_timescale( p_mp4->p_root );
+            uint32_t mdhd_timescale = isom_get_media_timescale( p_mp4->p_root, p_mp4->i_track );
+            if( mdhd_timescale != 0 ) /* avoid zero division */
+            {
+                actual_duration = (double)((largest_pts + last_delta) * p_mp4->i_time_inc) * mvhd_timescale / mdhd_timescale;
+                MP4_LOG_IF_ERR( isom_create_explicit_timeline_map( p_mp4->p_root, p_mp4->i_track, actual_duration, p_mp4->i_start_offset * p_mp4->i_time_inc, ISOM_EDIT_MODE_NORMAL ),
+                                "failed to set timeline map for video.\n" );
+            }
+            else
+                MP4_LOG_ERROR( "mdhd timescale is broken.\n" );
+
+            MP4_LOG_IF_ERR( isom_update_bitrate_info( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry ),
+                            "failed to update bitrate information for video.\n" );
+        }
 #if HAVE_ANY_AUDIO
         mp4_audio_hnd_t *p_audio = p_mp4->audio_hnd;
-        if( p_audio )
+        if( p_audio && p_audio->i_track )
         {
-            MP4_LOG_IF_ERR( ( write_audio_frames( p_mp4, actual_duration / mvhd_timescale, 0 ) ||
+            MP4_LOG_IF_ERR( ( write_audio_frames( p_mp4, actual_duration / mvhd_timescale, 0 ) || // FIXME: I wonder why is this needed?
                               write_audio_frames( p_mp4, 0, 1 ) ),
                             "failed to flush audio frame(s).\n" );
 #if HAVE_AUDIO
