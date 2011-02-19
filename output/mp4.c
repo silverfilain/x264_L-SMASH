@@ -711,12 +711,8 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
                                  "failed to create AC-3 specific info.\n" );
                 break;
             case ISOM_CODEC_TYPE_SAMR_AUDIO :
-                p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_PRIV_SAMR_AUDIO;
-                MP4_FAIL_IF_ERR( mp4sys_amr_create_damr( p_audio->summary ),
-                                 "failed to create AMR specific info.\n" );
-                break;
             case ISOM_CODEC_TYPE_SAWB_AUDIO :
-                p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_PRIV_SAWB_AUDIO;
+                p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_NONE;
                 MP4_FAIL_IF_ERR( mp4sys_amr_create_damr( p_audio->summary ),
                                  "failed to create AMR specific info.\n" );
                 break;
@@ -737,24 +733,13 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
          */
         /*
          * WARNING: If you wish to allocate summary in your code, you have to allocate ASC too,
-         * and never use mp4sys_cleanup_audio_summary(), when L-SMASH is not compiled integrated with your code.
+         * and never use mp4sys_cleanup_audio_summary(), unless L-SMASH is compiled integrated with your code.
          * Because malloc() and free() have to be used as pair from EXACTLY SAME standard C library.
          * Otherwise you may cause bugs which you hardly call to mind.
          */
         p_audio->summary = mp4sys_duplicate_audio_summary( p_audio->p_importer, 1 );
-        switch( p_audio->summary->object_type_indication )
-        {
-        case MP4SYS_OBJECT_TYPE_Audio_ISO_14496_3:
-        case MP4SYS_OBJECT_TYPE_Audio_ISO_13818_3: /* Legacy Interface */
-        case MP4SYS_OBJECT_TYPE_Audio_ISO_11172_3: /* Legacy Interface */
-            p_audio->codec_type = ISOM_CODEC_TYPE_MP4A_AUDIO; break;
-        case MP4SYS_OBJECT_TYPE_PRIV_SAMR_AUDIO:
-            p_audio->codec_type = ISOM_CODEC_TYPE_SAMR_AUDIO; break;
-        case MP4SYS_OBJECT_TYPE_PRIV_SAWB_AUDIO:
-            p_audio->codec_type = ISOM_CODEC_TYPE_SAWB_AUDIO; break;
-        default:
-            MP4_FAIL_IF_ERR( 1, "Unknown object_type_indication.\n" );
-        }
+        MP4_FAIL_IF_ERR( !p_audio->summary, "failed to duplicate summary information.\n" );
+        p_audio->codec_type = p_audio->summary->sample_type;
 #endif /* #if HAVE_AUDIO #else */
         p_audio->i_video_timescale = i_media_timescale;
         MP4_FAIL_IF_ERR( isom_set_media_timescale( p_mp4->p_root, p_audio->i_track, p_audio->summary->frequency ),

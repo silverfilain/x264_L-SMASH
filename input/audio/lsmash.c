@@ -71,13 +71,17 @@ static int lsmash_init( hnd_t *handle, const char *opt_str )
             else
                 h->info.codec_name = "mp1";
             break;
-        case MP4SYS_OBJECT_TYPE_PRIV_SAMR_AUDIO:
-            h->info.codec_name = "amrnb";
-            break;
-        case MP4SYS_OBJECT_TYPE_PRIV_SAWB_AUDIO:
-            h->info.codec_name = "amrwb";
-            break;
         default :
+            if(h->summary->sample_type == ISOM_CODEC_TYPE_SAMR_AUDIO)
+            {
+                h->info.codec_name = "amrnb";
+                break;
+            }
+            else if(h->summary->sample_type == ISOM_CODEC_TYPE_SAWB_AUDIO)
+            {
+                h->info.codec_name = "amrwb";
+                break;
+            }
             AF_LOG_ERR( h, "unknown audio stream type.\n" );
             goto error;
             break;
