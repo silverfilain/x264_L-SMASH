@@ -815,8 +815,7 @@ static void help( x264_param_t *defaults, int longhelp )
     H2( " [mp4/3gp/3g2/mov/flv]\n" );
     H2( "      --dts-compress          Eliminate initial delay with container DTS hack\n" );
     H2( " [mp4/3gp/3g2/mov]\n" );
-    H2( "      --chapter <string>      Set the chapter list from chapter format file\n"
-        "                              Format of each line: hours:minutes:seconds.milliseconds chaptername\n" );
+    H2( "      --chapter <string>      Set the chapter list from chapter format file\n" );
     H2( "      --language <string>     Set the language by ISO639-2/T language codes\n" );
     H2( "      --no-container-sar      Disable sample aspect ratio within the container\n" );
     H2( "      --no-remux              Inhibit auto-remuxing for progressive download\n" );
