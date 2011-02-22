@@ -11,7 +11,7 @@ typedef struct lsmash_source_t
     AUDIO_FILTER_COMMON
 
     mp4sys_importer_t* importer;
-    mp4sys_audio_summary_t* summary;
+    lsmash_audio_summary_t* summary;
 
     int64_t frame_count;
     int64_t last_dts;
