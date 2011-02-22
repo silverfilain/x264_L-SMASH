@@ -96,6 +96,7 @@ typedef struct
 {
     lsmash_root_t *p_root;
     lsmash_brand_type_code major_brand;
+    lsmash_video_summary_t *summary;
     int i_brand_3gpp;
     int b_brand_m4a;
     int b_brand_qt;
@@ -505,6 +506,10 @@ static int open_file( char *psz_filename, hnd_t *p_handle, cli_output_opt_t *opt
     p_mp4->p_root = isom_open_movie( psz_filename, ISOM_FILE_MODE_WRITE );
     MP4_FAIL_IF_ERR_EX( !p_mp4->p_root, "failed to create root.\n" );
 
+    p_mp4->summary = calloc( 1, sizeof(lsmash_video_summary_t) );
+    MP4_FAIL_IF_ERR( !p_mp4->summary,
+                     "failed to allocate memory for summary information of video.\n" );
+
     if( opt->mux_mov )
     {
         p_mp4->major_brand = ISOM_BRAND_TYPE_QT;
@@ -624,16 +629,8 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
         MP4_FAIL_IF_ERR( isom_create_grouping( p_mp4->p_root, p_mp4->i_track, ISOM_GROUP_TYPE_ROLL ),
                          "failed to create roll recovery grouping\n" );
 
-    /* Add a sample entry. */
-    /* FIXME: I think these sample_entry relative stuff should be more encapsulated, by using video_summary. */
-    p_mp4->i_sample_entry = isom_add_sample_entry( p_mp4->p_root, p_mp4->i_track, ISOM_CODEC_TYPE_AVC1_VIDEO, NULL );
-    MP4_FAIL_IF_ERR( !p_mp4->i_sample_entry,
-                     "failed to add sample entry for video.\n" );
-    if( p_mp4->major_brand != ISOM_BRAND_TYPE_QT )
-        MP4_FAIL_IF_ERR( isom_add_btrt( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry ),
-                         "failed to add btrt.\n" );
-    MP4_FAIL_IF_ERR( isom_set_sample_resolution( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry, (uint16_t)p_param->i_width, (uint16_t)p_param->i_height ),
-                     "failed to set sample resolution.\n" );
+    p_mp4->summary->width = p_param->i_width;
+    p_mp4->summary->height = p_param->i_height;
     if( !p_mp4->b_force_display_size )
     {
         p_mp4->i_display_width = p_param->i_width << 16;
@@ -651,23 +648,32 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
         }
         if( !p_mp4->b_no_pasp )
         {
-            MP4_FAIL_IF_ERR( isom_set_sample_aspect_ratio( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry, p_param->vui.i_sar_width, p_param->vui.i_sar_height ),
-                             "failed to set sample aspect ratio.\n" );
+            p_mp4->summary->par_h = p_param->vui.i_sar_width;
+            p_mp4->summary->par_v = p_param->vui.i_sar_height;
             if( p_mp4->major_brand != ISOM_BRAND_TYPE_QT )
-                MP4_FAIL_IF_ERR( isom_set_scaling_method( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry, p_mp4->scaling_method, 0, 0 ),
-                                 "failed to set scaling method.\n" );
+                p_mp4->summary->scaling_method = p_mp4->scaling_method;
         }
     }
     MP4_FAIL_IF_ERR( isom_set_track_presentation_size( p_mp4->p_root, p_mp4->i_track, p_mp4->i_display_width, p_mp4->i_display_height ),
                      "failed to set presentation size.\n" );
     if( p_mp4->b_brand_qt )
     {
-        MP4_FAIL_IF_ERR( isom_set_color_parameter( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry, p_param->vui.i_colorprim, p_param->vui.i_transfer, p_param->vui.i_colmatrix ),
-                         "failed to set color parameter.\n" );
-        if( !p_mp4->b_no_pasp )
-            MP4_FAIL_IF_ERR( isom_set_track_aperture_modes( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry ),
-                             "failed to set track aperture mode.\n" );
+        p_mp4->summary->primaries = p_param->vui.i_colorprim;
+        p_mp4->summary->transfer = p_param->vui.i_transfer;
+        p_mp4->summary->matrix = p_param->vui.i_colmatrix;
     }
+
+    /* Add a sample entry. */
+    p_mp4->i_sample_entry = isom_add_sample_entry( p_mp4->p_root, p_mp4->i_track, ISOM_CODEC_TYPE_AVC1_VIDEO, p_mp4->summary );
+    MP4_FAIL_IF_ERR( !p_mp4->i_sample_entry,
+                     "failed to add sample entry for video.\n" );
+
+    if( p_mp4->major_brand != ISOM_BRAND_TYPE_QT )
+        MP4_FAIL_IF_ERR( isom_add_btrt( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry ),
+                         "failed to add btrt.\n" );
+    if( p_mp4->b_brand_qt && !p_mp4->b_no_pasp )
+        MP4_FAIL_IF_ERR( isom_set_track_aperture_modes( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry ),
+                         "failed to set track aperture mode.\n" );
 
     if( p_mp4->psz_language )
         MP4_FAIL_IF_ERR( isom_set_media_language( p_mp4->p_root, p_mp4->i_track, p_mp4->psz_language, 0 ),
