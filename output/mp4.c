@@ -94,7 +94,7 @@ typedef struct
 
 typedef struct
 {
-    isom_root_t *p_root;
+    lsmash_root_t *p_root;
     lsmash_brand_type_code major_brand;
     int i_brand_3gpp;
     int b_brand_m4a;
