@@ -72,6 +72,7 @@ if( cond )\
 
 #if HAVE_AUDIO
 #include "audio/encoders.h"
+#include "filters/audio/audio_filters.h"
 #endif
 
 typedef struct
@@ -86,6 +87,7 @@ typedef struct
     audio_info_t *info;
     hnd_t encoder;
     int has_sbr;
+    int b_copy;
 #else
     mp4sys_importer_t* p_importer;
 #endif
@@ -158,6 +160,79 @@ static void set_recovery_param( mp4_hnd_t *p_mp4, x264_param_t *p_param )
     p_mp4->i_max_frame_num = 1 << i_log2_max_frame_num;
 }
 
+static int set_channel_layout( mp4_hnd_t *p_mp4 )
+{
+#define CH_LAYOUT_MONO              (CH_FRONT_CENTER)
+#define CH_LAYOUT_STEREO            (CH_FRONT_LEFT|CH_FRONT_RIGHT)
+#define CH_LAYOUT_2_1               (CH_LAYOUT_STEREO|CH_BACK_CENTER)
+#define CH_LAYOUT_SURROUND          (CH_LAYOUT_STEREO|CH_FRONT_CENTER)
+#define CH_LAYOUT_4POINT0           (CH_LAYOUT_SURROUND|CH_BACK_CENTER)
+#define CH_LAYOUT_2_2               (CH_LAYOUT_STEREO|CH_SIDE_LEFT|CH_SIDE_RIGHT)
+#define CH_LAYOUT_QUAD              (CH_LAYOUT_STEREO|CH_BACK_LEFT|CH_BACK_RIGHT)
+#define CH_LAYOUT_5POINT0           (CH_LAYOUT_SURROUND|CH_SIDE_LEFT|CH_SIDE_RIGHT)
+#define CH_LAYOUT_5POINT1           (CH_LAYOUT_5POINT0|CH_LOW_FREQUENCY)
+#define CH_LAYOUT_5POINT0_BACK      (CH_LAYOUT_SURROUND|CH_BACK_LEFT|CH_BACK_RIGHT)
+#define CH_LAYOUT_5POINT1_BACK      (CH_LAYOUT_5POINT0_BACK|CH_LOW_FREQUENCY)
+#define CH_LAYOUT_7POINT0           (CH_LAYOUT_5POINT0|CH_BACK_LEFT|CH_BACK_RIGHT)
+#define CH_LAYOUT_7POINT1           (CH_LAYOUT_5POINT1|CH_BACK_LEFT|CH_BACK_RIGHT)
+#define CH_LAYOUT_7POINT1_WIDE      (CH_LAYOUT_5POINT1_BACK|CH_FRONT_LEFT_OF_CENTER|CH_FRONT_RIGHT_OF_CENTER)
+#define CH_LAYOUT_STEREO_DOWNMIX    (CH_STEREO_LEFT|CH_STEREO_RIGHT)
+
+    mp4_audio_hnd_t *p_audio = p_mp4->audio_hnd;
+    lsmash_channel_layout_tag_code layout_tag = QT_CHANNEL_LAYOUT_UNKNOWN;
+    lsmash_channel_bitmap_code bitmap = 0;
+    /* Lavcodec always returns SMPTE/ITU-R channel order, but its copying doesn't do reordering. */
+    if( !p_audio->b_copy )
+    {
+        layout_tag = QT_CHANNEL_LAYOUT_USE_CHANNEL_BITMAP;
+        bitmap = p_audio->info->chanlayout;
+    }
+    else
+    {
+        /* Channel order is unknown, so we guess it from ffmpeg's channel layout flags. */
+        if( p_audio->codec_type == ISOM_CODEC_TYPE_MP4A_AUDIO )
+            switch( p_audio->info->chanlayout )
+            {
+                case CH_LAYOUT_MONO :
+                    layout_tag = QT_CHANNEL_LAYOUT_MONO;
+                    break;
+                case CH_LAYOUT_STEREO :
+                case CH_LAYOUT_STEREO_DOWNMIX :
+                    layout_tag = QT_CHANNEL_LAYOUT_STEREO;
+                    break;
+                case CH_LAYOUT_2_1 :
+                case CH_LAYOUT_SURROUND :
+                    layout_tag = QT_CHANNEL_LAYOUT_AAC_3_0;
+                    break;
+                case CH_LAYOUT_4POINT0 :
+                    layout_tag = QT_CHANNEL_LAYOUT_AAC_4_0;
+                    break;
+                case CH_LAYOUT_2_2 :
+                case CH_LAYOUT_QUAD :
+                    layout_tag = QT_CHANNEL_LAYOUT_AAC_QUADRAPHONIC;
+                    break;
+                case CH_LAYOUT_5POINT0 :
+                case CH_LAYOUT_5POINT0_BACK :
+                    layout_tag = QT_CHANNEL_LAYOUT_AAC_5_0;
+                    break;
+                case CH_LAYOUT_5POINT1 :
+                case CH_LAYOUT_5POINT1_BACK :
+                    layout_tag = QT_CHANNEL_LAYOUT_AAC_5_1;
+                    break;
+                case CH_LAYOUT_7POINT0 :
+                    layout_tag = QT_CHANNEL_LAYOUT_AAC_7_0;
+                    break;
+                case CH_LAYOUT_7POINT1 :
+                case CH_LAYOUT_7POINT1_WIDE :
+                    layout_tag = QT_CHANNEL_LAYOUT_AAC_7_1;
+                    break;
+                default :
+                    break;
+            }
+    }
+    return isom_set_channel_layout( p_mp4->p_root, p_audio->i_track, p_audio->i_sample_entry, layout_tag, bitmap );
+}
+
 static void remove_mp4_hnd( hnd_t handle )
 {
     mp4_hnd_t *p_mp4 = handle;
@@ -223,15 +298,19 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
 
     // TODO: support other audio format
     hnd_t henc;
+    int copy = 0;
 
     if( !strcmp( audio_enc, "copy" ) )
+    {
         henc = x264_audio_copy_open( filters );
+        copy = 1;
+    }
     else
     {
         char audio_params[MAX_ARGS];
         const char *used_enc;
         /* libopencore-amr does not have AMR-WB encoder yet, so we can't use it. */
-        const audio_encoder_t *encoder = x264_select_audio_encoder( audio_enc, (char*[]){ "aac", "mp3", "ac3", "alac", "amrnb", "amrwb", NULL }, &used_enc );
+        const audio_encoder_t *encoder = x264_select_audio_encoder( audio_enc, (char*[]){ "aac", "mp3", "ac3", "alac", "raw", "amrnb", "amrwb", NULL }, &used_enc );
         MP4_FAIL_IF_ERR( !encoder, "unable to select audio encoder.\n" );
 
         snprintf( audio_params, MAX_ARGS, "%s,codec=%s", audio_parameters, used_enc );
@@ -242,6 +321,7 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
     mp4_hnd_t *p_mp4 = handle;
     mp4_audio_hnd_t *p_audio = p_mp4->audio_hnd = calloc( 1, sizeof( mp4_audio_hnd_t ) );
     audio_info_t *info = p_audio->info = x264_audio_encoder_info( henc );
+    p_audio->b_copy = copy;
 
     if( !strcmp( info->codec_name, "aac" ) )
     {
@@ -263,13 +343,21 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
         p_audio->codec_type = ISOM_CODEC_TYPE_ALAC_AUDIO;
         p_mp4->b_brand_m4a = 1;
     }
+    else if( !strcmp( info->codec_name, "raw" ) )
+#ifdef WORDS_BIGENDIAN
+        p_audio->codec_type = QT_CODEC_TYPE_TWOS_AUDIO;
+#else
+        p_audio->codec_type = QT_CODEC_TYPE_SOWT_AUDIO;
+#endif
     else if( !strcmp( info->codec_name, "amrnb" ) )
         p_audio->codec_type = ISOM_CODEC_TYPE_SAMR_AUDIO;
     else if( !strcmp( info->codec_name, "amrwb" ) )
         p_audio->codec_type = ISOM_CODEC_TYPE_SAWB_AUDIO;
 
     if( !p_audio->codec_type ||
-        (p_mp4->major_brand == ISOM_BRAND_TYPE_QT && p_audio->codec_type != ISOM_CODEC_TYPE_MP4A_AUDIO) )
+        (p_mp4->major_brand == ISOM_BRAND_TYPE_QT &&
+        (p_audio->codec_type != QT_CODEC_TYPE_TWOS_AUDIO && p_audio->codec_type != QT_CODEC_TYPE_SOWT_AUDIO &&
+        p_audio->codec_type != ISOM_CODEC_TYPE_MP4A_AUDIO)) )
     {
         MP4_LOG_ERROR( "unsupported audio codec '%s'.\n", info->codec_name );
         goto error;
@@ -326,11 +414,6 @@ static int write_audio_frames( mp4_hnd_t *p_mp4, double video_dts, int finish )
         if( !frame )
             break;
 
-        lsmash_sample_t *p_sample = isom_create_sample( frame->size );
-        MP4_FAIL_IF_ERR( !p_sample,
-                         "failed to create a audio sample data.\n" );
-        memcpy( p_sample->data, frame->data, frame->size );
-        x264_audio_free_frame( p_audio->encoder, frame );
 #else
         /* FIXME: mp4sys_importer_get_access_unit() returns 1 if there're any changes in stream's properties.
            If you want to support them, you have to retrieve summary again, and make some operation accordingly. */
@@ -341,14 +424,44 @@ static int write_audio_frames( mp4_hnd_t *p_mp4, double video_dts, int finish )
                          "failed to retrieve frame data from importer.\n" );
         if( p_sample->length == 0 )
             break; /* end of stream */
-#endif
-
-        p_sample->dts = audio_timestamp;
-        p_sample->cts = audio_timestamp;
+        p_sample->dts = p_sample->cts = audio_timestamp;
         p_sample->prop.sync_point = 1;
         p_sample->index = p_audio->i_sample_entry;
         MP4_FAIL_IF_ERR( isom_write_sample( p_mp4->p_root, p_audio->i_track, p_sample ),
                          "failed to write a audio sample.\n" );
+#endif
+        if( p_audio->codec_type != QT_CODEC_TYPE_SOWT_AUDIO && p_audio->codec_type != QT_CODEC_TYPE_TWOS_AUDIO )
+        {
+            lsmash_sample_t *p_sample = isom_create_sample( frame->size );
+            MP4_FAIL_IF_ERR( !p_sample,
+                             "failed to create a audio sample data.\n" );
+            memcpy( p_sample->data, frame->data, frame->size );
+            x264_audio_free_frame( p_audio->encoder, frame );
+            p_sample->dts = p_sample->cts = audio_timestamp;
+            p_sample->prop.sync_point = 1;
+            p_sample->index = p_audio->i_sample_entry;
+            MP4_FAIL_IF_ERR( isom_write_sample( p_mp4->p_root, p_audio->i_track, p_sample ),
+                             "failed to write a audio sample.\n" );
+        }
+        else
+        {
+            /* Write samples per LPCM frame. */
+            uint32_t bytes_per_packet = p_audio->summary->bit_depth / 8;
+            uint32_t bytes_per_frame = bytes_per_packet * p_audio->summary->channels;
+            for( uint32_t offset = 0; offset < frame->size; offset += bytes_per_frame )
+            {
+                lsmash_sample_t *p_sample = isom_create_sample( bytes_per_frame );
+                MP4_FAIL_IF_ERR( !p_sample,
+                                 "failed to create a audio sample data.\n" );
+                memcpy( p_sample->data, frame->data + offset, bytes_per_frame );
+                p_sample->cts = p_sample->dts = audio_timestamp++;
+                p_sample->prop.sync_point = 1;
+                p_sample->index = p_audio->i_sample_entry;
+                MP4_FAIL_IF_ERR( isom_write_sample( p_mp4->p_root, p_audio->i_track, p_sample ),
+                                 "failed to write a audio sample.\n" );
+            }
+            x264_audio_free_frame( p_audio->encoder, frame );
+        }
 
         p_audio->i_numframe++;
     }
@@ -430,13 +543,17 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
             MP4_LOG_IF_ERR( ( write_audio_frames( p_mp4, actual_duration / mvhd_timescale, 0 ) || // FIXME: I wonder why is this needed?
                               write_audio_frames( p_mp4, 0, 1 ) ),
                             "failed to flush audio frame(s).\n" );
+            uint32_t last_delta;
+            if( p_audio->codec_type == QT_CODEC_TYPE_SOWT_AUDIO || p_audio->codec_type == QT_CODEC_TYPE_TWOS_AUDIO )
+                last_delta = 1;
+            else
 #if HAVE_AUDIO
-            MP4_LOG_IF_ERR( isom_flush_pooled_samples( p_mp4->p_root, p_audio->i_track, p_audio->info->last_delta ),
-                            "failed to set last sample's duration for audio.\n" );
+                last_delta = p_audio->info->last_delta;
 #else
-            MP4_LOG_IF_ERR( isom_flush_pooled_samples( p_mp4->p_root, p_audio->i_track, p_audio->summary->samples_in_frame ),
-                            "failed to set last sample's duration for audio.\n" );
+                last_delta = p_audio->summary->samples_in_frame;
 #endif
+            MP4_LOG_IF_ERR( isom_flush_pooled_samples( p_mp4->p_root, p_audio->i_track, last_delta ),
+                            "failed to set last sample's duration for audio.\n" );
             MP4_LOG_IF_ERR( isom_create_explicit_timeline_map( p_mp4->p_root, p_audio->i_track, 0, 0, ISOM_EDIT_MODE_NORMAL ),
                             "failed to set timeline map for audio.\n" );
             MP4_LOG_IF_ERR( isom_update_bitrate_info( p_mp4->p_root, p_audio->i_track, p_audio->i_sample_entry ),
@@ -692,8 +809,10 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
         p_audio->summary->max_au_length    = ( 1 << 13 ) - 1;
         p_audio->summary->frequency        = p_audio->info->samplerate;
         p_audio->summary->channels         = p_audio->info->channels;
-        p_audio->summary->bit_depth        = 16;
+        p_audio->summary->bit_depth        = p_audio->info->chansize * 8;
         p_audio->summary->samples_in_frame = p_audio->info->framelen;
+        p_audio->summary->packed           = 1;
+        p_audio->summary->interleaved      = 1;
         switch( p_audio->codec_type )
         {
             case ISOM_CODEC_TYPE_MP4A_AUDIO :
@@ -721,6 +840,16 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
                 p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_NONE;
                 MP4_FAIL_IF_ERR( mp4sys_amr_create_damr( p_audio->summary ),
                                  "failed to create AMR specific info.\n" );
+                break;
+            case QT_CODEC_TYPE_TWOS_AUDIO :
+                p_audio->summary->sample_format = 0;    /* integer */
+                p_audio->summary->endianness = 0;       /* big endian */
+                p_audio->summary->signedness = 1;       /* signed */
+                break;
+            case QT_CODEC_TYPE_SOWT_AUDIO :
+                p_audio->summary->sample_format = 0;    /* integer */
+                p_audio->summary->endianness = 1;       /* little endian */
+                p_audio->summary->signedness = 1;       /* signed */
                 break;
             default :
                 p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_NONE;
@@ -765,8 +894,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
             MP4_FAIL_IF_ERR( isom_set_media_language( p_mp4->p_root, p_audio->i_track, p_mp4->psz_language, 0 ),
                              "failed to set language for audio track.\n" );
         if( p_mp4->major_brand == ISOM_BRAND_TYPE_QT )
-            MP4_FAIL_IF_ERR( isom_set_channel_layout( p_mp4->p_root, p_audio->i_track, p_audio->i_sample_entry, QT_CHANNEL_LAYOUT_USE_CHANNEL_BITMAP, p_audio->info->chanlayout ),
-                             "failed to set channel layout for audio.\n" );
+            MP4_FAIL_IF_ERR( set_channel_layout( p_mp4 ), "failed to set channel layout for audio.\n" );
     }
 #endif /* #if HAVE_ANY_AUDIO */
 
