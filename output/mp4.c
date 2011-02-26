@@ -185,6 +185,34 @@ static int set_channel_layout( mp4_hnd_t *p_mp4 )
     {
         layout_tag = QT_CHANNEL_LAYOUT_USE_CHANNEL_BITMAP;
         bitmap = p_audio->info->chanlayout;
+        /* Avisynth input doesn't return channel order, so we guess it from the number of channels. */
+        if( !p_audio->info->chanlayout )
+            switch( p_audio->info->channels )
+            {
+                case 1 :
+                    layout_tag = QT_CHANNEL_LAYOUT_ITU_1_0;
+                    break;
+                case 2 :
+                    layout_tag = QT_CHANNEL_LAYOUT_ITU_2_0;
+                    break;
+                case 3 :
+                    layout_tag = QT_CHANNEL_LAYOUT_ITU_3_0;
+                    break;
+                case 4 :
+                    layout_tag = QT_CHANNEL_LAYOUT_ITU_3_1;
+                    break;
+                case 5 :
+                    layout_tag = QT_CHANNEL_LAYOUT_ITU_3_2;
+                    break;
+                case 6 :
+                    layout_tag = QT_CHANNEL_LAYOUT_ITU_3_2_1;
+                    break;
+                case 8 :
+                    layout_tag = QT_CHANNEL_LAYOUT_ITU_3_4_1;
+                    break;
+                default :
+                    break;
+            }
     }
     else
     {
