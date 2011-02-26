@@ -72,7 +72,6 @@ if( cond )\
 
 #if HAVE_AUDIO
 #include "audio/encoders.h"
-#include "filters/audio/audio_filters.h"
 #endif
 
 typedef struct
