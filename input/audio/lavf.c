@@ -227,6 +227,13 @@ static hnd_t copy_init( hnd_t filter_chain, const char *opts )
             h->info.extradata_size = h->ctx->extradata_size;
             h->info.codec_name = "aac";
         }
+        else if( ( h->ctx->codec->id == CODEC_ID_MP4ALS ) && !h->ctx->extradata )
+        {
+            h->out = convert_to_audio_packet( h, h->pkt );
+            h->info.extradata = h->ctx->extradata;
+            h->info.extradata_size = h->ctx->extradata_size;
+            h->info.codec_name = "als";
+        }
         else if( ( h->ctx->codec->id == CODEC_ID_AC3 ) && !h->ctx->extradata )
         {
             h->ctx->extradata_size = h->pkt->size;

@@ -360,6 +360,8 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
             p_audio->has_sbr = 0; // SBR presence isn't specified, so assume implicit signaling
         p_mp4->b_brand_m4a = 1;
     }
+    if( !strcmp( info->codec_name, "als" ) )
+        p_audio->codec_type = ISOM_CODEC_TYPE_MP4A_AUDIO;
     else if( ( !strcmp( info->codec_name, "mp3" ) || !strcmp( info->codec_name, "mp2" ) || !strcmp( info->codec_name, "mp1" ) )
              && info->samplerate >= 16000 ) /* freq <16khz is MPEG-2.5. */
         p_audio->codec_type = ISOM_CODEC_TYPE_MP4A_AUDIO;
@@ -851,10 +853,13 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
                     else
                         p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_Audio_ISO_13818_3; /* Legacy Interface */
                 }
-                p_audio->summary->aot                    = MP4A_AUDIO_OBJECT_TYPE_AAC_LC;
-                p_audio->summary->sbr_mode               = p_audio->has_sbr ? MP4A_AAC_SBR_BACKWARD_COMPATIBLE : MP4A_AAC_SBR_NOT_SPECIFIED;
-                p_audio->summary->exdata_length          = p_audio->info->extradata_size;
-                p_audio->summary->exdata                 = malloc( p_audio->info->extradata_size );
+                if( !strcmp( p_audio->info->codec_name, "als" ) )
+                    p_audio->summary->aot = MP4A_AUDIO_OBJECT_TYPE_ALS;
+                else
+                    p_audio->summary->aot = MP4A_AUDIO_OBJECT_TYPE_AAC_LC;
+                p_audio->summary->sbr_mode      = p_audio->has_sbr ? MP4A_AAC_SBR_BACKWARD_COMPATIBLE : MP4A_AAC_SBR_NOT_SPECIFIED;
+                p_audio->summary->exdata_length = p_audio->info->extradata_size;
+                p_audio->summary->exdata        = malloc( p_audio->info->extradata_size );
                 memcpy( p_audio->summary->exdata, p_audio->info->extradata, p_audio->info->extradata_size );
                 break;
             case ISOM_CODEC_TYPE_AC_3_AUDIO :
