@@ -647,7 +647,7 @@ static int open_file( char *psz_filename, hnd_t *p_handle, cli_output_opt_t *opt
     p_mp4->b_force_display_size = p_mp4->i_display_height || p_mp4->i_display_height;
     p_mp4->scaling_method = p_mp4->b_force_display_size ? ISOM_SCALING_METHOD_FILL : ISOM_SCALING_METHOD_MEET;
 
-    p_mp4->p_root = lsmash_open_movie( psz_filename, ISOM_FILE_MODE_WRITE );
+    p_mp4->p_root = lsmash_open_movie( psz_filename, LSMASH_FILE_MODE_WRITE );
     MP4_FAIL_IF_ERR_EX( !p_mp4->p_root, "failed to create root.\n" );
 
     p_mp4->summary = calloc( 1, sizeof(lsmash_video_summary_t) );
