@@ -257,7 +257,7 @@ static int set_channel_layout( mp4_hnd_t *p_mp4 )
                     break;
             }
     }
-    return isom_set_channel_layout( p_mp4->p_root, p_audio->i_track, p_audio->i_sample_entry, layout_tag, bitmap );
+    return lsmash_set_channel_layout( p_mp4->p_root, p_audio->i_track, p_audio->i_sample_entry, layout_tag, bitmap );
 }
 
 static void remove_mp4_hnd( hnd_t handle )
@@ -272,7 +272,7 @@ static void remove_mp4_hnd( hnd_t handle )
     }
     if( p_mp4->p_root )
     {
-        isom_destroy_root( p_mp4->p_root );
+        lsmash_destroy_root( p_mp4->p_root );
         p_mp4->p_root = NULL;
     }
 #if HAVE_ANY_AUDIO
@@ -444,7 +444,7 @@ static int write_audio_frames( mp4_hnd_t *p_mp4, double video_dts, int finish )
 #else
         /* FIXME: mp4sys_importer_get_access_unit() returns 1 if there're any changes in stream's properties.
            If you want to support them, you have to retrieve summary again, and make some operation accordingly. */
-        lsmash_sample_t *p_sample = isom_create_sample( p_audio->summary->max_au_length );
+        lsmash_sample_t *p_sample = lsmash_create_sample( p_audio->summary->max_au_length );
         MP4_FAIL_IF_ERR( !p_sample,
                          "failed to create a audio sample data.\n" );
         MP4_FAIL_IF_ERR( mp4sys_importer_get_access_unit( p_audio->p_importer, 1, p_sample->data, &p_sample->length ),
@@ -454,12 +454,12 @@ static int write_audio_frames( mp4_hnd_t *p_mp4, double video_dts, int finish )
         p_sample->dts = p_sample->cts = audio_timestamp;
         p_sample->prop.sync_point = 1;
         p_sample->index = p_audio->i_sample_entry;
-        MP4_FAIL_IF_ERR( isom_write_sample( p_mp4->p_root, p_audio->i_track, p_sample ),
+        MP4_FAIL_IF_ERR( lsmash_write_sample( p_mp4->p_root, p_audio->i_track, p_sample ),
                          "failed to write a audio sample.\n" );
 #endif
         if( p_audio->codec_type != QT_CODEC_TYPE_SOWT_AUDIO && p_audio->codec_type != QT_CODEC_TYPE_TWOS_AUDIO )
         {
-            lsmash_sample_t *p_sample = isom_create_sample( frame->size );
+            lsmash_sample_t *p_sample = lsmash_create_sample( frame->size );
             MP4_FAIL_IF_ERR( !p_sample,
                              "failed to create a audio sample data.\n" );
             memcpy( p_sample->data, frame->data, frame->size );
@@ -467,7 +467,7 @@ static int write_audio_frames( mp4_hnd_t *p_mp4, double video_dts, int finish )
             p_sample->dts = p_sample->cts = audio_timestamp;
             p_sample->prop.sync_point = 1;
             p_sample->index = p_audio->i_sample_entry;
-            MP4_FAIL_IF_ERR( isom_write_sample( p_mp4->p_root, p_audio->i_track, p_sample ),
+            MP4_FAIL_IF_ERR( lsmash_write_sample( p_mp4->p_root, p_audio->i_track, p_sample ),
                              "failed to write a audio sample.\n" );
         }
         else
@@ -477,14 +477,14 @@ static int write_audio_frames( mp4_hnd_t *p_mp4, double video_dts, int finish )
             uint32_t bytes_per_frame = bytes_per_packet * p_audio->summary->channels;
             for( uint32_t offset = 0; offset < frame->size; offset += bytes_per_frame )
             {
-                lsmash_sample_t *p_sample = isom_create_sample( bytes_per_frame );
+                lsmash_sample_t *p_sample = lsmash_create_sample( bytes_per_frame );
                 MP4_FAIL_IF_ERR( !p_sample,
                                  "failed to create a audio sample data.\n" );
                 memcpy( p_sample->data, frame->data + offset, bytes_per_frame );
                 p_sample->cts = p_sample->dts = audio_timestamp++;
                 p_sample->prop.sync_point = 1;
                 p_sample->index = p_audio->i_sample_entry;
-                MP4_FAIL_IF_ERR( isom_write_sample( p_mp4->p_root, p_audio->i_track, p_sample ),
+                MP4_FAIL_IF_ERR( lsmash_write_sample( p_mp4->p_root, p_audio->i_track, p_sample ),
                                  "failed to write a audio sample.\n" );
             }
             x264_audio_free_frame( p_audio->encoder, frame );
@@ -534,7 +534,7 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
         {
             /* Flush the rest of samples and add the last sample_delta. */
             uint32_t last_delta = largest_pts - second_largest_pts;
-            MP4_LOG_IF_ERR( isom_flush_pooled_samples( p_mp4->p_root, p_mp4->i_track, (last_delta ? last_delta : 1) * p_mp4->i_time_inc ),
+            MP4_LOG_IF_ERR( lsmash_flush_pooled_samples( p_mp4->p_root, p_mp4->i_track, (last_delta ? last_delta : 1) * p_mp4->i_time_inc ),
                             "failed to flush the rest of samples.\n" );
 
             /*
@@ -549,18 +549,18 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
              * So, we add Edit Box here to avoid this implicit media_rate could distort track's presentation timestamps slightly.
              * Note: Any demuxers should follow the Edit List Box if it exists.
              */
-                     mvhd_timescale = isom_get_movie_timescale( p_mp4->p_root );
-            uint32_t mdhd_timescale = isom_get_media_timescale( p_mp4->p_root, p_mp4->i_track );
+                     mvhd_timescale = lsmash_get_movie_timescale( p_mp4->p_root );
+            uint32_t mdhd_timescale = lsmash_get_media_timescale( p_mp4->p_root, p_mp4->i_track );
             if( mdhd_timescale != 0 ) /* avoid zero division */
             {
                 actual_duration = (double)((largest_pts + last_delta) * p_mp4->i_time_inc) * mvhd_timescale / mdhd_timescale;
-                MP4_LOG_IF_ERR( isom_create_explicit_timeline_map( p_mp4->p_root, p_mp4->i_track, actual_duration, p_mp4->i_start_offset * p_mp4->i_time_inc, ISOM_EDIT_MODE_NORMAL ),
+                MP4_LOG_IF_ERR( lsmash_create_explicit_timeline_map( p_mp4->p_root, p_mp4->i_track, actual_duration, p_mp4->i_start_offset * p_mp4->i_time_inc, ISOM_EDIT_MODE_NORMAL ),
                                 "failed to set timeline map for video.\n" );
             }
             else
                 MP4_LOG_ERROR( "mdhd timescale is broken.\n" );
 
-            MP4_LOG_IF_ERR( isom_update_bitrate_info( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry ),
+            MP4_LOG_IF_ERR( lsmash_update_bitrate_info( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry ),
                             "failed to update bitrate information for video.\n" );
         }
 #if HAVE_ANY_AUDIO
@@ -579,17 +579,17 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
 #else
                 last_delta = p_audio->summary->samples_in_frame;
 #endif
-            MP4_LOG_IF_ERR( isom_flush_pooled_samples( p_mp4->p_root, p_audio->i_track, last_delta ),
+            MP4_LOG_IF_ERR( lsmash_flush_pooled_samples( p_mp4->p_root, p_audio->i_track, last_delta ),
                             "failed to set last sample's duration for audio.\n" );
-            MP4_LOG_IF_ERR( isom_create_explicit_timeline_map( p_mp4->p_root, p_audio->i_track, 0, 0, ISOM_EDIT_MODE_NORMAL ),
+            MP4_LOG_IF_ERR( lsmash_create_explicit_timeline_map( p_mp4->p_root, p_audio->i_track, 0, 0, ISOM_EDIT_MODE_NORMAL ),
                             "failed to set timeline map for audio.\n" );
-            MP4_LOG_IF_ERR( isom_update_bitrate_info( p_mp4->p_root, p_audio->i_track, p_audio->i_sample_entry ),
+            MP4_LOG_IF_ERR( lsmash_update_bitrate_info( p_mp4->p_root, p_audio->i_track, p_audio->i_sample_entry ),
                             "failed to update bitrate information for audio.\n" );
         }
 #endif
 
         if( p_mp4->psz_chapter && (p_mp4->major_brand != ISOM_BRAND_TYPE_QT) )
-            MP4_LOG_IF_ERR( isom_set_tyrant_chapter( p_mp4->p_root, p_mp4->psz_chapter ), "failed to set chapter list.\n" );
+            MP4_LOG_IF_ERR( lsmash_set_tyrant_chapter( p_mp4->p_root, p_mp4->psz_chapter ), "failed to set chapter list.\n" );
 
         if( !p_mp4->b_no_remux )
         {
@@ -598,16 +598,16 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
             remux_info.func = remux_callback;
             remux_info.buffer_size = 4*1024*1024; // 4MiB
             remux_info.param = &start;
-            MP4_LOG_IF_ERR( isom_finish_movie( p_mp4->p_root, &remux_info ), "failed to finish movie.\n" );
+            MP4_LOG_IF_ERR( lsmash_finish_movie( p_mp4->p_root, &remux_info ), "failed to finish movie.\n" );
         }
         else
-            MP4_LOG_IF_ERR( isom_finish_movie( p_mp4->p_root, NULL ), "failed to finish movie.\n" );
+            MP4_LOG_IF_ERR( lsmash_finish_movie( p_mp4->p_root, NULL ), "failed to finish movie.\n" );
 
         /* Write media data size here. */
-        MP4_LOG_IF_ERR( isom_write_mdat_size( p_mp4->p_root ), "failed to write mdat size.\n" );
+        MP4_LOG_IF_ERR( lsmash_write_mdat_size( p_mp4->p_root ), "failed to write mdat size.\n" );
     }
 
-    remove_mp4_hnd( p_mp4 ); /* including isom_destroy_root( p_mp4->p_root ); */
+    remove_mp4_hnd( p_mp4 ); /* including lsmash_destroy_root( p_mp4->p_root ); */
 
     return 0;
 }
@@ -647,7 +647,7 @@ static int open_file( char *psz_filename, hnd_t *p_handle, cli_output_opt_t *opt
     p_mp4->b_force_display_size = p_mp4->i_display_height || p_mp4->i_display_height;
     p_mp4->scaling_method = p_mp4->b_force_display_size ? ISOM_SCALING_METHOD_FILL : ISOM_SCALING_METHOD_MEET;
 
-    p_mp4->p_root = isom_open_movie( psz_filename, ISOM_FILE_MODE_WRITE );
+    p_mp4->p_root = lsmash_open_movie( psz_filename, ISOM_FILE_MODE_WRITE );
     MP4_FAIL_IF_ERR_EX( !p_mp4->p_root, "failed to create root.\n" );
 
     p_mp4->summary = calloc( 1, sizeof(lsmash_video_summary_t) );
@@ -745,32 +745,32 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
             p_mp4->b_brand_qt = 1;
         }
     }
-    MP4_FAIL_IF_ERR( isom_set_brands( p_mp4->p_root, p_mp4->major_brand, minor_version, brands, brand_count ),
+    MP4_FAIL_IF_ERR( lsmash_set_brands( p_mp4->p_root, p_mp4->major_brand, minor_version, brands, brand_count ),
                      "failed to set brands / ftyp.\n" );
 
     /* Set max duration per chunk. */
-    MP4_FAIL_IF_ERR( isom_set_max_chunk_duration( p_mp4->p_root, 0.5 ),
+    MP4_FAIL_IF_ERR( lsmash_set_max_chunk_duration( p_mp4->p_root, 0.5 ),
                      "failed to set max duration per chunk.\n" );
 
     /* Create a video track. */
-    p_mp4->i_track = isom_create_track( p_mp4->p_root, ISOM_MEDIA_HANDLER_TYPE_VIDEO_TRACK );
+    p_mp4->i_track = lsmash_create_track( p_mp4->p_root, ISOM_MEDIA_HANDLER_TYPE_VIDEO_TRACK );
     MP4_FAIL_IF_ERR_EX( !p_mp4->i_track, "failed to create a video track.\n" );
 
     /* Set timescale. */
-    MP4_FAIL_IF_ERR( isom_set_movie_timescale( p_mp4->p_root, 600 ),
+    MP4_FAIL_IF_ERR( lsmash_set_movie_timescale( p_mp4->p_root, 600 ),
                      "failed to set movie timescale.\n" );
-    MP4_FAIL_IF_ERR( isom_set_media_timescale( p_mp4->p_root, p_mp4->i_track, i_media_timescale ),
+    MP4_FAIL_IF_ERR( lsmash_set_media_timescale( p_mp4->p_root, p_mp4->i_track, i_media_timescale ),
                      "failed to set media timescale for video.\n" );
 
     /* Set handler name. */
-    MP4_FAIL_IF_ERR( isom_set_media_handler_name( p_mp4->p_root, p_mp4->i_track, "X264 Video Media Handler" ),
+    MP4_FAIL_IF_ERR( lsmash_set_media_handler_name( p_mp4->p_root, p_mp4->i_track, "X264 Video Media Handler" ),
                      "failed to set media hander name for video.\n" );
     if( p_mp4->b_brand_qt )
-        MP4_FAIL_IF_ERR( isom_set_data_handler_name( p_mp4->p_root, p_mp4->i_track, "X264 URL Data Handler" ),
+        MP4_FAIL_IF_ERR( lsmash_set_data_handler_name( p_mp4->p_root, p_mp4->i_track, "X264 URL Data Handler" ),
                          "failed to set data hander name for video.\n" );
 
     if( p_mp4->b_use_recovery )
-        MP4_FAIL_IF_ERR( isom_create_grouping( p_mp4->p_root, p_mp4->i_track, ISOM_GROUP_TYPE_ROLL ),
+        MP4_FAIL_IF_ERR( lsmash_create_grouping( p_mp4->p_root, p_mp4->i_track, ISOM_GROUP_TYPE_ROLL ),
                          "failed to create roll recovery grouping\n" );
 
     p_mp4->summary->width = p_param->i_width;
@@ -798,7 +798,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
                 p_mp4->summary->scaling_method = p_mp4->scaling_method;
         }
     }
-    MP4_FAIL_IF_ERR( isom_set_track_presentation_size( p_mp4->p_root, p_mp4->i_track, p_mp4->i_display_width, p_mp4->i_display_height ),
+    MP4_FAIL_IF_ERR( lsmash_set_track_presentation_size( p_mp4->p_root, p_mp4->i_track, p_mp4->i_display_width, p_mp4->i_display_height ),
                      "failed to set presentation size.\n" );
     if( p_mp4->b_brand_qt )
     {
@@ -808,19 +808,19 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     }
 
     /* Add a sample entry. */
-    p_mp4->i_sample_entry = isom_add_sample_entry( p_mp4->p_root, p_mp4->i_track, ISOM_CODEC_TYPE_AVC1_VIDEO, p_mp4->summary );
+    p_mp4->i_sample_entry = lsmash_add_sample_entry( p_mp4->p_root, p_mp4->i_track, ISOM_CODEC_TYPE_AVC1_VIDEO, p_mp4->summary );
     MP4_FAIL_IF_ERR( !p_mp4->i_sample_entry,
                      "failed to add sample entry for video.\n" );
 
     if( p_mp4->major_brand != ISOM_BRAND_TYPE_QT )
-        MP4_FAIL_IF_ERR( isom_add_btrt( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry ),
+        MP4_FAIL_IF_ERR( lsmash_add_btrt( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry ),
                          "failed to add btrt.\n" );
     if( p_mp4->b_brand_qt && !p_mp4->b_no_pasp )
-        MP4_FAIL_IF_ERR( isom_set_track_aperture_modes( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry ),
+        MP4_FAIL_IF_ERR( lsmash_set_track_aperture_modes( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry ),
                          "failed to set track aperture mode.\n" );
 
     if( p_mp4->psz_language )
-        MP4_FAIL_IF_ERR( isom_set_media_language( p_mp4->p_root, p_mp4->i_track, p_mp4->psz_language, 0 ),
+        MP4_FAIL_IF_ERR( lsmash_set_media_language( p_mp4->p_root, p_mp4->i_track, p_mp4->psz_language, 0 ),
                          "failed to set language for video.\n");
 
 #if HAVE_ANY_AUDIO
@@ -828,7 +828,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     if( p_audio )
     {
         /* Create a audio track. */
-        p_audio->i_track = isom_create_track( p_mp4->p_root, ISOM_MEDIA_HANDLER_TYPE_AUDIO_TRACK );
+        p_audio->i_track = lsmash_create_track( p_mp4->p_root, ISOM_MEDIA_HANDLER_TYPE_AUDIO_TRACK );
         MP4_FAIL_IF_ERR_EX( !p_audio->i_track, "failed to create a audio track.\n" );
 
 #if HAVE_AUDIO
@@ -887,7 +887,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
         }
 #else
         /*
-         * NOTE: Retrieve audio summary, which will be used for isom_add_sample_entry() as audio parameters.
+         * NOTE: Retrieve audio summary, which will be used for lsmash_add_sample_entry() as audio parameters.
          * Currently, our ADTS importer never recognize SBR (HE-AAC).
          * Thus, in this sample, if the source contains SBR, it'll be coded as implicit signaling for SBR.
          * If you want to use explicit signaling of SBR, change the sbr_mode in summary and
@@ -904,21 +904,21 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
         p_audio->codec_type = p_audio->summary->sample_type;
 #endif /* #if HAVE_AUDIO #else */
         p_audio->i_video_timescale = i_media_timescale;
-        MP4_FAIL_IF_ERR( isom_set_media_timescale( p_mp4->p_root, p_audio->i_track, p_audio->summary->frequency ),
+        MP4_FAIL_IF_ERR( lsmash_set_media_timescale( p_mp4->p_root, p_audio->i_track, p_audio->summary->frequency ),
                          "failed to set media timescale for audio.\n");
-        MP4_FAIL_IF_ERR( isom_set_media_handler_name( p_mp4->p_root, p_audio->i_track, "X264 Sound Media Handler" ),
+        MP4_FAIL_IF_ERR( lsmash_set_media_handler_name( p_mp4->p_root, p_audio->i_track, "X264 Sound Media Handler" ),
                          "failed to set media handler name for audio.\n" );
         if( p_mp4->b_brand_qt )
-            MP4_FAIL_IF_ERR( isom_set_data_handler_name( p_mp4->p_root, p_audio->i_track, "X264 URL Data Handler" ),
+            MP4_FAIL_IF_ERR( lsmash_set_data_handler_name( p_mp4->p_root, p_audio->i_track, "X264 URL Data Handler" ),
                              "failed to set data hander name for audio.\n" );
-        p_audio->i_sample_entry = isom_add_sample_entry( p_mp4->p_root, p_audio->i_track, p_audio->codec_type, p_audio->summary );
+        p_audio->i_sample_entry = lsmash_add_sample_entry( p_mp4->p_root, p_audio->i_track, p_audio->codec_type, p_audio->summary );
         MP4_FAIL_IF_ERR( !p_audio->i_sample_entry,
                          "failed to add sample_entry for audio.\n" );
         /* MP4AudioSampleEntry does not have btrt */
-//        MP4_FAIL_IF_ERR( isom_add_btrt( p_mp4->p_root, p_audio->i_track, p_audio->i_sample_entry ),
+//        MP4_FAIL_IF_ERR( lsmash_add_btrt( p_mp4->p_root, p_audio->i_track, p_audio->i_sample_entry ),
 //                         "failed to add btrt for audio.\n" );
         if( p_mp4->psz_language )
-            MP4_FAIL_IF_ERR( isom_set_media_language( p_mp4->p_root, p_audio->i_track, p_mp4->psz_language, 0 ),
+            MP4_FAIL_IF_ERR( lsmash_set_media_language( p_mp4->p_root, p_audio->i_track, p_mp4->psz_language, 0 ),
                              "failed to set language for audio track.\n" );
         if( p_mp4->major_brand == ISOM_BRAND_TYPE_QT )
             MP4_FAIL_IF_ERR( set_channel_layout( p_mp4 ), "failed to set channel layout for audio.\n" );
@@ -940,13 +940,13 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
     uint8_t *pps = p_nal[1].p_payload + 4;
     uint8_t *sei = p_nal[2].p_payload;
 
-    MP4_FAIL_IF_ERR( isom_set_avc_config( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry, 1, sps[1], sps[2], sps[3], 3, 1, BIT_DEPTH-8, BIT_DEPTH-8 ),
+    MP4_FAIL_IF_ERR( lsmash_set_avc_config( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry, 1, sps[1], sps[2], sps[3], 3, 1, BIT_DEPTH-8, BIT_DEPTH-8 ),
                      "failed to set avc config.\n" );
     /* SPS */
-    MP4_FAIL_IF_ERR( isom_add_sps_entry( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry, sps, sps_size ),
+    MP4_FAIL_IF_ERR( lsmash_add_sps_entry( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry, sps, sps_size ),
                      "failed to add sps.\n" );
     /* PPS */
-    MP4_FAIL_IF_ERR( isom_add_pps_entry( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry, pps, pps_size ),
+    MP4_FAIL_IF_ERR( lsmash_add_pps_entry( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry, pps, pps_size ),
                      "failed to add pps.\n" );
     /* SEI */
     p_mp4->p_sei_buffer = malloc( sei_size );
@@ -956,11 +956,11 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
     p_mp4->i_sei_size = sei_size;
 
     /* Write ftyp. */
-    MP4_FAIL_IF_ERR( isom_write_ftyp( p_mp4->p_root ),
+    MP4_FAIL_IF_ERR( lsmash_write_ftyp( p_mp4->p_root ),
                      "failed to write brands / ftyp.\n" );
 
     /* Write mdat header. */
-    MP4_FAIL_IF_ERR( isom_add_mdat( p_mp4->p_root ), "failed to add mdat.\n" );
+    MP4_FAIL_IF_ERR( lsmash_add_mdat( p_mp4->p_root ), "failed to add mdat.\n" );
 
     return sei_size + sps_size + pps_size;
 }
@@ -974,11 +974,11 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
     {
         p_mp4->i_start_offset = p_picture->i_dts * -1;
         if( p_mp4->psz_chapter && (p_mp4->b_brand_qt || p_mp4->b_brand_m4a) )
-            MP4_FAIL_IF_ERR( isom_create_reference_chapter_track( p_mp4->p_root, p_mp4->i_track, p_mp4->psz_chapter ),
+            MP4_FAIL_IF_ERR( lsmash_create_reference_chapter_track( p_mp4->p_root, p_mp4->i_track, p_mp4->psz_chapter ),
                              "failed to create reference chapter track.\n" );
     }
 
-    lsmash_sample_t *p_sample = isom_create_sample( i_size + p_mp4->i_sei_size );
+    lsmash_sample_t *p_sample = lsmash_create_sample( i_size + p_mp4->i_sei_size );
     MP4_FAIL_IF_ERR( !p_sample,
                      "failed to create a video sample data.\n" );
 
@@ -1042,7 +1042,7 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
                   p_sample->prop.leading == ISOM_SAMPLE_IS_UNDECODABLE_LEADING || p_sample->prop.leading == ISOM_SAMPLE_IS_DECODABLE_LEADING ? "yes" : "no" );
 
     /* Write data per sample. */
-    MP4_FAIL_IF_ERR( isom_write_sample( p_mp4->p_root, p_mp4->i_track, p_sample ),
+    MP4_FAIL_IF_ERR( lsmash_write_sample( p_mp4->p_root, p_mp4->i_track, p_sample ),
                      "failed to write a video frame.\n" );
 
     p_mp4->i_numframe++;
