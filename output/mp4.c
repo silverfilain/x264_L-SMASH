@@ -750,17 +750,17 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     MP4_FAIL_IF_ERR( lsmash_set_brands( p_mp4->p_root, p_mp4->major_brand, minor_version, brands, brand_count ),
                      "failed to set brands / ftyp.\n" );
 
-    /* Set max duration per chunk. */
-    MP4_FAIL_IF_ERR( lsmash_set_max_chunk_duration( p_mp4->p_root, 0.5 ),
-                     "failed to set max duration per chunk.\n" );
+    /* Set movie parameters. */
+    lsmash_movie_parameters_t movie_param;
+    lsmash_initialize_movie_parameters( &movie_param );
+    MP4_FAIL_IF_ERR( lsmash_set_movie_parameters( p_mp4->p_root, &movie_param ),
+                     "failed to set movie parameters.\n" );
 
     /* Create a video track. */
     p_mp4->i_track = lsmash_create_track( p_mp4->p_root, ISOM_MEDIA_HANDLER_TYPE_VIDEO_TRACK );
     MP4_FAIL_IF_ERR_EX( !p_mp4->i_track, "failed to create a video track.\n" );
 
-    /* Set timescale. */
-    MP4_FAIL_IF_ERR( lsmash_set_movie_timescale( p_mp4->p_root, 600 ),
-                     "failed to set movie timescale.\n" );
+    /* Set media timescale. */
     MP4_FAIL_IF_ERR( lsmash_set_media_timescale( p_mp4->p_root, p_mp4->i_track, i_media_timescale ),
                      "failed to set media timescale for video.\n" );
 
