@@ -760,21 +760,6 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     p_mp4->i_track = lsmash_create_track( p_mp4->p_root, ISOM_MEDIA_HANDLER_TYPE_VIDEO_TRACK );
     MP4_FAIL_IF_ERR_EX( !p_mp4->i_track, "failed to create a video track.\n" );
 
-    /* Set media timescale. */
-    MP4_FAIL_IF_ERR( lsmash_set_media_timescale( p_mp4->p_root, p_mp4->i_track, i_media_timescale ),
-                     "failed to set media timescale for video.\n" );
-
-    /* Set handler name. */
-    MP4_FAIL_IF_ERR( lsmash_set_media_handler_name( p_mp4->p_root, p_mp4->i_track, "X264 Video Media Handler" ),
-                     "failed to set media hander name for video.\n" );
-    if( p_mp4->b_brand_qt )
-        MP4_FAIL_IF_ERR( lsmash_set_data_handler_name( p_mp4->p_root, p_mp4->i_track, "X264 URL Data Handler" ),
-                         "failed to set data hander name for video.\n" );
-
-    if( p_mp4->b_use_recovery )
-        MP4_FAIL_IF_ERR( lsmash_create_grouping( p_mp4->p_root, p_mp4->i_track, ISOM_GROUP_TYPE_ROLL ),
-                         "failed to create roll recovery grouping\n" );
-
     p_mp4->summary->width = p_param->i_width;
     p_mp4->summary->height = p_param->i_height;
     if( !p_mp4->b_force_display_size )
@@ -800,8 +785,14 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
                 p_mp4->summary->scaling_method = p_mp4->scaling_method;
         }
     }
+    if( p_mp4->b_brand_qt )
+    {
+        p_mp4->summary->primaries = p_param->vui.i_colorprim;
+        p_mp4->summary->transfer = p_param->vui.i_transfer;
+        p_mp4->summary->matrix = p_param->vui.i_colmatrix;
+    }
 
-    /* Set track parameters. */
+    /* Set video track parameters. */
     lsmash_track_parameters_t track_param;
     lsmash_initialize_track_parameters( &track_param );
     lsmash_track_mode_code track_mode = ISOM_TRACK_ENABLED | ISOM_TRACK_IN_MOVIE | ISOM_TRACK_IN_PREVIEW;
@@ -811,14 +802,18 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     track_param.display_width = p_mp4->i_display_width;
     track_param.display_height = p_mp4->i_display_height;
     MP4_FAIL_IF_ERR( lsmash_set_track_parameters( p_mp4->p_root, p_mp4->i_track, &track_param ),
-                     "failed to set track parameters.\n" );
+                     "failed to set track parameters for video.\n" );
 
+    /* Set video media parameters. */
+    lsmash_media_parameters_t media_param;
+    lsmash_initialize_media_parameters( &media_param );
+    media_param.timescale = i_media_timescale;
+    media_param.ISO_language = p_mp4->psz_language;
+    media_param.media_handler_name = "X264 Video Media Handler";
     if( p_mp4->b_brand_qt )
-    {
-        p_mp4->summary->primaries = p_param->vui.i_colorprim;
-        p_mp4->summary->transfer = p_param->vui.i_transfer;
-        p_mp4->summary->matrix = p_param->vui.i_colmatrix;
-    }
+        media_param.data_handler_name = "X264 URL Data Handler";
+    MP4_FAIL_IF_ERR( lsmash_set_media_parameters( p_mp4->p_root, p_mp4->i_track, &media_param ),
+                     "failed to set media parameters for video.\n" );
 
     /* Add a sample entry. */
     p_mp4->i_sample_entry = lsmash_add_sample_entry( p_mp4->p_root, p_mp4->i_track, ISOM_CODEC_TYPE_AVC1_VIDEO, p_mp4->summary );
@@ -831,10 +826,9 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     if( p_mp4->b_brand_qt && !p_mp4->b_no_pasp )
         MP4_FAIL_IF_ERR( lsmash_set_track_aperture_modes( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry ),
                          "failed to set track aperture mode.\n" );
-
-    if( p_mp4->psz_language )
-        MP4_FAIL_IF_ERR( lsmash_set_media_language( p_mp4->p_root, p_mp4->i_track, p_mp4->psz_language, 0 ),
-                         "failed to set language for video.\n");
+    if( p_mp4->b_use_recovery )
+        MP4_FAIL_IF_ERR( lsmash_create_grouping( p_mp4->p_root, p_mp4->i_track, ISOM_GROUP_TYPE_ROLL ),
+                         "failed to create roll recovery grouping\n" );
 
 #if HAVE_ANY_AUDIO
     mp4_audio_hnd_t *p_audio = p_mp4->audio_hnd;
@@ -919,27 +913,30 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
         MP4_FAIL_IF_ERR( !p_audio->summary, "failed to duplicate summary information.\n" );
         p_audio->codec_type = p_audio->summary->sample_type;
 #endif /* #if HAVE_AUDIO #else */
+
+        /* Set sound track parameters. */
         lsmash_initialize_track_parameters( &track_param );
         track_param.mode = track_mode;
         MP4_FAIL_IF_ERR( lsmash_set_track_parameters( p_mp4->p_root, p_audio->i_track, &track_param ),
-                         "failed to set track parameters.\n" );
+                         "failed to set track parameters for audio.\n" );
         p_audio->i_video_timescale = i_media_timescale;
-        MP4_FAIL_IF_ERR( lsmash_set_media_timescale( p_mp4->p_root, p_audio->i_track, p_audio->summary->frequency ),
-                         "failed to set media timescale for audio.\n");
-        MP4_FAIL_IF_ERR( lsmash_set_media_handler_name( p_mp4->p_root, p_audio->i_track, "X264 Sound Media Handler" ),
-                         "failed to set media handler name for audio.\n" );
+
+        /* Set sound media parameters. */
+        lsmash_initialize_media_parameters( &media_param );
+        media_param.timescale = p_audio->summary->frequency;
+        media_param.ISO_language = p_mp4->psz_language;
+        media_param.media_handler_name = "X264 Sound Media Handler";
         if( p_mp4->b_brand_qt )
-            MP4_FAIL_IF_ERR( lsmash_set_data_handler_name( p_mp4->p_root, p_audio->i_track, "X264 URL Data Handler" ),
-                             "failed to set data hander name for audio.\n" );
+            media_param.data_handler_name = "X264 URL Data Handler";
+        MP4_FAIL_IF_ERR( lsmash_set_media_parameters( p_mp4->p_root, p_audio->i_track, &media_param ),
+                         "failed to set media parameters for audio.\n" );
+
         p_audio->i_sample_entry = lsmash_add_sample_entry( p_mp4->p_root, p_audio->i_track, p_audio->codec_type, p_audio->summary );
         MP4_FAIL_IF_ERR( !p_audio->i_sample_entry,
                          "failed to add sample_entry for audio.\n" );
         /* MP4AudioSampleEntry does not have btrt */
 //        MP4_FAIL_IF_ERR( lsmash_add_btrt( p_mp4->p_root, p_audio->i_track, p_audio->i_sample_entry ),
 //                         "failed to add btrt for audio.\n" );
-        if( p_mp4->psz_language )
-            MP4_FAIL_IF_ERR( lsmash_set_media_language( p_mp4->p_root, p_audio->i_track, p_mp4->psz_language, 0 ),
-                             "failed to set language for audio track.\n" );
         if( p_mp4->major_brand == ISOM_BRAND_TYPE_QT )
             MP4_FAIL_IF_ERR( set_channel_layout( p_mp4 ), "failed to set channel layout for audio.\n" );
     }
