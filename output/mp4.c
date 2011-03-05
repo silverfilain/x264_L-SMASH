@@ -800,8 +800,19 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
                 p_mp4->summary->scaling_method = p_mp4->scaling_method;
         }
     }
-    MP4_FAIL_IF_ERR( lsmash_set_track_presentation_size( p_mp4->p_root, p_mp4->i_track, p_mp4->i_display_width, p_mp4->i_display_height ),
-                     "failed to set presentation size.\n" );
+
+    /* Set track parameters. */
+    lsmash_track_parameters_t track_param;
+    lsmash_initialize_track_parameters( &track_param );
+    lsmash_track_mode_code track_mode = ISOM_TRACK_ENABLED | ISOM_TRACK_IN_MOVIE | ISOM_TRACK_IN_PREVIEW;
+    if( p_mp4->b_brand_qt )
+        track_mode |= QT_TRACK_IN_POSTER;
+    track_param.mode = track_mode;
+    track_param.display_width = p_mp4->i_display_width;
+    track_param.display_height = p_mp4->i_display_height;
+    MP4_FAIL_IF_ERR( lsmash_set_track_parameters( p_mp4->p_root, p_mp4->i_track, &track_param ),
+                     "failed to set track parameters.\n" );
+
     if( p_mp4->b_brand_qt )
     {
         p_mp4->summary->primaries = p_param->vui.i_colorprim;
@@ -908,6 +919,10 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
         MP4_FAIL_IF_ERR( !p_audio->summary, "failed to duplicate summary information.\n" );
         p_audio->codec_type = p_audio->summary->sample_type;
 #endif /* #if HAVE_AUDIO #else */
+        lsmash_initialize_track_parameters( &track_param );
+        track_param.mode = track_mode;
+        MP4_FAIL_IF_ERR( lsmash_set_track_parameters( p_mp4->p_root, p_audio->i_track, &track_param ),
+                         "failed to set track parameters.\n" );
         p_audio->i_video_timescale = i_media_timescale;
         MP4_FAIL_IF_ERR( lsmash_set_media_timescale( p_mp4->p_root, p_audio->i_track, p_audio->summary->frequency ),
                          "failed to set media timescale for audio.\n");
