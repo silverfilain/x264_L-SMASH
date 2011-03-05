@@ -964,9 +964,6 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
     MP4_FAIL_IF_ERR( lsmash_write_ftyp( p_mp4->p_root ),
                      "failed to write brands / ftyp.\n" );
 
-    /* Write mdat header. */
-    MP4_FAIL_IF_ERR( lsmash_add_mdat( p_mp4->p_root ), "failed to add mdat.\n" );
-
     return sei_size + sps_size + pps_size;
 }
 
