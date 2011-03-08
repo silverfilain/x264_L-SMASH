@@ -118,7 +118,7 @@ typedef struct
     int b_use_recovery;
     int i_recovery_frame_cnt;
     int i_max_frame_num;
-    uint64_t i_gop_head_cts;
+    uint64_t i_last_intra_cts;
     int b_no_remux;
     uint32_t i_display_width;
     uint32_t i_display_height;
@@ -720,7 +720,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
         brands[brand_count++] = ISOM_BRAND_TYPE_QT;
         p_mp4->i_brand_3gpp = 0;
         p_mp4->b_brand_m4a = 0;
-        p_mp4->b_use_recovery = 0;      /* Disable roll recovery. */
+        p_mp4->b_use_recovery = 0;      /* Disable sample grouping. */
     }
     else
     {
@@ -741,10 +741,13 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
         }
         if( p_mp4->b_use_recovery )
         {
-            brands[brand_count++] = ISOM_BRAND_TYPE_AVC1;   /* sdtp/sgpd/sbgp */
-            brands[brand_count++] = ISOM_BRAND_TYPE_ISO4;   /* cslg */
-            brands[brand_count++] = ISOM_BRAND_TYPE_QT;     /* tapt/cslg/stps/sdtp */
-            p_mp4->b_brand_qt = 1;
+            brands[brand_count++] = ISOM_BRAND_TYPE_AVC1;   /* sdtp/sgpd/sbgp/random access recovery point grouping */
+            if( p_param->i_open_gop )
+            {
+                brands[brand_count++] = ISOM_BRAND_TYPE_ISO6;   /* cslg/random access point grouping */
+                brands[brand_count++] = ISOM_BRAND_TYPE_QT;     /* tapt/cslg/stps/sdtp */
+                p_mp4->b_brand_qt = 1;
+            }
         }
     }
     MP4_FAIL_IF_ERR( lsmash_set_brands( p_mp4->p_root, p_mp4->major_brand, minor_version, brands, brand_count ),
@@ -826,9 +829,12 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     if( p_mp4->b_brand_qt && !p_mp4->b_no_pasp )
         MP4_FAIL_IF_ERR( lsmash_set_track_aperture_modes( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry ),
                          "failed to set track aperture mode.\n" );
-    if( p_mp4->b_use_recovery )
+    if( p_param->b_intra_refresh )
         MP4_FAIL_IF_ERR( lsmash_create_grouping( p_mp4->p_root, p_mp4->i_track, ISOM_GROUP_TYPE_ROLL ),
-                         "failed to create roll recovery grouping\n" );
+                         "failed to create random access recovery point sample grouping\n" );
+    if( p_param->i_open_gop )
+        MP4_FAIL_IF_ERR( lsmash_create_grouping( p_mp4->p_root, p_mp4->i_track, ISOM_GROUP_TYPE_RAP ),
+                         "failed to create random access point sample grouping\n" );
 
 #if HAVE_ANY_AUDIO
     mp4_audio_hnd_t *p_audio = p_mp4->audio_hnd;
@@ -1033,9 +1039,9 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
         p_sample->prop.redundant = ISOM_SAMPLE_HAS_NO_REDUNDANCY;
         if( p_mp4->b_use_recovery )
         {
-            p_sample->prop.leading = !IS_X264_TYPE_B( p_picture->i_type ) || p_sample->cts >= p_mp4->i_gop_head_cts ? ISOM_SAMPLE_IS_NOT_LEADING : ISOM_SAMPLE_IS_UNDECODABLE_LEADING;
-            if( p_sample->prop.sync_point || p_sample->prop.partial_sync )
-                p_mp4->i_gop_head_cts = p_sample->cts;
+            p_sample->prop.leading = !IS_X264_TYPE_B( p_picture->i_type ) || p_sample->cts >= p_mp4->i_last_intra_cts ? ISOM_SAMPLE_IS_NOT_LEADING : ISOM_SAMPLE_IS_UNDECODABLE_LEADING;
+            if( p_sample->prop.independent == ISOM_SAMPLE_IS_INDEPENDENT )
+                p_mp4->i_last_intra_cts = p_sample->cts;
             p_sample->prop.recovery.start_point = p_picture->b_keyframe && p_picture->i_type != X264_TYPE_IDR;   /* A picture with Recovery Point SEI */
             p_sample->prop.recovery.identifier = p_picture->i_frame_num % p_mp4->i_max_frame_num;
             if( p_sample->prop.recovery.start_point )
