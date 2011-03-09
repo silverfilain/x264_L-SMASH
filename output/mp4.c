@@ -724,9 +724,6 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     }
     else
     {
-        brands[brand_count++] = ISOM_BRAND_TYPE_ISOM;
-        brands[brand_count++] = ISOM_BRAND_TYPE_MP41;
-        brands[brand_count++] = ISOM_BRAND_TYPE_MP42;
         if( p_mp4->i_brand_3gpp >= 1 )
             brands[brand_count++] = ISOM_BRAND_TYPE_3GP6;
         if( p_mp4->i_brand_3gpp == 2 )
@@ -734,11 +731,14 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
             brands[brand_count++] = ISOM_BRAND_TYPE_3G2A;
             minor_version = 0x00010000;
         }
+        brands[brand_count++] = ISOM_BRAND_TYPE_MP42;
+        brands[brand_count++] = ISOM_BRAND_TYPE_MP41;
         if( p_mp4->b_brand_m4a )
         {
             brands[brand_count++] = ISOM_BRAND_TYPE_M4V;
             brands[brand_count++] = ISOM_BRAND_TYPE_M4A;
         }
+        brands[brand_count++] = ISOM_BRAND_TYPE_ISOM;
         if( p_mp4->b_use_recovery )
         {
             brands[brand_count++] = ISOM_BRAND_TYPE_AVC1;   /* sdtp/sgpd/sbgp/random access recovery point grouping */
