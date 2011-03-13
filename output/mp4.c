@@ -159,6 +159,7 @@ static void set_recovery_param( mp4_hnd_t *p_mp4, x264_param_t *p_param )
     p_mp4->i_max_frame_num = 1 << i_log2_max_frame_num;
 }
 
+#if HAVE_ANY_AUDIO
 static int set_channel_layout( mp4_hnd_t *p_mp4 )
 {
 #define CH_LAYOUT_MONO              (CH_FRONT_CENTER)
@@ -259,6 +260,7 @@ static int set_channel_layout( mp4_hnd_t *p_mp4 )
     }
     return lsmash_set_channel_layout( p_mp4->p_root, p_audio->i_track, p_audio->i_sample_entry, layout_tag, bitmap );
 }
+#endif
 
 static void remove_mp4_hnd( hnd_t handle )
 {
