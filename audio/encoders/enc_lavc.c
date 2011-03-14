@@ -73,24 +73,6 @@ static const struct {
 };
 
 #define ISCODEC( name ) (!strcmp( h->info.codec_name, #name ))
-#define ISLPCM (!strcmp( h->info.codec_name, "pcm_f32be" ) \
-             || !strcmp( h->info.codec_name, "pcm_f32le" ) \
-             || !strcmp( h->info.codec_name, "pcm_f64be" ) \
-             || !strcmp( h->info.codec_name, "pcm_f64le" ) \
-             || !strcmp( h->info.codec_name, "pcm_s16be" ) \
-             || !strcmp( h->info.codec_name, "pcm_s16le" ) \
-             || !strcmp( h->info.codec_name, "pcm_s24be" ) \
-             || !strcmp( h->info.codec_name, "pcm_s24le" ) \
-             || !strcmp( h->info.codec_name, "pcm_s32be" ) \
-             || !strcmp( h->info.codec_name, "pcm_s32le" ) \
-             || !strcmp( h->info.codec_name, "pcm_s8" ) \
-             || !strcmp( h->info.codec_name, "pcm_u16be" ) \
-             || !strcmp( h->info.codec_name, "pcm_u16le" ) \
-             || !strcmp( h->info.codec_name, "pcm_u24be" ) \
-             || !strcmp( h->info.codec_name, "pcm_u24le" ) \
-             || !strcmp( h->info.codec_name, "pcm_u32be" ) \
-             || !strcmp( h->info.codec_name, "pcm_u32le" ) \
-             || !strcmp( h->info.codec_name, "pcm_u8" ))
 
 static hnd_t init( hnd_t filter_chain, const char *opt_str )
 {
