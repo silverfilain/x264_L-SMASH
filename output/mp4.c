@@ -365,6 +365,12 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
 
     switch( p_mp4->major_brand )
     {
+        case ISOM_BRAND_TYPE_3GP6 :
+        case ISOM_BRAND_TYPE_3G2A :
+            if( !strcmp( info->codec_name, "amrnb" ) )
+                p_audio->codec_type = ISOM_CODEC_TYPE_SAMR_AUDIO;
+            else if( !strcmp( info->codec_name, "amrwb" ) )
+                p_audio->codec_type = ISOM_CODEC_TYPE_SAWB_AUDIO;
         case ISOM_BRAND_TYPE_MP42 :
             if( !strcmp( info->codec_name, "aac" ) )
             {
@@ -388,13 +394,6 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
                 p_audio->codec_type = ISOM_CODEC_TYPE_ALAC_AUDIO;
                 p_mp4->b_brand_m4a = 1;
             }
-            break;
-        case ISOM_BRAND_TYPE_3GP6 :
-        case ISOM_BRAND_TYPE_3G2A :
-            if( !strcmp( info->codec_name, "amrnb" ) )
-                p_audio->codec_type = ISOM_CODEC_TYPE_SAMR_AUDIO;
-            else if( !strcmp( info->codec_name, "amrwb" ) )
-                p_audio->codec_type = ISOM_CODEC_TYPE_SAWB_AUDIO;
             break;
         case ISOM_BRAND_TYPE_QT :
             if( !strcmp( info->codec_name, "aac" ) )
