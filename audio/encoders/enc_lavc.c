@@ -36,6 +36,7 @@ static int is_encoder_available( const char *name, void **priv )
 
 #define MODE_VBR     0x01
 #define MODE_BITRATE 0x02
+#define MODE_IGNORED MODE_VBR|MODE_BITRATE
 
 static const struct {
     enum CodecID id;
@@ -48,12 +49,48 @@ static const struct {
     { CODEC_ID_VORBIS,  "vorbis",  MODE_VBR,              50 },
     { CODEC_ID_AAC,     "aac",     MODE_BITRATE,          96 },
     { CODEC_ID_AC3,     "ac3",     MODE_BITRATE,          96 },
-    { CODEC_ID_ALAC,    "alac",    MODE_VBR|MODE_BITRATE, 64 }, //alac ignores mode & bitrate
+    { CODEC_ID_ALAC,    "alac",    MODE_IGNORED,          64 },
     { CODEC_ID_AMR_NB,  "amrnb",   MODE_BITRATE,          12.2 },
+    { CODEC_ID_PCM_F32BE, "pcm_f32be", MODE_IGNORED,      0 },
+    { CODEC_ID_PCM_F32LE, "pcm_f32le", MODE_IGNORED,      0 },
+    { CODEC_ID_PCM_F64BE, "pcm_f64be", MODE_IGNORED,      0 },
+    { CODEC_ID_PCM_F64LE, "pcm_f64le", MODE_IGNORED,      0 },
+    { CODEC_ID_PCM_S16BE, "pcm_s16be", MODE_IGNORED,      0 },
+    { CODEC_ID_PCM_S16LE, "pcm_s16le", MODE_IGNORED,      0 },
+    { CODEC_ID_PCM_S24BE, "pcm_s24be", MODE_IGNORED,      0 },
+    { CODEC_ID_PCM_S24LE, "pcm_s24le", MODE_IGNORED,      0 },
+    { CODEC_ID_PCM_S32BE, "pcm_s32be", MODE_IGNORED,      0 },
+    { CODEC_ID_PCM_S32LE, "pcm_s32le", MODE_IGNORED,      0 },
+    { CODEC_ID_PCM_S8,    "pcm_s8",    MODE_IGNORED,      0 },
+    { CODEC_ID_PCM_U16BE, "pcm_u16be", MODE_IGNORED,      0 },
+    { CODEC_ID_PCM_U16LE, "pcm_u16le", MODE_IGNORED,      0 },
+    { CODEC_ID_PCM_U24BE, "pcm_u24be", MODE_IGNORED,      0 },
+    { CODEC_ID_PCM_U24LE, "pcm_u24le", MODE_IGNORED,      0 },
+    { CODEC_ID_PCM_U32BE, "pcm_u32be", MODE_IGNORED,      0 },
+    { CODEC_ID_PCM_U32LE, "pcm_u32le", MODE_IGNORED,      0 },
+    { CODEC_ID_PCM_U8,    "pcm_u8",    MODE_IGNORED,      0 },
     { CODEC_ID_NONE,    NULL, },
 };
 
 #define ISCODEC( name ) (!strcmp( h->info.codec_name, #name ))
+#define ISLPCM (!strcmp( h->info.codec_name, "pcm_f32be" ) \
+             || !strcmp( h->info.codec_name, "pcm_f32le" ) \
+             || !strcmp( h->info.codec_name, "pcm_f64be" ) \
+             || !strcmp( h->info.codec_name, "pcm_f64le" ) \
+             || !strcmp( h->info.codec_name, "pcm_s16be" ) \
+             || !strcmp( h->info.codec_name, "pcm_s16le" ) \
+             || !strcmp( h->info.codec_name, "pcm_s24be" ) \
+             || !strcmp( h->info.codec_name, "pcm_s24le" ) \
+             || !strcmp( h->info.codec_name, "pcm_s32be" ) \
+             || !strcmp( h->info.codec_name, "pcm_s32le" ) \
+             || !strcmp( h->info.codec_name, "pcm_s8" ) \
+             || !strcmp( h->info.codec_name, "pcm_u16be" ) \
+             || !strcmp( h->info.codec_name, "pcm_u16le" ) \
+             || !strcmp( h->info.codec_name, "pcm_u24be" ) \
+             || !strcmp( h->info.codec_name, "pcm_u24le" ) \
+             || !strcmp( h->info.codec_name, "pcm_u32be" ) \
+             || !strcmp( h->info.codec_name, "pcm_u32le" ) \
+             || !strcmp( h->info.codec_name, "pcm_u8" ))
 
 static hnd_t init( hnd_t filter_chain, const char *opt_str )
 {
@@ -152,15 +189,20 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     h->info.extradata       = h->ctx->extradata;
     h->info.extradata_size  = h->ctx->extradata_size;
     h->info.framelen        = h->ctx->frame_size;
-    h->info.chansize        = av_get_bits_per_sample_format( h->ctx->sample_fmt ) / 8;
-    h->info.samplesize      = h->info.chansize * h->info.channels;
-    h->info.framesize       = h->info.framelen * h->info.samplesize;
     h->info.timebase        = (timebase_t) { 1, h->ctx->sample_rate };
     h->info.last_delta      = h->info.framelen;
+    h->info.chansize        = IS_LPCM_CODEC_ID( h->ctx->codec->id )
+                            ? av_get_bits_per_sample( h->ctx->codec->id ) / 8
+                            : av_get_bits_per_sample_format( h->ctx->sample_fmt ) / 8;
+    h->info.samplesize      = h->info.chansize * h->info.channels;
+    h->info.framesize       = h->info.framelen * h->info.samplesize;
 
-    h->buf_size = !ISCODEC( alac )
-                      ? FF_MIN_BUFFER_SIZE * 3 / 2
-                      : 2 * (8 + h->info.framesize);
+    if( ISCODEC( alac ) )
+        h->buf_size = 2 * (8 + h->info.framesize);
+    else if( IS_LPCM_CODEC_ID( h->ctx->codec->id ) )
+        h->buf_size = h->info.framesize;
+    else
+        h->buf_size = FF_MIN_BUFFER_SIZE * 3 / 2;
     h->last_dts = INVALID_DTS;
 
     x264_cli_log( "audio", X264_LOG_INFO, "opened libavcodec's %s encoder (%s%.1f%s, %dbits, %dch, %dhz)\n", codec->name,
@@ -228,7 +270,7 @@ static audio_packet_t *get_next_packet( hnd_t handle )
         h->last_sample += smp->samplecount;
 
         void *indata   = x264_af_interleave2( h->smpfmt, smp->samples, smp->channels, smp->samplecount );
-        out->size       = avcodec_encode_audio( h->ctx, out->data, h->buf_size, indata );
+        out->size      = avcodec_encode_audio( h->ctx, out->data, h->buf_size, indata );
 
         x264_af_free_packet( smp );
     }

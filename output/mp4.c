@@ -339,7 +339,11 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
         char audio_params[MAX_ARGS];
         const char *used_enc;
         /* libopencore-amr does not have AMR-WB encoder yet, so we can't use it. */
-        const audio_encoder_t *encoder = x264_select_audio_encoder( audio_enc, (char*[]){ "aac", "mp3", "ac3", "alac", "raw", "amrnb", "amrwb", NULL }, &used_enc );
+        char *codec_list[] = { "aac", "mp3", "ac3", "alac", "raw", "amrnb", "amrwb",
+                               "pcm_f32be", "pcm_f32le", "pcm_f64be", "pcm_f64le",
+                               "pcm_s16be", "pcm_s16le", "pcm_s24be", "pcm_s24le",
+                               "pcm_s32be", "pcm_s32le", "pcm_s8", "pcm_u8", NULL };
+        const audio_encoder_t *encoder = x264_select_audio_encoder( audio_enc, codec_list, &used_enc );
         MP4_FAIL_IF_ERR( !encoder, "unable to select audio encoder.\n" );
 
         snprintf( audio_params, MAX_ARGS, "%s,codec=%s", audio_parameters, used_enc );
@@ -352,53 +356,154 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
     audio_info_t *info = p_audio->info = x264_audio_encoder_info( henc );
     p_audio->b_copy = copy;
 
-    if( !strcmp( info->codec_name, "aac" ) )
+    p_audio->summary = calloc( 1, sizeof(lsmash_audio_summary_t) );
+    if( !p_audio->summary )
     {
-        p_audio->codec_type = ISOM_CODEC_TYPE_MP4A_AUDIO;
-        audio_aac_info_t *aacinfo = info->opaque;
-        if( aacinfo )
-            p_audio->has_sbr = aacinfo->has_sbr;
-        else
-            p_audio->has_sbr = 0; // SBR presence isn't specified, so assume implicit signaling
-        p_mp4->b_brand_m4a = 1;
+        MP4_LOG_ERROR( "failed to allocate memory for summary information of audio.\n" );
+        goto error;
     }
-    if( !strcmp( info->codec_name, "als" ) )
-        p_audio->codec_type = ISOM_CODEC_TYPE_MP4A_AUDIO;
-    else if( ( !strcmp( info->codec_name, "mp3" ) || !strcmp( info->codec_name, "mp2" ) || !strcmp( info->codec_name, "mp1" ) )
-             && info->samplerate >= 16000 ) /* freq <16khz is MPEG-2.5. */
-        p_audio->codec_type = ISOM_CODEC_TYPE_MP4A_AUDIO;
-    else if( !strcmp( info->codec_name, "ac3" ) )
-        p_audio->codec_type = ISOM_CODEC_TYPE_AC_3_AUDIO;
-    else if( !strcmp( info->codec_name, "alac" ) )
-    {
-        p_audio->codec_type = ISOM_CODEC_TYPE_ALAC_AUDIO;
-        p_mp4->b_brand_m4a = 1;
-    }
-    else if( !strcmp( info->codec_name, "raw" ) )
-#ifdef WORDS_BIGENDIAN
-        p_audio->codec_type = QT_CODEC_TYPE_TWOS_AUDIO;
-#else
-        p_audio->codec_type = QT_CODEC_TYPE_SOWT_AUDIO;
-#endif
-    else if( !strcmp( info->codec_name, "amrnb" ) )
-        p_audio->codec_type = ISOM_CODEC_TYPE_SAMR_AUDIO;
-    else if( !strcmp( info->codec_name, "amrwb" ) )
-        p_audio->codec_type = ISOM_CODEC_TYPE_SAWB_AUDIO;
 
-    if( !p_audio->codec_type ||
-        (p_mp4->major_brand == ISOM_BRAND_TYPE_QT &&
-        (p_audio->codec_type != QT_CODEC_TYPE_TWOS_AUDIO && p_audio->codec_type != QT_CODEC_TYPE_SOWT_AUDIO &&
-        p_audio->codec_type != ISOM_CODEC_TYPE_MP4A_AUDIO)) )
+    switch( p_mp4->major_brand )
+    {
+        case ISOM_BRAND_TYPE_MP42 :
+            if( !strcmp( info->codec_name, "aac" ) )
+            {
+                p_audio->codec_type = ISOM_CODEC_TYPE_MP4A_AUDIO;
+                audio_aac_info_t *aacinfo = info->opaque;
+                if( aacinfo )
+                    p_audio->has_sbr = aacinfo->has_sbr;
+                else
+                    p_audio->has_sbr = 0; // SBR presence isn't specified, so assume implicit signaling
+                p_mp4->b_brand_m4a = 1;
+            }
+            if( !strcmp( info->codec_name, "als" ) )
+                p_audio->codec_type = ISOM_CODEC_TYPE_MP4A_AUDIO;
+            else if( ( !strcmp( info->codec_name, "mp3" ) || !strcmp( info->codec_name, "mp2" ) || !strcmp( info->codec_name, "mp1" ) )
+                     && info->samplerate >= 16000 ) /* freq <16khz is MPEG-2.5. */
+                p_audio->codec_type = ISOM_CODEC_TYPE_MP4A_AUDIO;
+            else if( !strcmp( info->codec_name, "ac3" ) )
+                p_audio->codec_type = ISOM_CODEC_TYPE_AC_3_AUDIO;
+            else if( !strcmp( info->codec_name, "alac" ) )
+            {
+                p_audio->codec_type = ISOM_CODEC_TYPE_ALAC_AUDIO;
+                p_mp4->b_brand_m4a = 1;
+            }
+            break;
+        case ISOM_BRAND_TYPE_3GP6 :
+        case ISOM_BRAND_TYPE_3G2A :
+            if( !strcmp( info->codec_name, "amrnb" ) )
+                p_audio->codec_type = ISOM_CODEC_TYPE_SAMR_AUDIO;
+            else if( !strcmp( info->codec_name, "amrwb" ) )
+                p_audio->codec_type = ISOM_CODEC_TYPE_SAWB_AUDIO;
+            break;
+        case ISOM_BRAND_TYPE_QT :
+            if( !strcmp( info->codec_name, "aac" ) )
+            {
+                p_audio->codec_type = ISOM_CODEC_TYPE_MP4A_AUDIO;
+                audio_aac_info_t *aacinfo = info->opaque;
+                if( aacinfo )
+                    p_audio->has_sbr = aacinfo->has_sbr;
+                else
+                    p_audio->has_sbr = 0; // SBR presence isn't specified, so assume implicit signaling
+            }
+            else if( !strcmp( info->codec_name, "raw" ) )
+            {
+#ifdef WORDS_BIGENDIAN
+                p_audio->codec_type = QT_CODEC_TYPE_TWOS_AUDIO;
+                p_audio->summary->endianness    = 0;
+#else
+                p_audio->codec_type = QT_CODEC_TYPE_SOWT_AUDIO;
+                p_audio->summary->endianness    = 1;
+#endif
+                p_audio->summary->sample_format = 0;
+                p_audio->summary->signedness    = 1;
+            }
+            else if( p_audio->b_copy )
+                break;      /* We haven't supported LPCM copying yet. */
+            else if( !strcmp( info->codec_name, "pcm_f64be" ) )
+            {
+                p_audio->codec_type = QT_CODEC_TYPE_FL64_AUDIO;
+                p_audio->summary->sample_format = 1;
+                p_audio->summary->endianness    = 0;
+            }
+            else if( !strcmp( info->codec_name, "pcm_f64le" ) )
+            {
+                p_audio->codec_type = QT_CODEC_TYPE_FL64_AUDIO;
+                p_audio->summary->sample_format = 1;
+                p_audio->summary->endianness    = 1;
+            }
+            else if( !strcmp( info->codec_name, "pcm_f32be" ) )
+            {
+                p_audio->codec_type = QT_CODEC_TYPE_FL32_AUDIO;
+                p_audio->summary->sample_format = 1;
+                p_audio->summary->endianness    = 0;
+            }
+            else if( !strcmp( info->codec_name, "pcm_f32le" ) )
+            {
+                p_audio->codec_type = QT_CODEC_TYPE_FL32_AUDIO;
+                p_audio->summary->sample_format = 1;
+                p_audio->summary->endianness    = 1;
+            }
+            else if( !strcmp( info->codec_name, "pcm_s16be" ) || !strcmp( info->codec_name, "pcm_s8" ) )
+            {
+                p_audio->codec_type = QT_CODEC_TYPE_TWOS_AUDIO;
+                p_audio->summary->sample_format = 0;
+                p_audio->summary->endianness    = 0;
+                p_audio->summary->signedness    = 1;
+            }
+            else if( !strcmp( info->codec_name, "pcm_s16le" ) )
+            {
+                p_audio->codec_type = QT_CODEC_TYPE_SOWT_AUDIO;
+                p_audio->summary->sample_format = 0;
+                p_audio->summary->endianness    = 1;
+                p_audio->summary->signedness    = 1;
+            }
+            else if( !strcmp( info->codec_name, "pcm_s24be" ) )
+            {
+                p_audio->codec_type = QT_CODEC_TYPE_IN24_AUDIO;
+                p_audio->summary->sample_format = 0;
+                p_audio->summary->endianness    = 0;
+                p_audio->summary->signedness    = 1;
+            }
+            else if( !strcmp( info->codec_name, "pcm_s24le" ) )
+            {
+                p_audio->codec_type = QT_CODEC_TYPE_IN24_AUDIO;
+                p_audio->summary->sample_format = 0;
+                p_audio->summary->endianness    = 1;
+                p_audio->summary->signedness    = 1;
+            }
+            else if( !strcmp( info->codec_name, "pcm_s32be" ) )
+            {
+                p_audio->codec_type = QT_CODEC_TYPE_IN32_AUDIO;
+                p_audio->summary->sample_format = 0;
+                p_audio->summary->endianness    = 0;
+                p_audio->summary->signedness    = 1;
+            }
+            else if( !strcmp( info->codec_name, "pcm_s32le" ) )
+            {
+                p_audio->codec_type = QT_CODEC_TYPE_IN32_AUDIO;
+                p_audio->summary->sample_format = 0;
+                p_audio->summary->endianness    = 1;
+                p_audio->summary->signedness    = 1;
+            }
+            else if( !strcmp( info->codec_name, "pcm_u8" ) )
+            {
+                p_audio->codec_type = QT_CODEC_TYPE_RAW_AUDIO;
+                p_audio->summary->sample_format = 0;
+                p_audio->summary->signedness    = 0;
+            }
+            break;
+        default :
+            break;
+    }
+
+    if( !p_audio->codec_type )
     {
         MP4_LOG_ERROR( "unsupported audio codec '%s'.\n", info->codec_name );
         goto error;
     }
 
     p_audio->encoder = henc;
-
-    p_audio->summary = calloc( 1, sizeof(lsmash_audio_summary_t) );
-    MP4_FAIL_IF_ERR( !p_audio->summary,
-                     "failed to allocate memory for summary information of audio.\n" );
 
     return 1;
 
@@ -461,7 +566,10 @@ static int write_audio_frames( mp4_hnd_t *p_mp4, double video_dts, int finish )
         MP4_FAIL_IF_ERR( lsmash_write_sample( p_mp4->p_root, p_audio->i_track, p_sample ),
                          "failed to write a audio sample.\n" );
 #endif
-        if( p_audio->codec_type != QT_CODEC_TYPE_SOWT_AUDIO && p_audio->codec_type != QT_CODEC_TYPE_TWOS_AUDIO )
+        if( p_audio->codec_type != QT_CODEC_TYPE_SOWT_AUDIO && p_audio->codec_type != QT_CODEC_TYPE_TWOS_AUDIO &&
+            p_audio->codec_type != QT_CODEC_TYPE_IN24_AUDIO && p_audio->codec_type != QT_CODEC_TYPE_IN32_AUDIO &&
+            p_audio->codec_type != QT_CODEC_TYPE_FL32_AUDIO && p_audio->codec_type != QT_CODEC_TYPE_FL64_AUDIO &&
+            p_audio->codec_type != QT_CODEC_TYPE_LPCM_AUDIO )
         {
             lsmash_sample_t *p_sample = lsmash_create_sample( frame->size );
             MP4_FAIL_IF_ERR( !p_sample,
@@ -885,16 +993,6 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
                 p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_NONE;
                 MP4_FAIL_IF_ERR( mp4sys_amr_create_damr( p_audio->summary ),
                                  "failed to create AMR specific info.\n" );
-                break;
-            case QT_CODEC_TYPE_TWOS_AUDIO :
-                p_audio->summary->sample_format = 0;    /* integer */
-                p_audio->summary->endianness = 0;       /* big endian */
-                p_audio->summary->signedness = 1;       /* signed */
-                break;
-            case QT_CODEC_TYPE_SOWT_AUDIO :
-                p_audio->summary->sample_format = 0;    /* integer */
-                p_audio->summary->endianness = 1;       /* little endian */
-                p_audio->summary->signedness = 1;       /* signed */
                 break;
             default :
                 p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_NONE;

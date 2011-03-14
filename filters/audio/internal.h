@@ -22,6 +22,8 @@
         *handle = h;                                            \
     } while( 0 )
 
+#define IS_LPCM_CODEC_ID( id ) ((id) >= 0x10000 && (id) < 0x11000)
+
 // Generic audio handle (used to access fields from AUDIO_FILTER_COMMON)
 typedef struct audio_hnd_t
 {
