@@ -187,75 +187,48 @@ static int set_channel_layout( mp4_hnd_t *p_mp4 )
         layout_tag = QT_CHANNEL_LAYOUT_USE_CHANNEL_BITMAP;
         bitmap = p_audio->info->chanlayout;
         /* Avisynth input doesn't return channel order, so we guess it from the number of channels. */
-        if( !p_audio->info->chanlayout )
-            switch( p_audio->info->channels )
-            {
-                case 1 :
-                    layout_tag = QT_CHANNEL_LAYOUT_ITU_1_0;
-                    break;
-                case 2 :
-                    layout_tag = QT_CHANNEL_LAYOUT_ITU_2_0;
-                    break;
-                case 3 :
-                    layout_tag = QT_CHANNEL_LAYOUT_ITU_3_0;
-                    break;
-                case 4 :
-                    layout_tag = QT_CHANNEL_LAYOUT_ITU_3_1;
-                    break;
-                case 5 :
-                    layout_tag = QT_CHANNEL_LAYOUT_ITU_3_2;
-                    break;
-                case 6 :
-                    layout_tag = QT_CHANNEL_LAYOUT_ITU_3_2_1;
-                    break;
-                case 8 :
-                    layout_tag = QT_CHANNEL_LAYOUT_ITU_3_4_1;
-                    break;
-                default :
-                    break;
-            }
+        if( !p_audio->info->chanlayout && p_audio->info->channels <= 8 )
+        {
+            lsmash_channel_layout_tag_code channel_table[] = {
+                QT_CHANNEL_LAYOUT_USE_CHANNEL_BITMAP,
+                QT_CHANNEL_LAYOUT_ITU_1_0,
+                QT_CHANNEL_LAYOUT_ITU_2_0,
+                QT_CHANNEL_LAYOUT_ITU_3_0,
+                QT_CHANNEL_LAYOUT_ITU_3_1,
+                QT_CHANNEL_LAYOUT_ITU_3_2,
+                QT_CHANNEL_LAYOUT_ITU_3_2_1,
+                QT_CHANNEL_LAYOUT_USE_CHANNEL_BITMAP,
+                QT_CHANNEL_LAYOUT_ITU_3_4_1
+            };
+            layout_tag = channel_table[p_audio->info->channels];
+        }
     }
-    else
+    else if( p_audio->codec_type == ISOM_CODEC_TYPE_MP4A_AUDIO )
     {
         /* Channel order is unknown, so we guess it from ffmpeg's channel layout flags. */
-        if( p_audio->codec_type == ISOM_CODEC_TYPE_MP4A_AUDIO )
-            switch( p_audio->info->chanlayout )
+        typedef struct { lsmash_channel_bitmap_code bitmap; lsmash_channel_layout_tag_code layout_tag; } qt_channel_map;
+        qt_channel_map channel_table[] = {
+            { CH_LAYOUT_MONO,           QT_CHANNEL_LAYOUT_MONO },
+            { CH_LAYOUT_STEREO,         QT_CHANNEL_LAYOUT_STEREO },
+            { CH_LAYOUT_STEREO_DOWNMIX, QT_CHANNEL_LAYOUT_STEREO },
+            { CH_LAYOUT_2_1,            QT_CHANNEL_LAYOUT_AAC_3_0 },
+            { CH_LAYOUT_SURROUND,       QT_CHANNEL_LAYOUT_AAC_3_0 },
+            { CH_LAYOUT_4POINT0,        QT_CHANNEL_LAYOUT_AAC_4_0 },
+            { CH_LAYOUT_2_2,            QT_CHANNEL_LAYOUT_AAC_QUADRAPHONIC },
+            { CH_LAYOUT_QUAD,           QT_CHANNEL_LAYOUT_AAC_QUADRAPHONIC },
+            { CH_LAYOUT_5POINT0,        QT_CHANNEL_LAYOUT_AAC_5_0 },
+            { CH_LAYOUT_5POINT0_BACK,   QT_CHANNEL_LAYOUT_AAC_5_0 },
+            { CH_LAYOUT_5POINT1,        QT_CHANNEL_LAYOUT_AAC_5_1 },
+            { CH_LAYOUT_5POINT1_BACK,   QT_CHANNEL_LAYOUT_AAC_5_1 },
+            { CH_LAYOUT_7POINT0,        QT_CHANNEL_LAYOUT_AAC_7_0 },
+            { CH_LAYOUT_7POINT1,        QT_CHANNEL_LAYOUT_AAC_7_1 },
+            { CH_LAYOUT_7POINT1_WIDE,   QT_CHANNEL_LAYOUT_AAC_7_1 }
+        };
+        for( int i = 0; i < sizeof(channel_table)/sizeof(qt_channel_map); i++ )
+            if( p_audio->info->chanlayout == channel_table[i].bitmap )
             {
-                case CH_LAYOUT_MONO :
-                    layout_tag = QT_CHANNEL_LAYOUT_MONO;
-                    break;
-                case CH_LAYOUT_STEREO :
-                case CH_LAYOUT_STEREO_DOWNMIX :
-                    layout_tag = QT_CHANNEL_LAYOUT_STEREO;
-                    break;
-                case CH_LAYOUT_2_1 :
-                case CH_LAYOUT_SURROUND :
-                    layout_tag = QT_CHANNEL_LAYOUT_AAC_3_0;
-                    break;
-                case CH_LAYOUT_4POINT0 :
-                    layout_tag = QT_CHANNEL_LAYOUT_AAC_4_0;
-                    break;
-                case CH_LAYOUT_2_2 :
-                case CH_LAYOUT_QUAD :
-                    layout_tag = QT_CHANNEL_LAYOUT_AAC_QUADRAPHONIC;
-                    break;
-                case CH_LAYOUT_5POINT0 :
-                case CH_LAYOUT_5POINT0_BACK :
-                    layout_tag = QT_CHANNEL_LAYOUT_AAC_5_0;
-                    break;
-                case CH_LAYOUT_5POINT1 :
-                case CH_LAYOUT_5POINT1_BACK :
-                    layout_tag = QT_CHANNEL_LAYOUT_AAC_5_1;
-                    break;
-                case CH_LAYOUT_7POINT0 :
-                    layout_tag = QT_CHANNEL_LAYOUT_AAC_7_0;
-                    break;
-                case CH_LAYOUT_7POINT1 :
-                case CH_LAYOUT_7POINT1_WIDE :
-                    layout_tag = QT_CHANNEL_LAYOUT_AAC_7_1;
-                    break;
-                default :
-                    break;
+                layout_tag = channel_table[i].layout_tag;
+                break;
             }
     }
     return lsmash_set_channel_layout( p_mp4->p_root, p_audio->i_track, p_audio->i_sample_entry, layout_tag, bitmap );
