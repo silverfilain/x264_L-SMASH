@@ -549,6 +549,11 @@ static int write_audio_frames( mp4_hnd_t *p_mp4, double video_dts, int finish )
         if( !frame )
             break;
 
+        lsmash_sample_t *p_sample = lsmash_create_sample( frame->size );
+        MP4_FAIL_IF_ERR( !p_sample,
+                         "failed to create a audio sample data.\n" );
+        memcpy( p_sample->data, frame->data, frame->size );
+        x264_audio_free_frame( p_audio->encoder, frame );
 #else
         /* FIXME: mp4sys_importer_get_access_unit() returns 1 if there're any changes in stream's properties.
            If you want to support them, you have to retrieve summary again, and make some operation accordingly. */
@@ -559,47 +564,12 @@ static int write_audio_frames( mp4_hnd_t *p_mp4, double video_dts, int finish )
                          "failed to retrieve frame data from importer.\n" );
         if( p_sample->length == 0 )
             break; /* end of stream */
+#endif
         p_sample->dts = p_sample->cts = audio_timestamp;
         p_sample->prop.sync_point = 1;
         p_sample->index = p_audio->i_sample_entry;
         MP4_FAIL_IF_ERR( lsmash_append_sample( p_mp4->p_root, p_audio->i_track, p_sample ),
-                         "failed to write a audio sample.\n" );
-#endif
-        if( p_audio->codec_type != QT_CODEC_TYPE_SOWT_AUDIO && p_audio->codec_type != QT_CODEC_TYPE_TWOS_AUDIO &&
-            p_audio->codec_type != QT_CODEC_TYPE_IN24_AUDIO && p_audio->codec_type != QT_CODEC_TYPE_IN32_AUDIO &&
-            p_audio->codec_type != QT_CODEC_TYPE_FL32_AUDIO && p_audio->codec_type != QT_CODEC_TYPE_FL64_AUDIO &&
-            p_audio->codec_type != QT_CODEC_TYPE_LPCM_AUDIO )
-        {
-            lsmash_sample_t *p_sample = lsmash_create_sample( frame->size );
-            MP4_FAIL_IF_ERR( !p_sample,
-                             "failed to create a audio sample data.\n" );
-            memcpy( p_sample->data, frame->data, frame->size );
-            x264_audio_free_frame( p_audio->encoder, frame );
-            p_sample->dts = p_sample->cts = audio_timestamp;
-            p_sample->prop.sync_point = 1;
-            p_sample->index = p_audio->i_sample_entry;
-            MP4_FAIL_IF_ERR( lsmash_append_sample( p_mp4->p_root, p_audio->i_track, p_sample ),
-                             "failed to write a audio sample.\n" );
-        }
-        else
-        {
-            /* Write samples per LPCM frame. */
-            uint32_t bytes_per_packet = p_audio->summary->bit_depth / 8;
-            uint32_t bytes_per_frame = bytes_per_packet * p_audio->summary->channels;
-            for( uint32_t offset = 0; offset < frame->size; offset += bytes_per_frame )
-            {
-                lsmash_sample_t *p_sample = lsmash_create_sample( bytes_per_frame );
-                MP4_FAIL_IF_ERR( !p_sample,
-                                 "failed to create a audio sample data.\n" );
-                memcpy( p_sample->data, frame->data + offset, bytes_per_frame );
-                p_sample->cts = p_sample->dts = audio_timestamp++;
-                p_sample->prop.sync_point = 1;
-                p_sample->index = p_audio->i_sample_entry;
-                MP4_FAIL_IF_ERR( lsmash_append_sample( p_mp4->p_root, p_audio->i_track, p_sample ),
-                                 "failed to write a audio sample.\n" );
-            }
-            x264_audio_free_frame( p_audio->encoder, frame );
-        }
+                         "failed to append a audio sample.\n" );
 
         p_audio->i_numframe++;
     }
@@ -1160,19 +1130,17 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
                   p_sample->prop.disposable == ISOM_SAMPLE_IS_DISPOSABLE ? "yes" : "no",
                   p_sample->prop.leading == ISOM_SAMPLE_IS_UNDECODABLE_LEADING || p_sample->prop.leading == ISOM_SAMPLE_IS_DECODABLE_LEADING ? "yes" : "no" );
 
-    /* Write data per sample. */
+    /* Append data per sample. */
     MP4_FAIL_IF_ERR( lsmash_append_sample( p_mp4->p_root, p_mp4->i_track, p_sample ),
-                     "failed to write a video frame.\n" );
+                     "failed to append a video frame.\n" );
 
     p_mp4->i_numframe++;
 
 #if HAVE_ANY_AUDIO
     mp4_audio_hnd_t *p_audio = p_mp4->audio_hnd;
     if( p_audio )
-    {
-        MP4_FAIL_IF_ERR( write_audio_frames( p_mp4, p_sample->dts / (double)p_audio->i_video_timescale, 0 ),
-                         "failed to write audio frame(s).\n" );
-    }
+        if( write_audio_frames( p_mp4, p_sample->dts / (double)p_audio->i_video_timescale, 0 ) )
+            return -1;
 #endif
 
     return i_size;
