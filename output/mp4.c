@@ -908,12 +908,15 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     if( p_mp4->b_brand_qt && !p_mp4->b_no_pasp )
         MP4_FAIL_IF_ERR( lsmash_set_track_aperture_modes( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry ),
                          "failed to set track aperture mode.\n" );
-    if( p_param->b_intra_refresh )
-        MP4_FAIL_IF_ERR( lsmash_create_grouping( p_mp4->p_root, p_mp4->i_track, ISOM_GROUP_TYPE_ROLL ),
-                         "failed to create random access recovery point sample grouping\n" );
-    if( p_param->i_open_gop )
-        MP4_FAIL_IF_ERR( lsmash_create_grouping( p_mp4->p_root, p_mp4->i_track, ISOM_GROUP_TYPE_RAP ),
-                         "failed to create random access point sample grouping\n" );
+    if( p_mp4->major_brand != ISOM_BRAND_TYPE_QT )
+    {
+        if( p_param->b_intra_refresh )
+            MP4_FAIL_IF_ERR( lsmash_create_grouping( p_mp4->p_root, p_mp4->i_track, ISOM_GROUP_TYPE_ROLL ),
+                             "failed to create random access recovery point sample grouping\n" );
+        if( p_param->i_open_gop )
+            MP4_FAIL_IF_ERR( lsmash_create_grouping( p_mp4->p_root, p_mp4->i_track, ISOM_GROUP_TYPE_RAP ),
+                             "failed to create random access point sample grouping\n" );
+    }
 
 #if HAVE_ANY_AUDIO
     mp4_audio_hnd_t *p_audio = p_mp4->audio_hnd;
