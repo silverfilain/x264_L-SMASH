@@ -562,7 +562,7 @@ static int write_audio_frames( mp4_hnd_t *p_mp4, double video_dts, int finish )
         p_sample->dts = p_sample->cts = audio_timestamp;
         p_sample->prop.sync_point = 1;
         p_sample->index = p_audio->i_sample_entry;
-        MP4_FAIL_IF_ERR( lsmash_write_sample( p_mp4->p_root, p_audio->i_track, p_sample ),
+        MP4_FAIL_IF_ERR( lsmash_append_sample( p_mp4->p_root, p_audio->i_track, p_sample ),
                          "failed to write a audio sample.\n" );
 #endif
         if( p_audio->codec_type != QT_CODEC_TYPE_SOWT_AUDIO && p_audio->codec_type != QT_CODEC_TYPE_TWOS_AUDIO &&
@@ -578,7 +578,7 @@ static int write_audio_frames( mp4_hnd_t *p_mp4, double video_dts, int finish )
             p_sample->dts = p_sample->cts = audio_timestamp;
             p_sample->prop.sync_point = 1;
             p_sample->index = p_audio->i_sample_entry;
-            MP4_FAIL_IF_ERR( lsmash_write_sample( p_mp4->p_root, p_audio->i_track, p_sample ),
+            MP4_FAIL_IF_ERR( lsmash_append_sample( p_mp4->p_root, p_audio->i_track, p_sample ),
                              "failed to write a audio sample.\n" );
         }
         else
@@ -595,7 +595,7 @@ static int write_audio_frames( mp4_hnd_t *p_mp4, double video_dts, int finish )
                 p_sample->cts = p_sample->dts = audio_timestamp++;
                 p_sample->prop.sync_point = 1;
                 p_sample->index = p_audio->i_sample_entry;
-                MP4_FAIL_IF_ERR( lsmash_write_sample( p_mp4->p_root, p_audio->i_track, p_sample ),
+                MP4_FAIL_IF_ERR( lsmash_append_sample( p_mp4->p_root, p_audio->i_track, p_sample ),
                                  "failed to write a audio sample.\n" );
             }
             x264_audio_free_frame( p_audio->encoder, frame );
@@ -1161,7 +1161,7 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
                   p_sample->prop.leading == ISOM_SAMPLE_IS_UNDECODABLE_LEADING || p_sample->prop.leading == ISOM_SAMPLE_IS_DECODABLE_LEADING ? "yes" : "no" );
 
     /* Write data per sample. */
-    MP4_FAIL_IF_ERR( lsmash_write_sample( p_mp4->p_root, p_mp4->i_track, p_sample ),
+    MP4_FAIL_IF_ERR( lsmash_append_sample( p_mp4->p_root, p_mp4->i_track, p_sample ),
                      "failed to write a video frame.\n" );
 
     p_mp4->i_numframe++;
