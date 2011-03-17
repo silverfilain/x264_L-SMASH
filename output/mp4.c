@@ -189,7 +189,7 @@ static int set_channel_layout( mp4_hnd_t *p_mp4 )
         /* Avisynth input doesn't return channel order, so we guess it from the number of channels. */
         if( !p_audio->info->chanlayout && p_audio->info->channels <= 8 )
         {
-            lsmash_channel_layout_tag_code channel_table[] = {
+            static const lsmash_channel_layout_tag_code channel_table[] = {
                 QT_CHANNEL_LAYOUT_USE_CHANNEL_BITMAP,
                 QT_CHANNEL_LAYOUT_ITU_1_0,
                 QT_CHANNEL_LAYOUT_ITU_2_0,
@@ -207,7 +207,7 @@ static int set_channel_layout( mp4_hnd_t *p_mp4 )
     {
         /* Channel order is unknown, so we guess it from ffmpeg's channel layout flags. */
         typedef struct { lsmash_channel_bitmap_code bitmap; lsmash_channel_layout_tag_code layout_tag; } qt_channel_map;
-        qt_channel_map channel_table[] = {
+        static const qt_channel_map channel_table[] = {
             { CH_LAYOUT_MONO,           QT_CHANNEL_LAYOUT_MONO },
             { CH_LAYOUT_STEREO,         QT_CHANNEL_LAYOUT_STEREO },
             { CH_LAYOUT_STEREO_DOWNMIX, QT_CHANNEL_LAYOUT_STEREO },
