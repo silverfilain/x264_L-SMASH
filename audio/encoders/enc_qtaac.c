@@ -582,6 +582,7 @@ static hnd_t qtaac_init( hnd_t filter_chain, const char *opt_str )
     h->info.chansize       = 4;
     h->info.samplesize     = h->info.channels * h->info.chansize;
     h->info.framesize      = h->info.framelen * h->info.samplesize;
+    h->info.depth          = 32;
     h->info.last_delta     = h->info.framelen;
 
     audio_aac_info_t *aacinfo = malloc( sizeof( audio_aac_info_t ) );

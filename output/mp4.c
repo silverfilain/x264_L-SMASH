@@ -904,7 +904,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
         p_audio->summary->max_au_length    = ( 1 << 13 ) - 1;
         p_audio->summary->frequency        = p_audio->info->samplerate;
         p_audio->summary->channels         = p_audio->info->channels;
-        p_audio->summary->bit_depth        = p_audio->info->chansize * 8;
+        p_audio->summary->bit_depth        = p_audio->info->depth;
         p_audio->summary->samples_in_frame = p_audio->info->framelen;
         p_audio->summary->packed           = 1;
         p_audio->summary->interleaved      = 1;

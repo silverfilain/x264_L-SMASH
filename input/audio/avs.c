@@ -289,6 +289,7 @@ static int init( hnd_t *handle, const char *opt_str )
     h->info.chansize       = avs_bytes_per_channel_sample( vi );
     h->info.samplesize     = h->info.chansize * h->info.channels;
     h->info.framesize      = h->info.samplesize;
+    h->info.depth          = h->info.chansize;
     h->info.timebase       = (timebase_t){ 1, h->info.samplerate };
 
     h->num_samples = vi->num_audio_samples;

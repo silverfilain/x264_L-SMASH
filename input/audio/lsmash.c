@@ -93,6 +93,7 @@ static int lsmash_init( hnd_t *handle, const char *opt_str )
     h->info.chansize       = h->summary->bit_depth>>3;
     h->info.samplesize     = h->info.chansize * h->info.channels;
     h->info.framesize      = h->info.framelen * h->info.samplesize;
+    h->info.depth          = h->summary->bit_depth;
     h->info.timebase       = (timebase_t){ 1, h->summary->frequency };
     h->info.last_delta     = h->info.framelen;
 

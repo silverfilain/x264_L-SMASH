@@ -128,6 +128,7 @@ static int init( hnd_t *handle, const char *opt_str )
         .framesize      = h->ctx->frame_size * sizeof( float ),
         .chansize       = av_get_bits_per_sample_format( h->samplefmt ) / 8,
         .samplesize     = av_get_bits_per_sample_format( h->samplefmt ) * h->ctx->channels / 8,
+        .depth          = h->ctx->bits_per_coded_sample,
         .timebase       = /* {1, 1000}, /*/ { 1, h->ctx->sample_rate },
         .extradata      = h->ctx->extradata,
         .extradata_size = h->ctx->extradata_size,

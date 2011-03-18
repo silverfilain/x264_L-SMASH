@@ -23,6 +23,7 @@ static hnd_t init( hnd_t filter_chain, const char *opts )
     h->info.extradata_size = 0;
     h->info.chansize       = 2;
     h->info.samplesize     = 2 * h->info.channels;
+    h->info.depth          = h->info.chansize * 8;
     h->info.timebase       = (timebase_t) { 1, h->info.samplerate };
 
     x264_cli_log( "audio", X264_LOG_INFO, "opened raw encoder (%dbits, %dch, %dhz)\n",
