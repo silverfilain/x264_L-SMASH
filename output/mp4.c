@@ -659,9 +659,6 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
         }
         else
             MP4_LOG_IF_ERR( lsmash_finish_movie( p_mp4->p_root, NULL ), "failed to finish movie.\n" );
-
-        /* Write media data size here. */
-        MP4_LOG_IF_ERR( lsmash_write_mdat_size( p_mp4->p_root ), "failed to write mdat size.\n" );
     }
 
     remove_mp4_hnd( p_mp4 ); /* including lsmash_destroy_root( p_mp4->p_root ); */
