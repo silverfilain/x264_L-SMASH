@@ -616,9 +616,6 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
             }
             else
                 MP4_LOG_ERROR( "mdhd timescale is broken.\n" );
-
-            MP4_LOG_IF_ERR( lsmash_update_bitrate_info( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry ),
-                            "failed to update bitrate information for video.\n" );
         }
 #if HAVE_ANY_AUDIO
         mp4_audio_hnd_t *p_audio = p_mp4->audio_hnd;
@@ -640,8 +637,6 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
                             "failed to set last sample's duration for audio.\n" );
             MP4_LOG_IF_ERR( lsmash_create_explicit_timeline_map( p_mp4->p_root, p_audio->i_track, 0, 0, ISOM_EDIT_MODE_NORMAL ),
                             "failed to set timeline map for audio.\n" );
-            MP4_LOG_IF_ERR( lsmash_update_bitrate_info( p_mp4->p_root, p_audio->i_track, p_audio->i_sample_entry ),
-                            "failed to update bitrate information for audio.\n" );
         }
 #endif
 
