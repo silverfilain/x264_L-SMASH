@@ -160,7 +160,7 @@ static void set_recovery_param( mp4_hnd_t *p_mp4, x264_param_t *p_param )
 }
 
 #if HAVE_ANY_AUDIO
-static int set_channel_layout( mp4_hnd_t *p_mp4 )
+static void set_channel_layout( mp4_hnd_t *p_mp4 )
 {
 #define CH_LAYOUT_MONO              (CH_FRONT_CENTER)
 #define CH_LAYOUT_STEREO            (CH_FRONT_LEFT|CH_FRONT_RIGHT)
@@ -181,6 +181,7 @@ static int set_channel_layout( mp4_hnd_t *p_mp4 )
     mp4_audio_hnd_t *p_audio = p_mp4->audio_hnd;
     lsmash_channel_layout_tag_code layout_tag = QT_CHANNEL_LAYOUT_UNKNOWN;
     lsmash_channel_bitmap_code bitmap = 0;
+
     /* Lavcodec always returns SMPTE/ITU-R channel order, but its copying doesn't do reordering. */
     if( !p_audio->b_copy )
     {
@@ -231,7 +232,9 @@ static int set_channel_layout( mp4_hnd_t *p_mp4 )
                 break;
             }
     }
-    return lsmash_set_channel_layout( p_mp4->p_root, p_audio->i_track, p_audio->i_sample_entry, layout_tag, bitmap );
+
+    p_audio->summary->layout_tag = layout_tag;
+    p_audio->summary->bitmap = bitmap;
 }
 #endif
 
@@ -899,6 +902,8 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
         p_audio->i_track = lsmash_create_track( p_mp4->p_root, ISOM_MEDIA_HANDLER_TYPE_AUDIO_TRACK );
         MP4_FAIL_IF_ERR_EX( !p_audio->i_track, "failed to create a audio track.\n" );
 
+        if( p_mp4->major_brand == ISOM_BRAND_TYPE_QT )
+            set_channel_layout( p_mp4 );
 #if HAVE_AUDIO
         p_audio->summary->stream_type      = MP4SYS_STREAM_TYPE_AudioStream;
         p_audio->summary->max_au_length    = ( 1 << 13 ) - 1;
@@ -988,8 +993,6 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
         /* MP4AudioSampleEntry does not have btrt */
 //        MP4_FAIL_IF_ERR( lsmash_add_btrt( p_mp4->p_root, p_audio->i_track, p_audio->i_sample_entry ),
 //                         "failed to add btrt for audio.\n" );
-        if( p_mp4->major_brand == ISOM_BRAND_TYPE_QT )
-            MP4_FAIL_IF_ERR( set_channel_layout( p_mp4 ), "failed to set channel layout for audio.\n" );
     }
 #endif /* #if HAVE_ANY_AUDIO */
 
