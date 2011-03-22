@@ -30,7 +30,7 @@
 #include "common/common.h"
 #include "output.h"
 #include "mp4/lsmash.h"
-#include "mp4/importer.h" /* FIXME: will be replaced with summary.h */
+#include "mp4/importer.h"
 
 /*******************/
 
@@ -280,7 +280,7 @@ static void remove_mp4_hnd( hnd_t handle )
     if( p_audio->summary )
     {
         /* WARNING: You should not rely on this if you created summary in your own code instead of using importer of L-SMASH. */
-        mp4sys_cleanup_audio_summary( p_audio->summary );
+        lsmash_cleanup_audio_summary( p_audio->summary );
         p_audio->summary = NULL;
     }
     if( p_audio->p_importer )
@@ -949,11 +949,11 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
          * Currently, our ADTS importer never recognize SBR (HE-AAC).
          * Thus, in this sample, if the source contains SBR, it'll be coded as implicit signaling for SBR.
          * If you want to use explicit signaling of SBR, change the sbr_mode in summary and
-         * call mp4sys_setup_AudioSpecificConfig() to reconstruct ASC within the summary.
+         * call lsmash_setup_AudioSpecificConfig() to reconstruct ASC within the summary.
          */
         /*
          * WARNING: If you wish to allocate summary in your code, you have to allocate ASC too,
-         * and never use mp4sys_cleanup_audio_summary(), unless L-SMASH is compiled integrated with your code.
+         * and never use lsmash_cleanup_audio_summary(), unless L-SMASH is compiled integrated with your code.
          * Because malloc() and free() have to be used as pair from EXACTLY SAME standard C library.
          * Otherwise you may cause bugs which you hardly call to mind.
          */

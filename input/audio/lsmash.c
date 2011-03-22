@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <inttypes.h>
 
+#include "output/mp4/lsmash.h"
 #include "output/mp4/importer.h"
 
 typedef struct lsmash_source_t
@@ -123,7 +124,7 @@ error:
 fail:
     if( h->summary )
     {
-        mp4sys_cleanup_audio_summary( h->summary );
+        lsmash_cleanup_audio_summary( h->summary );
         h->summary = NULL;
     }
     if( h->importer )
@@ -151,7 +152,7 @@ static void lsmash_close( hnd_t handle )
     lsmash_source_t *h = handle;
 
     if( h->summary )
-        mp4sys_cleanup_audio_summary( h->summary );
+        lsmash_cleanup_audio_summary( h->summary );
     if( h->importer )
         mp4sys_importer_close( h->importer );
     if( h )
