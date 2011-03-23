@@ -260,29 +260,19 @@ static void remove_mp4_hnd( hnd_t handle )
         free( p_mp4 );
         return;
     }
-#if HAVE_AUDIO
     if( p_audio->summary )
     {
-        if( p_audio->summary->exdata )
-        {
-            free( p_audio->summary->exdata );
-            p_audio->summary->exdata = NULL;
-        }
-        free( p_audio->summary );
+        /* WARNING: You should not rely on this if you created summary in your own code. */
+        lsmash_cleanup_audio_summary( p_audio->summary );
         p_audio->summary = NULL;
     }
+#if HAVE_AUDIO
     if( p_audio->encoder )
     {
         x264_audio_encoder_close( p_audio->encoder );
         p_audio->encoder = NULL;
     }
 #else
-    if( p_audio->summary )
-    {
-        /* WARNING: You should not rely on this if you created summary in your own code instead of using importer of L-SMASH. */
-        lsmash_cleanup_audio_summary( p_audio->summary );
-        p_audio->summary = NULL;
-    }
     if( p_audio->p_importer )
     {
         mp4sys_importer_close( p_audio->p_importer );
@@ -332,7 +322,7 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
     audio_info_t *info = p_audio->info = x264_audio_encoder_info( henc );
     p_audio->b_copy = copy;
 
-    p_audio->summary = calloc( 1, sizeof(lsmash_audio_summary_t) );
+    p_audio->summary = lsmash_create_audio_summary();
     if( !p_audio->summary )
     {
         MP4_LOG_ERROR( "failed to allocate memory for summary information of audio.\n" );
@@ -921,9 +911,8 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
                 else
                     p_audio->summary->aot = MP4A_AUDIO_OBJECT_TYPE_AAC_LC;
                 p_audio->summary->sbr_mode      = p_audio->has_sbr ? MP4A_AAC_SBR_BACKWARD_COMPATIBLE : MP4A_AAC_SBR_NOT_SPECIFIED;
-                p_audio->summary->exdata_length = p_audio->info->extradata_size;
-                p_audio->summary->exdata        = malloc( p_audio->info->extradata_size );
-                memcpy( p_audio->summary->exdata, p_audio->info->extradata, p_audio->info->extradata_size );
+                MP4_FAIL_IF_ERR( lsmash_summary_add_exdata( p_audio->summary, p_audio->info->extradata, p_audio->info->extradata_size ),
+                                 "failed to create mp4a specific info.\n" );
                 break;
             case ISOM_CODEC_TYPE_AC_3_AUDIO :
                 p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_AC_3_AUDIO;
@@ -938,9 +927,8 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
                 break;
             default :
                 p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_NONE;
-                p_audio->summary->exdata_length          = p_audio->info->extradata_size;
-                p_audio->summary->exdata                 = malloc( p_audio->info->extradata_size );
-                memcpy( p_audio->summary->exdata, p_audio->info->extradata, p_audio->info->extradata_size );
+                MP4_FAIL_IF_ERR( lsmash_summary_add_exdata( p_audio->summary, p_audio->info->extradata, p_audio->info->extradata_size ),
+                                 "failed to create unknown specific info.\n" );
                 break;
         }
 #else
