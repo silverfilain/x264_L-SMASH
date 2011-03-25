@@ -1,5 +1,10 @@
+/* escape conflicting float_t and redefining NAN, defined in fp.h of QuickTime SDK. */
+#define float_t escape_float_t
+#define NAN escape_NAN
 #include "audio/encoders.h"
 #include "filters/audio/internal.h"
+#undef float_t
+#undef NAN
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
