@@ -532,7 +532,7 @@ static int write_audio_frames( mp4_hnd_t *p_mp4, double video_dts, int finish )
             break; /* end of stream */
 #endif
         p_sample->dts = p_sample->cts = audio_timestamp;
-        p_sample->prop.sync_point = 1;
+        p_sample->prop.random_access_type = ISOM_SAMPLE_RANDOM_ACCESS_TYPE_SYNC;
         p_sample->index = p_audio->i_sample_entry;
         MP4_FAIL_IF_ERR( lsmash_append_sample( p_mp4->p_root, p_audio->i_track, p_sample ),
                          "failed to append a audio sample.\n" );
@@ -1058,26 +1058,31 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
     p_sample->dts = dts;
     p_sample->cts = cts;
     p_sample->index = p_mp4->i_sample_entry;
-    p_sample->prop.sync_point = p_picture->i_type == X264_TYPE_IDR;
+    p_sample->prop.random_access_type = p_picture->i_type == X264_TYPE_IDR ? ISOM_SAMPLE_RANDOM_ACCESS_TYPE_CLOSED_RAP : ISOM_SAMPLE_RANDOM_ACCESS_TYPE_NONE;
     if( p_mp4->b_use_recovery || p_mp4->b_brand_qt )
     {
-        p_sample->prop.partial_sync = (p_picture->i_type == X264_TYPE_I) && p_picture->b_keyframe && (p_mp4->i_recovery_frame_cnt == 0);
         p_sample->prop.independent = IS_X264_TYPE_I( p_picture->i_type ) ? ISOM_SAMPLE_IS_INDEPENDENT : ISOM_SAMPLE_IS_NOT_INDEPENDENT;
         p_sample->prop.disposable = p_picture->i_type == X264_TYPE_B ? ISOM_SAMPLE_IS_DISPOSABLE : ISOM_SAMPLE_IS_NOT_DISPOSABLE;
         p_sample->prop.redundant = ISOM_SAMPLE_HAS_NO_REDUNDANCY;
         if( p_mp4->b_use_recovery )
         {
-            p_sample->prop.leading = !IS_X264_TYPE_B( p_picture->i_type ) || p_sample->cts >= p_mp4->i_last_intra_cts ? ISOM_SAMPLE_IS_NOT_LEADING : ISOM_SAMPLE_IS_UNDECODABLE_LEADING;
+            p_sample->prop.leading = !IS_X264_TYPE_B( p_picture->i_type ) || p_sample->cts >= p_mp4->i_last_intra_cts
+                                   ? ISOM_SAMPLE_IS_NOT_LEADING : ISOM_SAMPLE_IS_UNDECODABLE_LEADING;
             if( p_sample->prop.independent == ISOM_SAMPLE_IS_INDEPENDENT )
                 p_mp4->i_last_intra_cts = p_sample->cts;
-            p_sample->prop.recovery.start_point = p_picture->b_keyframe && p_picture->i_type != X264_TYPE_IDR;   /* A picture with Recovery Point SEI */
             p_sample->prop.recovery.identifier = p_picture->i_frame_num % p_mp4->i_max_frame_num;
-            if( p_sample->prop.recovery.start_point )
+            if( p_picture->b_keyframe && p_picture->i_type != X264_TYPE_IDR )
+            {
+                /* A picture with Recovery Point SEI */
+                p_sample->prop.random_access_type = ISOM_SAMPLE_RANDOM_ACCESS_TYPE_RECOVERY;
                 p_sample->prop.recovery.complete = (p_sample->prop.recovery.identifier + p_mp4->i_recovery_frame_cnt) % p_mp4->i_max_frame_num;
+            }
         }
         else if( p_picture->i_type != X264_TYPE_IDR && p_picture->i_type != X264_TYPE_B )
             if( p_picture->i_type == X264_TYPE_I || p_picture->i_type == X264_TYPE_P || p_picture->i_type == X264_TYPE_BREF )
                 p_sample->prop.allow_earlier = QT_SAMPLE_EARLIER_PTS_ALLOWED;
+        if( p_picture->i_type == X264_TYPE_I && p_picture->b_keyframe && p_mp4->i_recovery_frame_cnt == 0 )
+            p_sample->prop.random_access_type = ISOM_SAMPLE_RANDOM_ACCESS_TYPE_OPEN_RAP;
     }
 
     x264_cli_log( "mp4", X264_LOG_DEBUG, "coded: %d, frame_num: %d, key: %s, type: %s, independ: %s, dispose: %s, lead: %s\n",
