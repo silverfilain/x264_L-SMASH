@@ -601,7 +601,8 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
             if( mdhd_timescale != 0 ) /* avoid zero division */
             {
                 actual_duration = (double)((largest_pts + last_delta) * p_mp4->i_time_inc) * mvhd_timescale / mdhd_timescale;
-                MP4_LOG_IF_ERR( lsmash_create_explicit_timeline_map( p_mp4->p_root, p_mp4->i_track, actual_duration, p_mp4->i_start_offset * p_mp4->i_time_inc, ISOM_EDIT_MODE_NORMAL ),
+                int64_t first_cts = p_mp4->b_dts_compress ? 0 : p_mp4->i_start_offset * p_mp4->i_time_inc;
+                MP4_LOG_IF_ERR( lsmash_create_explicit_timeline_map( p_mp4->p_root, p_mp4->i_track, actual_duration, first_cts, ISOM_EDIT_MODE_NORMAL ),
                                 "failed to set timeline map for video.\n" );
             }
             else
