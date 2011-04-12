@@ -36,6 +36,7 @@ typedef struct
     int use_dts_compress;
     int no_sar;
     int no_remux;
+    int fragments;
     int mux_mov;
     int mux_3gp;
     int mux_3g2;

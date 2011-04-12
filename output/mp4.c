@@ -107,6 +107,7 @@ typedef struct
     uint32_t i_sample_entry;
     uint64_t i_time_inc;
     int64_t i_start_offset;
+    uint64_t prev_dts;
     uint32_t i_sei_size;
     uint8_t *p_sei_buffer;
     int i_numframe;
@@ -114,15 +115,16 @@ typedef struct
     int i_delay_frames;
     int b_dts_compress;
     int i_dts_compress_multiplier;
-    int b_no_pasp;
     int b_use_recovery;
     int i_recovery_frame_cnt;
     int i_max_frame_num;
     uint64_t i_last_intra_cts;
-    int b_no_remux;
     uint32_t i_display_width;
     uint32_t i_display_height;
+    int b_no_remux;
+    int b_no_pasp;
     int b_force_display_size;
+    int b_fragments;
     lsmash_scaling_method_code scaling_method;
 #if HAVE_ANY_AUDIO
     mp4_audio_hnd_t *audio_hnd;
@@ -584,29 +586,32 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
             MP4_LOG_IF_ERR( lsmash_flush_pooled_samples( p_mp4->p_root, p_mp4->i_track, (last_delta ? last_delta : 1) * p_mp4->i_time_inc ),
                             "failed to flush the rest of samples.\n" );
 
-            /*
-             * Declare the explicit time-line mapping.
-             * A segment_duration is given by movie timescale, while a media_time that is the start time of this segment
-             * is given by not the movie timescale but rather the media timescale.
-             * The reason is that ISO media have two time-lines, presentation and media time-line,
-             * and an edit maps the presentation time-line to the media time-line.
-             * According to QuickTime file format specification and the actual playback in QuickTime Player,
-             * if the Edit Box doesn't exist in the track, the ratio of the summation of sample durations and track's duration becomes
-             * the track's media_rate so that the entire media can be used by the track.
-             * So, we add Edit Box here to avoid this implicit media_rate could distort track's presentation timestamps slightly.
-             * Note: Any demuxers should follow the Edit List Box if it exists.
-             */
-                     mvhd_timescale = lsmash_get_movie_timescale( p_mp4->p_root );
-            uint32_t mdhd_timescale = lsmash_get_media_timescale( p_mp4->p_root, p_mp4->i_track );
-            if( mdhd_timescale != 0 ) /* avoid zero division */
+            if( !p_mp4->b_fragments )
             {
-                actual_duration = (double)((largest_pts + last_delta) * p_mp4->i_time_inc) * mvhd_timescale / mdhd_timescale;
-                int64_t first_cts = p_mp4->b_dts_compress ? 0 : p_mp4->i_start_offset * p_mp4->i_time_inc;
-                MP4_LOG_IF_ERR( lsmash_create_explicit_timeline_map( p_mp4->p_root, p_mp4->i_track, actual_duration, first_cts, ISOM_EDIT_MODE_NORMAL ),
-                                "failed to set timeline map for video.\n" );
+                /*
+                 * Declare the explicit time-line mapping.
+                 * A segment_duration is given by movie timescale, while a media_time that is the start time of this segment
+                 * is given by not the movie timescale but rather the media timescale.
+                 * The reason is that ISO media have two time-lines, presentation and media time-line,
+                 * and an edit maps the presentation time-line to the media time-line.
+                 * According to QuickTime file format specification and the actual playback in QuickTime Player,
+                 * if the Edit Box doesn't exist in the track, the ratio of the summation of sample durations and track's duration becomes
+                 * the track's media_rate so that the entire media can be used by the track.
+                 * So, we add Edit Box here to avoid this implicit media_rate could distort track's presentation timestamps slightly.
+                 * Note: Any demuxers should follow the Edit List Box if it exists.
+                 */
+                         mvhd_timescale = lsmash_get_movie_timescale( p_mp4->p_root );
+                uint32_t mdhd_timescale = lsmash_get_media_timescale( p_mp4->p_root, p_mp4->i_track );
+                if( mdhd_timescale != 0 ) /* avoid zero division */
+                {
+                    actual_duration = (double)((largest_pts + last_delta) * p_mp4->i_time_inc) * mvhd_timescale / mdhd_timescale;
+                    int64_t first_cts = p_mp4->b_dts_compress ? 0 : p_mp4->i_start_offset * p_mp4->i_time_inc;
+                    MP4_LOG_IF_ERR( lsmash_create_explicit_timeline_map( p_mp4->p_root, p_mp4->i_track, actual_duration, first_cts, ISOM_EDIT_MODE_NORMAL ),
+                                    "failed to set timeline map for video.\n" );
+                }
+                else
+                    MP4_LOG_ERROR( "mdhd timescale is broken.\n" );
             }
-            else
-                MP4_LOG_ERROR( "mdhd timescale is broken.\n" );
         }
 #if HAVE_ANY_AUDIO
         mp4_audio_hnd_t *p_audio = p_mp4->audio_hnd;
@@ -626,8 +631,9 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
 #endif
             MP4_LOG_IF_ERR( lsmash_flush_pooled_samples( p_mp4->p_root, p_audio->i_track, last_delta ),
                             "failed to set last sample's duration for audio.\n" );
-            MP4_LOG_IF_ERR( lsmash_create_explicit_timeline_map( p_mp4->p_root, p_audio->i_track, 0, 0, ISOM_EDIT_MODE_NORMAL ),
-                            "failed to set timeline map for audio.\n" );
+            if( !p_mp4->b_fragments )
+                MP4_LOG_IF_ERR( lsmash_create_explicit_timeline_map( p_mp4->p_root, p_audio->i_track, 0, 0, ISOM_EDIT_MODE_NORMAL ),
+                                "failed to set timeline map for audio.\n" );
         }
 #endif
 
@@ -672,28 +678,6 @@ static int open_file( char *psz_filename, hnd_t *p_handle, cli_output_opt_t *opt
 
     p_mp4->b_dts_compress = opt->use_dts_compress;
 
-    if( opt->chapter )
-    {
-        p_mp4->psz_chapter = opt->chapter;
-        fh = fopen( p_mp4->psz_chapter, "rb" );
-        MP4_FAIL_IF_ERR_EX( !fh, "can't open `%s'\n", p_mp4->psz_chapter );
-        fclose( fh );
-    }
-    p_mp4->psz_language = opt->language;
-    p_mp4->b_no_pasp = opt->no_sar;
-    p_mp4->b_no_remux = opt->no_remux;
-    p_mp4->i_display_width = opt->display_width * (1<<16);
-    p_mp4->i_display_height = opt->display_height * (1<<16);
-    p_mp4->b_force_display_size = p_mp4->i_display_height || p_mp4->i_display_height;
-    p_mp4->scaling_method = p_mp4->b_force_display_size ? ISOM_SCALING_METHOD_FILL : ISOM_SCALING_METHOD_MEET;
-
-    p_mp4->p_root = lsmash_open_movie( psz_filename, LSMASH_FILE_MODE_WRITE );
-    MP4_FAIL_IF_ERR_EX( !p_mp4->p_root, "failed to create root.\n" );
-
-    p_mp4->summary = calloc( 1, sizeof(lsmash_video_summary_t) );
-    MP4_FAIL_IF_ERR( !p_mp4->summary,
-                     "failed to allocate memory for summary information of video.\n" );
-
     if( opt->mux_mov )
     {
         p_mp4->major_brand = ISOM_BRAND_TYPE_QT;
@@ -711,6 +695,29 @@ static int open_file( char *psz_filename, hnd_t *p_handle, cli_output_opt_t *opt
     }
     else
         p_mp4->major_brand = ISOM_BRAND_TYPE_MP42;
+
+    if( opt->chapter )
+    {
+        p_mp4->psz_chapter = opt->chapter;
+        fh = fopen( p_mp4->psz_chapter, "rb" );
+        MP4_FAIL_IF_ERR_EX( !fh, "can't open `%s'\n", p_mp4->psz_chapter );
+        fclose( fh );
+    }
+    p_mp4->psz_language = opt->language;
+    p_mp4->b_no_pasp = opt->no_sar;
+    p_mp4->b_no_remux = opt->no_remux;
+    p_mp4->i_display_width = opt->display_width * (1<<16);
+    p_mp4->i_display_height = opt->display_height * (1<<16);
+    p_mp4->b_force_display_size = p_mp4->i_display_height || p_mp4->i_display_height;
+    p_mp4->scaling_method = p_mp4->b_force_display_size ? ISOM_SCALING_METHOD_FILL : ISOM_SCALING_METHOD_MEET;
+    p_mp4->b_fragments = opt->fragments;
+
+    p_mp4->p_root = lsmash_open_movie( psz_filename, p_mp4->b_fragments ? LSMASH_FILE_MODE_WRITE_FRAGMENTED : LSMASH_FILE_MODE_WRITE );
+    MP4_FAIL_IF_ERR_EX( !p_mp4->p_root, "failed to create root.\n" );
+
+    p_mp4->summary = calloc( 1, sizeof(lsmash_video_summary_t) );
+    MP4_FAIL_IF_ERR( !p_mp4->summary,
+                     "failed to allocate memory for summary information of video.\n" );
 
 #if HAVE_ANY_AUDIO
 #if HAVE_AUDIO
@@ -1095,18 +1102,32 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
                   p_sample->prop.disposable == ISOM_SAMPLE_IS_DISPOSABLE ? "yes" : "no",
                   p_sample->prop.leading == ISOM_SAMPLE_IS_UNDECODABLE_LEADING || p_sample->prop.leading == ISOM_SAMPLE_IS_DECODABLE_LEADING ? "yes" : "no" );
 
-    /* Append data per sample. */
-    MP4_FAIL_IF_ERR( lsmash_append_sample( p_mp4->p_root, p_mp4->i_track, p_sample ),
-                     "failed to append a video frame.\n" );
-
-    p_mp4->i_numframe++;
-
 #if HAVE_ANY_AUDIO
     mp4_audio_hnd_t *p_audio = p_mp4->audio_hnd;
     if( p_audio )
         if( write_audio_frames( p_mp4, p_sample->dts / (double)p_audio->i_video_timescale, 0 ) )
             return -1;
 #endif
+
+    if( p_mp4->b_fragments && p_mp4->i_numframe && p_sample->prop.random_access_type )
+    {
+        MP4_FAIL_IF_ERR( lsmash_flush_pooled_samples( p_mp4->p_root, p_mp4->i_track, p_sample->dts - p_mp4->prev_dts ),
+                         "failed to flush the rest of samples.\n" );
+#if HAVE_ANY_AUDIO
+        if( p_audio )
+            MP4_FAIL_IF_ERR( lsmash_flush_pooled_samples( p_mp4->p_root, p_audio->i_track, p_audio->summary->samples_in_frame ),
+                             "failed to flush the rest of samples for audio.\n" );
+#endif
+        MP4_FAIL_IF_ERR( lsmash_create_fragment_movie( p_mp4->p_root ),
+                         "failed to create a movie fragment.\n" );
+    }
+
+    /* Append data per sample. */
+    MP4_FAIL_IF_ERR( lsmash_append_sample( p_mp4->p_root, p_mp4->i_track, p_sample ),
+                     "failed to append a video frame.\n" );
+
+    p_mp4->prev_dts = dts;
+    p_mp4->i_numframe++;
 
     return i_size;
 }

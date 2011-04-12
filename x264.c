@@ -825,6 +825,7 @@ static void help( x264_param_t *defaults, int longhelp )
     H2( "      --no-container-sar      Disable sample aspect ratio within the container\n" );
     H2( "      --no-remux              Inhibit auto-remuxing for progressive download\n" );
     H2( "      --force-display-size    Force display region size for video\n" );
+    H2( "      --fragments             Enable movie fragments structure\n" );
     H0( "\n" );
     H0( "Filtering:\n" );
     H0( "\n" );
@@ -882,7 +883,8 @@ enum
     OPT_LANGUAGE,
     OPT_NO_CONTAINER_SAR,
     OPT_NO_REMUX,
-    OPT_FORCE_DISPLAY_SIZE
+    OPT_FORCE_DISPLAY_SIZE,
+    OPT_FRAGMENTS
 } OptionsOPT;
 
 static char short_options[] = "8A:B:b:f:hI:i:m:o:p:q:r:t:Vvw";
@@ -1053,6 +1055,7 @@ static struct option long_options[] =
     { "no-container-sar",  no_argument, NULL, OPT_NO_CONTAINER_SAR },
     { "no-remux",    no_argument, NULL, OPT_NO_REMUX },
     { "force-display-size", required_argument, NULL, OPT_FORCE_DISPLAY_SIZE },
+    { "fragments",         no_argument, NULL, OPT_FRAGMENTS },
     {0, 0, 0, 0}
 };
 
@@ -1535,6 +1538,9 @@ static int parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
                 FAIL_IF_ERROR( 2 != sscanf( optarg, "%lfx%lf", &output_opt.display_width, &output_opt.display_height ),
                                "invalid syntax for specifying display size: %s", optarg );
                 FAIL_IF_ERROR( output_opt.display_width <= 0 || output_opt.display_height <= 0, "display size must be positive.\n" );
+                break;
+            case OPT_FRAGMENTS:
+                output_opt.fragments = 1;
                 break;
             default:
 generic_option:
