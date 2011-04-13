@@ -135,7 +135,7 @@ typedef struct
 
 static void set_recovery_param( mp4_hnd_t *p_mp4, x264_param_t *p_param )
 {
-    p_mp4->b_use_recovery = p_param->i_open_gop || p_param->b_intra_refresh;
+    p_mp4->b_use_recovery = p_param->b_open_gop || p_param->b_intra_refresh;
     if( !p_mp4->b_use_recovery )
         return;
 
@@ -787,7 +787,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
         if( p_mp4->b_use_recovery )
         {
             brands[brand_count++] = ISOM_BRAND_TYPE_AVC1;   /* sdtp/sgpd/sbgp/random access recovery point grouping */
-            if( p_param->i_open_gop )
+            if( p_param->b_open_gop )
             {
                 brands[brand_count++] = ISOM_BRAND_TYPE_ISO6;   /* cslg/random access point grouping */
                 brands[brand_count++] = ISOM_BRAND_TYPE_QT;     /* tapt/cslg/stps/sdtp */
@@ -879,7 +879,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
         if( p_param->b_intra_refresh )
             MP4_FAIL_IF_ERR( lsmash_create_grouping( p_mp4->p_root, p_mp4->i_track, ISOM_GROUP_TYPE_ROLL ),
                              "failed to create random access recovery point sample grouping\n" );
-        if( p_param->i_open_gop )
+        if( p_param->b_open_gop )
             MP4_FAIL_IF_ERR( lsmash_create_grouping( p_mp4->p_root, p_mp4->i_track, ISOM_GROUP_TYPE_RAP ),
                              "failed to create random access point sample grouping\n" );
     }
