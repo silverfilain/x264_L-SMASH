@@ -71,8 +71,6 @@ intel_cflags() {
             [ "$arg" = -Wall ] && arg=-w0
         fi
 
-        # Intel Compiler on Mac OS X does not allow pre -msse3
-        [ $SYS = MACOSX -a \( "$arg" = -mia32 -o "$arg" = -msse -o "$arg" = -msse2 \) ] && arg=
         [ -n "$arg" ] && echo -n "$arg "
     done
 }
@@ -104,7 +102,11 @@ cc_check() {
             log_check "for $1"
         fi
     elif [ -z "$1" ]; then
-        log_check "whether $CC supports $3"
+        if [ -z "$2" ]; then
+            log_check "whether $CC supports $3"
+        else
+            log_check "whether $CC supports $3 with $2"
+        fi
     else
         log_check "for $3 in $1";
     fi
@@ -235,7 +237,7 @@ cross_prefix=""
 EXE=""
 
 # list of all preprocessor HAVE values we can define
-CONFIG_HAVE="MALLOC_H ALTIVEC ALTIVEC_H MMX ARMV6 ARMV6T2 NEON BEOSTHREAD POSIXTHREAD WIN32THREAD THREAD LOG2F VISUALIZE SWSCALE LAVF FFMS AVS GPL"
+CONFIG_HAVE="MALLOC_H ALTIVEC ALTIVEC_H MMX ARMV6 ARMV6T2 NEON BEOSTHREAD POSIXTHREAD WIN32THREAD THREAD LOG2F VISUALIZE SWSCALE LAVF FFMS AVS GPL VECTOREXT"
 
 # list of all preprocessor HAVE values we can define for audio stuff
 CONFIG_AUDIO_HAVE="AUDIO LAME QT_AAC FAAC AMRWB_3GPP NONFREE LSMASH"
@@ -372,7 +374,6 @@ if [[ $host_os = mingw* || $host_os = cygwin* ]]; then
     if [[ `basename "$CC"` = icl* ]]; then
         # Windows Intel Compiler creates dependency generation with absolute Windows paths, Cygwin's make does not support Windows paths.
         [[ $host_os = cygwin* ]] && die "Windows Intel Compiler support requires MSYS"
-        ARCHPRE="-arch:"
         compiler=ICL
         CFLAGS="$CFLAGS -Qstd=c99 -nologo -Qms0 -DHAVE_STRING_H -Iextras"
         QPRE="-Q"
@@ -383,7 +384,6 @@ if [[ $host_os = mingw* || $host_os = cygwin* ]]; then
 else
     if [[ `basename "$CC"` = icc* ]]; then
         AR="xiar"
-        ARCHPRE="-m"
         compiler=ICC
         QPRE="-"
     fi
@@ -467,12 +467,6 @@ case $host_cpu in
                 CFLAGS="$CFLAGS -mfpmath=sse -msse"
             fi
         else
-            # Intel Compiler >= 11 generally defaults to SSE2 optimization. -msse is also deprecated for -mia32
-            if cpp_check "" "" "__INTEL_COMPILER >= 1100" \
-             && ! (echo $CFLAGS | grep -Eiq "(${ARCHPRE}ia32|${ARCHPRE}sse|${ARCHPRE}ssse3|${ARCHPRE}avx)") \
-             && [[ "$CFLAGS" != *${QPRE}x* ]]; then
-                CFLAGS="$CFLAGS ${ARCHPRE}ia32"
-            fi
             # icc on linux has various degrees of mod16 stack support
             if [ $SYS = LINUX ]; then
                 # < 11 is completely incapable of keeping a mod16 stack
@@ -588,10 +582,12 @@ log_msg ""
 cc_check || die "No working C compiler found."
 
 if [ $compiler != ICL ]; then
-    if cc_check '' -std=gnu99 ; then
+    if cc_check '' -std=gnu99 'for( int i = 0; i < 9; i++ );' ; then
         CFLAGS="$CFLAGS -std=gnu99"
-    elif cc_check '' -std=c99 ; then
+    elif cc_check '' -std=c99 'for( int i = 0; i < 9; i++ );' ; then
         CFLAGS="$CFLAGS -std=c99 -D_POSIX_C_SOURCE=200112L -D_BSD_SOURCE"
+    elif ! cc_check '' '' 'for( int i = 0; i < 9; i++ );' ; then
+        die "C99 compiler is needed for compilation."
     fi
 fi
 
@@ -922,6 +918,8 @@ if [ "$avs" = "auto" ] ; then
         define HAVE_AVS
     fi
 fi
+
+cc_check "stdint.h" "" "uint32_t test_vec __attribute__ ((vector_size (16))) = {0,1,2,3};" && define HAVE_VECTOREXT
 
 if [ "$pic" = "yes" ] ; then
     CFLAGS="$CFLAGS -fPIC"
