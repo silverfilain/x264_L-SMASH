@@ -576,15 +576,22 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
 
     if( p_mp4->p_root )
     {
-        double actual_duration  = 0; /* FIXME: This may be inside block of "if( p_mp4->i_track )" if audio does not use this. */
-        uint32_t mvhd_timescale = 1; /* FIXME: This may be inside block of "if( p_mp4->i_track )" if audio does not use this.
-                                               And to avoid devision by zero, use 1 as default. */
+        double actual_duration   = 0;   /* FIXME: This may be inside block of "if( p_mp4->i_track )" if audio does not use this. */
+        uint32_t movie_timescale = 1;   /* FIXME: This may be inside block of "if( p_mp4->i_track )" if audio does not use this.
+                                         *        And to avoid devision by zero, use 1 as default. */
         if( p_mp4->i_track )
         {
             /* Flush the rest of samples and add the last sample_delta. */
             uint32_t last_delta = largest_pts - second_largest_pts;
             MP4_LOG_IF_ERR( lsmash_flush_pooled_samples( p_mp4->p_root, p_mp4->i_track, (last_delta ? last_delta : 1) * p_mp4->i_time_inc ),
                             "failed to flush the rest of samples.\n" );
+
+                     movie_timescale = lsmash_get_movie_timescale( p_mp4->p_root );
+            uint32_t media_timescale = lsmash_get_media_timescale( p_mp4->p_root, p_mp4->i_track );
+            if( media_timescale != 0 )  /* avoid zero division */
+                actual_duration = (double)((largest_pts + last_delta) * p_mp4->i_time_inc) * movie_timescale / media_timescale;
+            else
+                MP4_LOG_ERROR( "media timescale is broken.\n" );
 
             if( !p_mp4->b_fragments )
             {
@@ -600,24 +607,16 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
                  * So, we add Edit Box here to avoid this implicit media_rate could distort track's presentation timestamps slightly.
                  * Note: Any demuxers should follow the Edit List Box if it exists.
                  */
-                         mvhd_timescale = lsmash_get_movie_timescale( p_mp4->p_root );
-                uint32_t mdhd_timescale = lsmash_get_media_timescale( p_mp4->p_root, p_mp4->i_track );
-                if( mdhd_timescale != 0 ) /* avoid zero division */
-                {
-                    actual_duration = (double)((largest_pts + last_delta) * p_mp4->i_time_inc) * mvhd_timescale / mdhd_timescale;
-                    int64_t first_cts = p_mp4->b_dts_compress ? 0 : p_mp4->i_start_offset * p_mp4->i_time_inc;
-                    MP4_LOG_IF_ERR( lsmash_create_explicit_timeline_map( p_mp4->p_root, p_mp4->i_track, actual_duration, first_cts, ISOM_EDIT_MODE_NORMAL ),
-                                    "failed to set timeline map for video.\n" );
-                }
-                else
-                    MP4_LOG_ERROR( "mdhd timescale is broken.\n" );
+                int64_t first_cts = p_mp4->b_dts_compress ? 0 : p_mp4->i_start_offset * p_mp4->i_time_inc;
+                MP4_LOG_IF_ERR( lsmash_create_explicit_timeline_map( p_mp4->p_root, p_mp4->i_track, actual_duration, first_cts, ISOM_EDIT_MODE_NORMAL ),
+                                "failed to set timeline map for video.\n" );
             }
         }
 #if HAVE_ANY_AUDIO
         mp4_audio_hnd_t *p_audio = p_mp4->audio_hnd;
         if( p_audio && p_audio->i_track )
         {
-            MP4_LOG_IF_ERR( ( write_audio_frames( p_mp4, actual_duration / mvhd_timescale, 0 ) || // FIXME: I wonder why is this needed?
+            MP4_LOG_IF_ERR( ( write_audio_frames( p_mp4, actual_duration / movie_timescale, 0 ) || // FIXME: I wonder why is this needed?
                               write_audio_frames( p_mp4, 0, 1 ) ),
                             "failed to flush audio frame(s).\n" );
             uint32_t last_delta;
