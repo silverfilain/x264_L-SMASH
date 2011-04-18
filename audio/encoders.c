@@ -47,7 +47,7 @@ const audio_encoder_entry_t registered_audio_encoders[] = {
     { "pcm_u32le",  "pcm_u32le",        &audio_encoder_lavc, },
     { "pcm_u8",     "pcm_u8",           &audio_encoder_lavc, },
 #if 0
-    { "vorbis", "libvorbis",    &audio_encoder_lavc, },
+    { "vorbis", "libvorbis",            &audio_encoder_lavc, },
 #endif
     { "vorbis", "vorbis",               &audio_encoder_lavc, },
     { "amrnb",  "libopencore_amrnb",    &audio_encoder_lavc, },
