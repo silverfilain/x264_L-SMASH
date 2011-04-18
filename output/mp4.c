@@ -306,7 +306,6 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
     {
         char audio_params[MAX_ARGS];
         const char *used_enc;
-        /* libopencore-amr does not have AMR-WB encoder yet, so we can't use it. */
         char *codec_list[] = { "aac", "mp3", "ac3", "alac", "raw", "amrnb", "amrwb",
                                "pcm_f32be", "pcm_f32le", "pcm_f64be", "pcm_f64le",
                                "pcm_s16be", "pcm_s16le", "pcm_s24be", "pcm_s24le",
