@@ -824,8 +824,16 @@ if [ "$audio" = "auto" ]; then
     fi
     if [ "$audio_qtaac" = "auto" -a "$SYS" = "WINDOWS" ]; then
         if cc_check QTML.h "-D__CFTREE__" "InitializeQTML(0);"; then
-            audio_qtaac="yes"
-            audio_encs="$audio_encs, qtaac"
+            if [ "$nonfree" = "yes" ]; then
+                audio_qtaac="yes"
+                audio_encs="$audio_encs, qtaac"
+            else
+                echo "Warning: Found usable QuickTime SDK but --enable-nonfree isn't specified."
+                echo "Warning: If you want to compile qtaac support in, configure with --enable-nonfree."
+                echo "Warning: As a consequence, the resulting binaries will be unredistributable."
+                echo ""
+                audio_qtaac="no"
+            fi
         else
             audio_qtaac="no"
         fi
