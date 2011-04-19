@@ -492,7 +492,7 @@ static int set_param_audio( mp4_hnd_t* p_mp4, uint64_t i_media_timescale, lsmash
 
     /* Create a audio track. */
     p_audio->i_track = lsmash_create_track( p_mp4->p_root, ISOM_MEDIA_HANDLER_TYPE_AUDIO_TRACK );
-    MP4_FAIL_IF_ERR_EX( !p_audio->i_track, "failed to create a audio track.\n" );
+    MP4_FAIL_IF_ERR( !p_audio->i_track, "failed to create a audio track.\n" );
 
 #if HAVE_AUDIO
     if( p_mp4->major_brand == ISOM_BRAND_TYPE_QT )
@@ -825,8 +825,8 @@ static int open_file( char *psz_filename, hnd_t *p_handle, cli_output_opt_t *opt
     MP4_FAIL_IF_ERR_EX( !p_mp4->p_root, "failed to create root.\n" );
 
     p_mp4->summary = calloc( 1, sizeof(lsmash_video_summary_t) );
-    MP4_FAIL_IF_ERR( !p_mp4->summary,
-                     "failed to allocate memory for summary information of video.\n" );
+    MP4_FAIL_IF_ERR_EX( !p_mp4->summary,
+                        "failed to allocate memory for summary information of video.\n" );
 
 #if HAVE_ANY_AUDIO
 #if HAVE_AUDIO
@@ -915,7 +915,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
 
     /* Create a video track. */
     p_mp4->i_track = lsmash_create_track( p_mp4->p_root, ISOM_MEDIA_HANDLER_TYPE_VIDEO_TRACK );
-    MP4_FAIL_IF_ERR_EX( !p_mp4->i_track, "failed to create a video track.\n" );
+    MP4_FAIL_IF_ERR( !p_mp4->i_track, "failed to create a video track.\n" );
 
     p_mp4->summary->width = p_param->i_width;
     p_mp4->summary->height = p_param->i_height;
