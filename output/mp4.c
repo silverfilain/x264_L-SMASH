@@ -239,28 +239,9 @@ static void set_channel_layout( mp4_audio_hnd_t *p_audio )
 }
 #endif
 
-static void remove_mp4_hnd( hnd_t handle )
-{
-    mp4_hnd_t *p_mp4 = handle;
-    if( !p_mp4 )
-        return;
-    if( p_mp4->p_sei_buffer )
-    {
-        free( p_mp4->p_sei_buffer );
-        p_mp4->p_sei_buffer = NULL;
-    }
-    if( p_mp4->p_root )
-    {
-        lsmash_destroy_root( p_mp4->p_root );
-        p_mp4->p_root = NULL;
-    }
 #if HAVE_ANY_AUDIO
-    mp4_audio_hnd_t *p_audio = p_mp4->audio_hnd;
-    if( !p_audio )
-    {
-        free( p_mp4 );
-        return;
-    }
+static void remove_audio_hnd( mp4_audio_hnd_t *p_audio )
+{
     if( p_audio->summary )
     {
         /* WARNING: You should not rely on this if you created summary in your own code. */
@@ -281,8 +262,31 @@ static void remove_mp4_hnd( hnd_t handle )
     }
 #endif
     free( p_audio );
-    p_mp4->audio_hnd = NULL;
-#endif /* #if HAVE_ANY_AUDIO */
+}
+#endif
+
+static void remove_mp4_hnd( hnd_t handle )
+{
+    mp4_hnd_t *p_mp4 = handle;
+    if( !p_mp4 )
+        return;
+    if( p_mp4->p_sei_buffer )
+    {
+        free( p_mp4->p_sei_buffer );
+        p_mp4->p_sei_buffer = NULL;
+    }
+    if( p_mp4->p_root )
+    {
+        lsmash_destroy_root( p_mp4->p_root );
+        p_mp4->p_root = NULL;
+    }
+#if HAVE_ANY_AUDIO
+    if( p_mp4->audio_hnd )
+    {
+        remove_audio_hnd( p_mp4->audio_hnd );
+        p_mp4->audio_hnd = NULL;
+    }
+#endif
     free( p_mp4 );
 }
 
