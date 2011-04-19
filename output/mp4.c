@@ -161,7 +161,7 @@ static void set_recovery_param( mp4_hnd_t *p_mp4, x264_param_t *p_param )
     p_mp4->i_max_frame_num = 1 << i_log2_max_frame_num;
 }
 
-#if HAVE_ANY_AUDIO
+#if HAVE_AUDIO
 static void set_channel_layout( mp4_audio_hnd_t *p_audio )
 {
 #define CH_LAYOUT_MONO              (CH_FRONT_CENTER)
@@ -482,6 +482,109 @@ error:
 #endif /* #if HAVE_AUDIO */
 
 #if HAVE_ANY_AUDIO
+static int set_param_audio( mp4_hnd_t* p_mp4, uint64_t i_media_timescale, lsmash_track_mode_code track_mode )
+{
+    mp4_audio_hnd_t *p_audio = p_mp4->audio_hnd;
+
+    /* Create a audio track. */
+    p_audio->i_track = lsmash_create_track( p_mp4->p_root, ISOM_MEDIA_HANDLER_TYPE_AUDIO_TRACK );
+    MP4_FAIL_IF_ERR_EX( !p_audio->i_track, "failed to create a audio track.\n" );
+
+#if HAVE_AUDIO
+    if( p_mp4->major_brand == ISOM_BRAND_TYPE_QT )
+        set_channel_layout( p_audio );
+    p_audio->summary->stream_type      = MP4SYS_STREAM_TYPE_AudioStream;
+    p_audio->summary->max_au_length    = ( 1 << 13 ) - 1;
+    p_audio->summary->frequency        = p_audio->info->samplerate;
+    p_audio->summary->channels         = p_audio->info->channels;
+    p_audio->summary->bit_depth        = p_audio->info->depth;
+    p_audio->summary->samples_in_frame = p_audio->info->framelen;
+    p_audio->summary->packed           = 1;
+    p_audio->summary->interleaved      = 1;
+    switch( p_audio->codec_type )
+    {
+        case ISOM_CODEC_TYPE_MP4A_AUDIO :
+            p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_Audio_ISO_14496_3;
+            if( !strcmp( p_audio->info->codec_name, "mp3" ) || !strcmp( p_audio->info->codec_name, "mp2" ) || !strcmp( p_audio->info->codec_name, "mp1" ) )
+            {
+                if( p_audio->info->samplerate >= 32000 )
+                    p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_Audio_ISO_11172_3; /* Legacy Interface */
+                else
+                    p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_Audio_ISO_13818_3; /* Legacy Interface */
+            }
+            if( !strcmp( p_audio->info->codec_name, "als" ) )
+                p_audio->summary->aot = MP4A_AUDIO_OBJECT_TYPE_ALS;
+            else
+                p_audio->summary->aot = MP4A_AUDIO_OBJECT_TYPE_AAC_LC;
+            p_audio->summary->sbr_mode      = p_audio->has_sbr ? MP4A_AAC_SBR_BACKWARD_COMPATIBLE : MP4A_AAC_SBR_NOT_SPECIFIED;
+            MP4_FAIL_IF_ERR( lsmash_summary_add_exdata( p_audio->summary, p_audio->info->extradata, p_audio->info->extradata_size ),
+                             "failed to create mp4a specific info.\n" );
+            break;
+        case ISOM_CODEC_TYPE_AC_3_AUDIO :
+            p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_AC_3_AUDIO;
+            MP4_FAIL_IF_ERR( mp4sys_create_dac3_from_syncframe( p_audio->summary, p_audio->info->extradata, p_audio->info->extradata_size ),
+                             "failed to create AC-3 specific info.\n" );
+            break;
+        case ISOM_CODEC_TYPE_SAMR_AUDIO :
+        case ISOM_CODEC_TYPE_SAWB_AUDIO :
+            p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_NONE;
+            MP4_FAIL_IF_ERR( mp4sys_amr_create_damr( p_audio->summary ),
+                             "failed to create AMR specific info.\n" );
+            break;
+        default :
+            p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_NONE;
+            MP4_FAIL_IF_ERR( lsmash_summary_add_exdata( p_audio->summary, p_audio->info->extradata, p_audio->info->extradata_size ),
+                             "failed to create unknown specific info.\n" );
+            break;
+    }
+#else
+    /*
+     * NOTE: Retrieve audio summary, which will be used for lsmash_add_sample_entry() as audio parameters.
+     * Currently, our ADTS importer never recognize SBR (HE-AAC).
+     * Thus, in this sample, if the source contains SBR, it'll be coded as implicit signaling for SBR.
+     * If you want to use explicit signaling of SBR, change the sbr_mode in summary and
+     * call lsmash_setup_AudioSpecificConfig() to reconstruct ASC within the summary.
+     */
+    /*
+     * WARNING: If you wish to allocate summary in your code, you have to allocate ASC too,
+     * and never use lsmash_cleanup_audio_summary(), unless L-SMASH is compiled integrated with your code.
+     * Because malloc() and free() have to be used as pair from EXACTLY SAME standard C library.
+     * Otherwise you may cause bugs which you hardly call to mind.
+     */
+    p_audio->summary = mp4sys_duplicate_audio_summary( p_audio->p_importer, 1 );
+    MP4_FAIL_IF_ERR( !p_audio->summary, "failed to duplicate summary information.\n" );
+    p_audio->codec_type = p_audio->summary->sample_type;
+#endif /* #if HAVE_AUDIO #else */
+
+    /* Set sound track parameters. */
+    lsmash_track_parameters_t track_param;
+    lsmash_initialize_track_parameters( &track_param );
+    track_param.mode = track_mode;
+    MP4_FAIL_IF_ERR( lsmash_set_track_parameters( p_mp4->p_root, p_audio->i_track, &track_param ),
+                     "failed to set track parameters for audio.\n" );
+    p_audio->i_video_timescale = i_media_timescale;
+
+    /* Set sound media parameters. */
+    lsmash_media_parameters_t media_param;
+    lsmash_initialize_media_parameters( &media_param );
+    media_param.timescale = p_audio->summary->frequency;
+    media_param.ISO_language = p_mp4->psz_language;
+    media_param.media_handler_name = "X264 Sound Media Handler";
+    if( p_mp4->b_brand_qt )
+        media_param.data_handler_name = "X264 URL Data Handler";
+    MP4_FAIL_IF_ERR( lsmash_set_media_parameters( p_mp4->p_root, p_audio->i_track, &media_param ),
+                     "failed to set media parameters for audio.\n" );
+
+    p_audio->i_sample_entry = lsmash_add_sample_entry( p_mp4->p_root, p_audio->i_track, p_audio->codec_type, p_audio->summary );
+    MP4_FAIL_IF_ERR( !p_audio->i_sample_entry,
+                     "failed to add sample_entry for audio.\n" );
+    /* MP4AudioSampleEntry does not have btrt */
+//    MP4_FAIL_IF_ERR( lsmash_add_btrt( p_mp4->p_root, p_audio->i_track, p_audio->i_sample_entry ),
+//                     "failed to add btrt for audio.\n" );
+
+    return 0;
+}
+
 static int write_audio_frames( mp4_hnd_t *p_mp4, double video_dts, int finish )
 {
     mp4_audio_hnd_t *p_audio = p_mp4->audio_hnd;
@@ -539,6 +642,29 @@ static int write_audio_frames( mp4_hnd_t *p_mp4, double video_dts, int finish )
 
         p_audio->i_numframe++;
     }
+    return 0;
+}
+
+static int close_file_audio( mp4_hnd_t* p_mp4, double actual_duration, uint32_t movie_timescale )
+{
+    mp4_audio_hnd_t *p_audio = p_mp4->audio_hnd;
+    MP4_LOG_IF_ERR( ( write_audio_frames( p_mp4, actual_duration / movie_timescale, 0 ) || // FIXME: I wonder why is this needed?
+                      write_audio_frames( p_mp4, 0, 1 ) ),
+                    "failed to flush audio frame(s).\n" );
+    uint32_t last_delta;
+    if( p_audio->codec_type == QT_CODEC_TYPE_SOWT_AUDIO || p_audio->codec_type == QT_CODEC_TYPE_TWOS_AUDIO )
+        last_delta = 1;
+    else
+#if HAVE_AUDIO
+        last_delta = p_audio->info->last_delta;
+#else
+        last_delta = p_audio->summary->samples_in_frame;
+#endif
+    MP4_LOG_IF_ERR( lsmash_flush_pooled_samples( p_mp4->p_root, p_audio->i_track, last_delta ),
+                    "failed to set last sample's duration for audio.\n" );
+    if( !p_mp4->b_fragments )
+        MP4_LOG_IF_ERR( lsmash_create_explicit_timeline_map( p_mp4->p_root, p_audio->i_track, 0, 0, ISOM_EDIT_MODE_NORMAL ),
+                        "failed to set timeline map for audio.\n" );
     return 0;
 }
 #endif /* #if HAVE_ANY_AUDIO */
@@ -610,28 +736,10 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
                                 "failed to set timeline map for video.\n" );
             }
         }
+
 #if HAVE_ANY_AUDIO
-        mp4_audio_hnd_t *p_audio = p_mp4->audio_hnd;
-        if( p_audio && p_audio->i_track )
-        {
-            MP4_LOG_IF_ERR( ( write_audio_frames( p_mp4, actual_duration / movie_timescale, 0 ) || // FIXME: I wonder why is this needed?
-                              write_audio_frames( p_mp4, 0, 1 ) ),
-                            "failed to flush audio frame(s).\n" );
-            uint32_t last_delta;
-            if( p_audio->codec_type == QT_CODEC_TYPE_SOWT_AUDIO || p_audio->codec_type == QT_CODEC_TYPE_TWOS_AUDIO )
-                last_delta = 1;
-            else
-#if HAVE_AUDIO
-                last_delta = p_audio->info->last_delta;
-#else
-                last_delta = p_audio->summary->samples_in_frame;
-#endif
-            MP4_LOG_IF_ERR( lsmash_flush_pooled_samples( p_mp4->p_root, p_audio->i_track, last_delta ),
-                            "failed to set last sample's duration for audio.\n" );
-            if( !p_mp4->b_fragments )
-                MP4_LOG_IF_ERR( lsmash_create_explicit_timeline_map( p_mp4->p_root, p_audio->i_track, 0, 0, ISOM_EDIT_MODE_NORMAL ),
-                                "failed to set timeline map for audio.\n" );
-        }
+        MP4_LOG_IF_ERR( p_mp4->audio_hnd && p_mp4->audio_hnd->i_track && close_file_audio( p_mp4, actual_duration, movie_timescale ),
+                        "failed to close audio.\n" );
 #endif
 
         if( p_mp4->psz_chapter && (p_mp4->major_brand != ISOM_BRAND_TYPE_QT) )
@@ -882,104 +990,9 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     }
 
 #if HAVE_ANY_AUDIO
-    mp4_audio_hnd_t *p_audio = p_mp4->audio_hnd;
-    if( p_audio )
-    {
-        /* Create a audio track. */
-        p_audio->i_track = lsmash_create_track( p_mp4->p_root, ISOM_MEDIA_HANDLER_TYPE_AUDIO_TRACK );
-        MP4_FAIL_IF_ERR_EX( !p_audio->i_track, "failed to create a audio track.\n" );
-
-        if( p_mp4->major_brand == ISOM_BRAND_TYPE_QT )
-            set_channel_layout( p_audio );
-#if HAVE_AUDIO
-        p_audio->summary->stream_type      = MP4SYS_STREAM_TYPE_AudioStream;
-        p_audio->summary->max_au_length    = ( 1 << 13 ) - 1;
-        p_audio->summary->frequency        = p_audio->info->samplerate;
-        p_audio->summary->channels         = p_audio->info->channels;
-        p_audio->summary->bit_depth        = p_audio->info->depth;
-        p_audio->summary->samples_in_frame = p_audio->info->framelen;
-        p_audio->summary->packed           = 1;
-        p_audio->summary->interleaved      = 1;
-        switch( p_audio->codec_type )
-        {
-            case ISOM_CODEC_TYPE_MP4A_AUDIO :
-                p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_Audio_ISO_14496_3;
-                if( !strcmp( p_audio->info->codec_name, "mp3" ) || !strcmp( p_audio->info->codec_name, "mp2" ) || !strcmp( p_audio->info->codec_name, "mp1" ) )
-                {
-                    if( p_audio->info->samplerate >= 32000 )
-                        p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_Audio_ISO_11172_3; /* Legacy Interface */
-                    else
-                        p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_Audio_ISO_13818_3; /* Legacy Interface */
-                }
-                if( !strcmp( p_audio->info->codec_name, "als" ) )
-                    p_audio->summary->aot = MP4A_AUDIO_OBJECT_TYPE_ALS;
-                else
-                    p_audio->summary->aot = MP4A_AUDIO_OBJECT_TYPE_AAC_LC;
-                p_audio->summary->sbr_mode      = p_audio->has_sbr ? MP4A_AAC_SBR_BACKWARD_COMPATIBLE : MP4A_AAC_SBR_NOT_SPECIFIED;
-                MP4_FAIL_IF_ERR( lsmash_summary_add_exdata( p_audio->summary, p_audio->info->extradata, p_audio->info->extradata_size ),
-                                 "failed to create mp4a specific info.\n" );
-                break;
-            case ISOM_CODEC_TYPE_AC_3_AUDIO :
-                p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_AC_3_AUDIO;
-                MP4_FAIL_IF_ERR( mp4sys_create_dac3_from_syncframe( p_audio->summary, p_audio->info->extradata, p_audio->info->extradata_size ),
-                                 "failed to create AC-3 specific info.\n" );
-                break;
-            case ISOM_CODEC_TYPE_SAMR_AUDIO :
-            case ISOM_CODEC_TYPE_SAWB_AUDIO :
-                p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_NONE;
-                MP4_FAIL_IF_ERR( mp4sys_amr_create_damr( p_audio->summary ),
-                                 "failed to create AMR specific info.\n" );
-                break;
-            default :
-                p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_NONE;
-                MP4_FAIL_IF_ERR( lsmash_summary_add_exdata( p_audio->summary, p_audio->info->extradata, p_audio->info->extradata_size ),
-                                 "failed to create unknown specific info.\n" );
-                break;
-        }
-#else
-        /*
-         * NOTE: Retrieve audio summary, which will be used for lsmash_add_sample_entry() as audio parameters.
-         * Currently, our ADTS importer never recognize SBR (HE-AAC).
-         * Thus, in this sample, if the source contains SBR, it'll be coded as implicit signaling for SBR.
-         * If you want to use explicit signaling of SBR, change the sbr_mode in summary and
-         * call lsmash_setup_AudioSpecificConfig() to reconstruct ASC within the summary.
-         */
-        /*
-         * WARNING: If you wish to allocate summary in your code, you have to allocate ASC too,
-         * and never use lsmash_cleanup_audio_summary(), unless L-SMASH is compiled integrated with your code.
-         * Because malloc() and free() have to be used as pair from EXACTLY SAME standard C library.
-         * Otherwise you may cause bugs which you hardly call to mind.
-         */
-        p_audio->summary = mp4sys_duplicate_audio_summary( p_audio->p_importer, 1 );
-        MP4_FAIL_IF_ERR( !p_audio->summary, "failed to duplicate summary information.\n" );
-        p_audio->codec_type = p_audio->summary->sample_type;
-#endif /* #if HAVE_AUDIO #else */
-
-        /* Set sound track parameters. */
-        lsmash_initialize_track_parameters( &track_param );
-        track_param.mode = track_mode;
-        MP4_FAIL_IF_ERR( lsmash_set_track_parameters( p_mp4->p_root, p_audio->i_track, &track_param ),
-                         "failed to set track parameters for audio.\n" );
-        p_audio->i_video_timescale = i_media_timescale;
-
-        /* Set sound media parameters. */
-        lsmash_initialize_media_parameters( &media_param );
-        media_param.timescale = p_audio->summary->frequency;
-        media_param.ISO_language = p_mp4->psz_language;
-        media_param.media_handler_name = "X264 Sound Media Handler";
-        if( p_mp4->b_brand_qt )
-            media_param.data_handler_name = "X264 URL Data Handler";
-        MP4_FAIL_IF_ERR( lsmash_set_media_parameters( p_mp4->p_root, p_audio->i_track, &media_param ),
-                         "failed to set media parameters for audio.\n" );
-
-        p_audio->i_sample_entry = lsmash_add_sample_entry( p_mp4->p_root, p_audio->i_track, p_audio->codec_type, p_audio->summary );
-        MP4_FAIL_IF_ERR( !p_audio->i_sample_entry,
-                         "failed to add sample_entry for audio.\n" );
-        /* MP4AudioSampleEntry does not have btrt */
-//        MP4_FAIL_IF_ERR( lsmash_add_btrt( p_mp4->p_root, p_audio->i_track, p_audio->i_sample_entry ),
-//                         "failed to add btrt for audio.\n" );
-    }
-#endif /* #if HAVE_ANY_AUDIO */
+    MP4_FAIL_IF_ERR( p_mp4->audio_hnd && set_param_audio( p_mp4, i_media_timescale, track_mode ),
+                     "failed to set audio param\n" );
+#endif
 
     return 0;
 }
