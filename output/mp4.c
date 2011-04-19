@@ -162,7 +162,7 @@ static void set_recovery_param( mp4_hnd_t *p_mp4, x264_param_t *p_param )
 }
 
 #if HAVE_ANY_AUDIO
-static void set_channel_layout( mp4_hnd_t *p_mp4 )
+static void set_channel_layout( mp4_audio_hnd_t *p_audio )
 {
 #define CH_LAYOUT_MONO              (CH_FRONT_CENTER)
 #define CH_LAYOUT_STEREO            (CH_FRONT_LEFT|CH_FRONT_RIGHT)
@@ -180,7 +180,6 @@ static void set_channel_layout( mp4_hnd_t *p_mp4 )
 #define CH_LAYOUT_7POINT1_WIDE      (CH_LAYOUT_5POINT1_BACK|CH_FRONT_LEFT_OF_CENTER|CH_FRONT_RIGHT_OF_CENTER)
 #define CH_LAYOUT_STEREO_DOWNMIX    (CH_STEREO_LEFT|CH_STEREO_RIGHT)
 
-    mp4_audio_hnd_t *p_audio = p_mp4->audio_hnd;
     lsmash_channel_layout_tag_code layout_tag = QT_CHANNEL_LAYOUT_UNKNOWN;
     lsmash_channel_bitmap_code bitmap = 0;
 
@@ -891,7 +890,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
         MP4_FAIL_IF_ERR_EX( !p_audio->i_track, "failed to create a audio track.\n" );
 
         if( p_mp4->major_brand == ISOM_BRAND_TYPE_QT )
-            set_channel_layout( p_mp4 );
+            set_channel_layout( p_audio );
 #if HAVE_AUDIO
         p_audio->summary->stream_type      = MP4SYS_STREAM_TYPE_AudioStream;
         p_audio->summary->max_au_length    = ( 1 << 13 ) - 1;
