@@ -89,7 +89,7 @@ static int init( hnd_t *handle, const char *opt_str )
     if( track >= 0 )
     {
         if( track < h->lavf->nb_streams &&
-            h->lavf->streams[track]->codec->codec_type == CODEC_TYPE_AUDIO )
+            h->lavf->streams[track]->codec->codec_type == AVMEDIA_TYPE_AUDIO )
             tid = track;
         else
             AF_LOG_ERR( h, "requested track %d is unavailable "
@@ -99,7 +99,7 @@ static int init( hnd_t *handle, const char *opt_str )
     {
         for( track = 0;
              track < h->lavf->nb_streams &&
-             h->lavf->streams[track]->codec->codec_type != CODEC_TYPE_AUDIO; )
+             h->lavf->streams[track]->codec->codec_type != AVMEDIA_TYPE_AUDIO; )
             ++track;
         if( track < h->lavf->nb_streams )
             tid = track;
