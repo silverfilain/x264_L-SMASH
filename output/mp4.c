@@ -603,10 +603,10 @@ static int write_audio_frames( mp4_hnd_t *p_mp4, double video_dts, int finish )
     {
         uint64_t audio_timestamp = (uint64_t)p_audio->i_numframe * p_audio->summary->samples_in_frame;
         /*
-         * means while( audio_dts < video_dts )
+         * means while( audio_dts <= video_dts )
          * FIXME: I wonder if there's any way more effective.
          */
-        if( !finish && audio_timestamp / (double)p_audio->summary->frequency > video_dts )
+        if( !finish && ((audio_timestamp / (double)p_audio->summary->frequency > video_dts) || !video_dts) )
             break;
 
         /* read a audio frame */
