@@ -774,10 +774,10 @@ static int open_file( char *psz_filename, hnd_t *p_handle, cli_output_opt_t *opt
     *p_handle = NULL;
     FILE *fh = fopen( psz_filename, "wb" );
     MP4_FAIL_IF_ERR( !fh, "cannot open output file `%s'.\n", psz_filename );
-    if( !x264_is_regular_file( fh ) )
+    if( !opt->fragments && !x264_is_regular_file( fh ) )
     {
         fclose( fh );
-        MP4_FAIL_IF_ERR( -1, "MP4 output is incompatible with non-regular file `%s'\n", psz_filename );
+        MP4_FAIL_IF_ERR( -1, "Non-fragmented MP4 output is incompatible with non-regular file `%s'\n", psz_filename );
     }
     fclose( fh );
 
