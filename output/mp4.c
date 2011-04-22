@@ -1100,9 +1100,8 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
                 p_sample->prop.recovery.complete = (p_sample->prop.recovery.identifier + p_mp4->i_recovery_frame_cnt) % p_mp4->i_max_frame_num;
             }
         }
-        else if( p_picture->i_type != X264_TYPE_IDR && p_picture->i_type != X264_TYPE_B )
-            if( p_picture->i_type == X264_TYPE_I || p_picture->i_type == X264_TYPE_P || p_picture->i_type == X264_TYPE_BREF )
-                p_sample->prop.allow_earlier = QT_SAMPLE_EARLIER_PTS_ALLOWED;
+        else if( p_picture->i_type == X264_TYPE_I || p_picture->i_type == X264_TYPE_P || p_picture->i_type == X264_TYPE_BREF )
+            p_sample->prop.allow_earlier = QT_SAMPLE_EARLIER_PTS_ALLOWED;
         if( p_picture->i_type == X264_TYPE_I && p_picture->b_keyframe && p_mp4->i_recovery_frame_cnt == 0 )
             p_sample->prop.random_access_type = ISOM_SAMPLE_RANDOM_ACCESS_TYPE_OPEN_RAP;
     }
