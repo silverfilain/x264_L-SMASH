@@ -665,7 +665,7 @@ static int close_file_audio( mp4_hnd_t* p_mp4, double actual_duration, uint32_t 
         last_delta = p_audio->summary->samples_in_frame;
 #endif
     MP4_LOG_IF_ERR( lsmash_flush_pooled_samples( p_mp4->p_root, p_audio->i_track, last_delta ),
-                    "failed to set last sample's duration for audio.\n" );
+                    "failed to flush the rest of audio samples.\n" );
     if( !p_mp4->b_fragments )
         MP4_LOG_IF_ERR( lsmash_create_explicit_timeline_map( p_mp4->p_root, p_audio->i_track, 0, 0, ISOM_EDIT_MODE_NORMAL ),
                         "failed to set timeline map for audio.\n" );
