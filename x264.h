@@ -41,7 +41,7 @@
 
 #include "x264_config.h"
 
-#define X264_BUILD 114
+#define X264_BUILD 115
 
 /* x264_t:
  *      opaque handler for encoder */
@@ -162,9 +162,6 @@ typedef struct
 #define X264_B_PYRAMID_NORMAL        2
 #define X264_KEYINT_MIN_AUTO         0
 #define X264_KEYINT_MAX_INFINITE     (1<<30)
-#define X264_OPEN_GOP_NONE           0
-#define X264_OPEN_GOP_NORMAL         1
-#define X264_OPEN_GOP_BLURAY         2
 
 static const char * const x264_direct_pred_names[] = { "none", "spatial", "temporal", "auto", 0 };
 static const char * const x264_motion_est_names[] = { "dia", "hex", "umh", "esa", "tesa", 0 };
@@ -176,7 +173,6 @@ static const char * const x264_colorprim_names[] = { "", "bt709", "undef", "", "
 static const char * const x264_transfer_names[] = { "", "bt709", "undef", "", "bt470m", "bt470bg", "smpte170m", "smpte240m", "linear", "log100", "log316", 0 };
 static const char * const x264_colmatrix_names[] = { "GBR", "bt709", "undef", "", "fcc", "bt470bg", "smpte170m", "smpte240m", "YCgCo", 0 };
 static const char * const x264_nal_hrd_names[] = { "none", "vbr", "cbr", 0 };
-static const char * const x264_open_gop_names[] = { "none", "normal", "bluray", 0 };
 
 /* Colorspace type */
 #define X264_CSP_MASK           0x00ff  /* */
@@ -281,7 +277,8 @@ typedef struct x264_param_t
     int         i_bframe_adaptive;
     int         i_bframe_bias;
     int         i_bframe_pyramid;   /* Keep some B-frames as references: 0=off, 1=strict hierarchical, 2=normal */
-    int         i_open_gop;         /* Open gop: 1=display order, 2=bluray compatibility braindamage mode */
+    int         b_open_gop;
+    int         b_bluray_compat;
 
     int         b_deblocking_filter;
     int         i_deblocking_filter_alphac0;    /* [-6, 6] -6 light filter, 6 strong */
@@ -385,7 +382,8 @@ typedef struct x264_param_t
 
     /* Cropping Rectangle parameters: added to those implicitly defined by
        non-mod16 video resolutions. */
-    struct {
+    struct
+    {
         unsigned int i_left;
         unsigned int i_top;
         unsigned int i_right;
@@ -480,7 +478,8 @@ void x264_nal_encode( x264_t *h, uint8_t *dst, x264_nal_t *nal );
  * H.264 level restriction information
  ****************************************************************************/
 
-typedef struct {
+typedef struct
+{
     int level_idc;
     int mbps;        /* max macroblock processing rate (macroblocks/sec) */
     int frame_size;  /* max frame size (macroblocks) */

@@ -137,7 +137,7 @@ typedef union { x264_uint128_t i; uint64_t a[2]; uint32_t b[4]; uint16_t c[8]; u
 #define X264_SCAN8_LUMA_SIZE (5*8)
 #define X264_SCAN8_0 (4+1*8)
 
-static const int x264_scan8[16+2*4+3] =
+static const unsigned x264_scan8[16+2*4+3] =
 {
     /* Luma */
     4+1*8, 5+1*8, 4+2*8, 5+2*8,
@@ -205,7 +205,8 @@ void x264_log( x264_t *h, int i_level, const char *psz_fmt, ... );
 
 void x264_reduce_fraction( uint32_t *n, uint32_t *d );
 void x264_reduce_fraction64( uint64_t *n, uint64_t *d );
-void x264_init_vlc_tables( void );
+void x264_cavlc_init( void );
+void x264_cabac_init( void );
 
 static ALWAYS_INLINE pixel x264_clip_pixel( int x )
 {
@@ -310,6 +311,7 @@ enum sei_payload_type_e
     SEI_USER_DATA_REGISTERED   = 4,
     SEI_USER_DATA_UNREGISTERED = 5,
     SEI_RECOVERY_POINT         = 6,
+    SEI_DEC_REF_PIC_MARKING    = 7,
     SEI_FRAME_PACKING          = 45,
 };
 
@@ -472,6 +474,10 @@ struct x264_t
 
     /* Slice header */
     x264_slice_header_t sh;
+
+    /* Slice header backup, for SEI_DEC_REF_PIC_MARKING */
+    int b_sh_backup;
+    x264_slice_header_t sh_backup;
 
     /* cabac context */
     x264_cabac_t    cabac;
@@ -645,6 +651,7 @@ struct x264_t
         int b_reencode_mb;
         int ip_offset; /* Used by PIR to offset the quantizer of intra-refresh blocks. */
         int b_deblock_rdo;
+        int b_overflow; /* If CAVLC had a level code overflow during bitstream writing. */
 
         struct
         {
@@ -850,11 +857,12 @@ struct x264_t
 
 // included at the end because it needs x264_t
 #include "macroblock.h"
-#include "rectangle.h"
 
-#if HAVE_MMX
+#if ARCH_X86 || ARCH_X86_64
 #include "x86/util.h"
 #endif
+
+#include "rectangle.h"
 
 #endif
 

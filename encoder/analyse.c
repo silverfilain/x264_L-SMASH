@@ -26,8 +26,6 @@
  *****************************************************************************/
 
 #define _ISOC99_SOURCE
-#include <math.h>
-#include <unistd.h>
 
 #include "common/common.h"
 #include "macroblock.h"
@@ -138,7 +136,8 @@ typedef struct
 } x264_mb_analysis_t;
 
 /* lambda = pow(2,qp/6-2) */
-const uint16_t x264_lambda_tab[QP_MAX_MAX+1] = {
+const uint16_t x264_lambda_tab[QP_MAX_MAX+1] =
+{
    1,   1,   1,   1,   1,   1,   1,   1, /*  0- 7 */
    1,   1,   1,   1,   1,   1,   1,   1, /*  8-15 */
    2,   2,   2,   2,   3,   3,   3,   4, /* 16-23 */
@@ -154,7 +153,8 @@ const uint16_t x264_lambda_tab[QP_MAX_MAX+1] = {
 
 /* lambda2 = pow(lambda,2) * .9 * 256 */
 /* Capped to avoid overflow */
-const int x264_lambda2_tab[QP_MAX_MAX+1] = {
+const int x264_lambda2_tab[QP_MAX_MAX+1] =
+{
        14,       18,       22,       28,       36,       45,      57,      72, /*  0- 7 */
        91,      115,      145,      182,      230,      290,     365,     460, /*  8-15 */
       580,      731,      921,     1161,     1462,     1843,    2322,    2925, /* 16-23 */
@@ -168,14 +168,16 @@ const int x264_lambda2_tab[QP_MAX_MAX+1] = {
 134217727,134217727,134217727,134217727,134217727,134217727,                   /* 76-81 */
 };
 
-const uint8_t x264_exp2_lut[64] = {
+const uint8_t x264_exp2_lut[64] =
+{
       0,   3,   6,   8,  11,  14,  17,  20,  23,  26,  29,  32,  36,  39,  42,  45,
      48,  52,  55,  58,  62,  65,  69,  72,  76,  80,  83,  87,  91,  94,  98, 102,
     106, 110, 114, 118, 122, 126, 130, 135, 139, 143, 147, 152, 156, 161, 165, 170,
     175, 179, 184, 189, 194, 198, 203, 208, 214, 219, 224, 229, 234, 240, 245, 250
 };
 
-const float x264_log2_lut[128] = {
+const float x264_log2_lut[128] =
+{
     0.00000, 0.01123, 0.02237, 0.03342, 0.04439, 0.05528, 0.06609, 0.07682,
     0.08746, 0.09803, 0.10852, 0.11894, 0.12928, 0.13955, 0.14975, 0.15987,
     0.16993, 0.17991, 0.18982, 0.19967, 0.20945, 0.21917, 0.22882, 0.23840,
@@ -195,13 +197,15 @@ const float x264_log2_lut[128] = {
 };
 
 /* Avoid an int/float conversion. */
-const float x264_log2_lz_lut[32] = {
+const float x264_log2_lz_lut[32] =
+{
     31,30,29,28,27,26,25,24,23,22,21,20,19,18,17,16,15,14,13,12,11,10,9,8,7,6,5,4,3,2,1,0
 };
 
 // should the intra and inter lambdas be different?
 // I'm just matching the behaviour of deadzone quant.
-static const int x264_trellis_lambda2_tab[2][QP_MAX_MAX+1] = {
+static const int x264_trellis_lambda2_tab[2][QP_MAX_MAX+1] =
+{
     // inter lambda = .85 * .85 * 2**(qp/3. + 10 - LAMBDA_BITS)
     {
                46,       58,       73,       92,      117,      147,
@@ -238,7 +242,8 @@ static const int x264_trellis_lambda2_tab[2][QP_MAX_MAX+1] = {
 };
 
 #define MAX_CHROMA_LAMBDA_OFFSET 36
-static const uint16_t x264_chroma_lambda2_offset_tab[MAX_CHROMA_LAMBDA_OFFSET+1] = {
+static const uint16_t x264_chroma_lambda2_offset_tab[MAX_CHROMA_LAMBDA_OFFSET+1] =
+{
        16,    20,    25,    32,    40,    50,
        64,    80,   101,   128,   161,   203,
       256,   322,   406,   512,   645,   812,
@@ -249,16 +254,20 @@ static const uint16_t x264_chroma_lambda2_offset_tab[MAX_CHROMA_LAMBDA_OFFSET+1]
 };
 
 /* TODO: calculate CABAC costs */
-static const uint8_t i_mb_b_cost_table[X264_MBTYPE_MAX] = {
+static const uint8_t i_mb_b_cost_table[X264_MBTYPE_MAX] =
+{
     9, 9, 9, 9, 0, 0, 0, 1, 3, 7, 7, 7, 3, 7, 7, 7, 5, 9, 0
 };
-static const uint8_t i_mb_b16x8_cost_table[17] = {
+static const uint8_t i_mb_b16x8_cost_table[17] =
+{
     0, 0, 0, 0, 0, 0, 0, 0, 5, 7, 7, 7, 5, 7, 9, 9, 9
 };
-static const uint8_t i_sub_mb_b_cost_table[13] = {
+static const uint8_t i_sub_mb_b_cost_table[13] =
+{
     7, 5, 5, 3, 7, 5, 7, 3, 7, 7, 7, 5, 1
 };
-static const uint8_t i_sub_mb_p_cost_table[4] = {
+static const uint8_t i_sub_mb_p_cost_table[4] =
+{
     5, 3, 3, 1
 };
 
@@ -267,7 +276,18 @@ static void x264_analyse_update_cache( x264_t *h, x264_mb_analysis_t *a );
 static uint16_t x264_cost_ref[QP_MAX+1][3][33];
 static UNUSED x264_pthread_mutex_t cost_ref_mutex = X264_PTHREAD_MUTEX_INITIALIZER;
 
-int x264_analyse_init_costs( x264_t *h, int qp )
+float *x264_analyse_prepare_costs( x264_t *h )
+{
+    float *logs = x264_malloc( (2*4*2048+1)*sizeof(float) );
+    if( !logs )
+        return NULL;
+    logs[0] = 0.718f;
+    for( int i = 1; i <= 2*4*2048; i++ )
+        logs[i] = log2f(i+1)*2 + 1.718f;
+    return logs;
+}
+
+int x264_analyse_init_costs( x264_t *h, float *logs, int qp )
 {
     int lambda = x264_lambda_tab[qp];
     if( h->cost_mv[qp] )
@@ -278,7 +298,7 @@ int x264_analyse_init_costs( x264_t *h, int qp )
     for( int i = 0; i <= 2*4*2048; i++ )
     {
         h->cost_mv[qp][-i] =
-        h->cost_mv[qp][i]  = X264_MIN( lambda * (log2f(i+1)*2 + 0.718f + !!i) + .5f, (1<<16)-1 );
+        h->cost_mv[qp][i]  = X264_MIN( lambda * logs[i] + .5f, (1<<16)-1 );
     }
     x264_pthread_mutex_lock( &cost_ref_mutex );
     for( int i = 0; i < 3; i++ )

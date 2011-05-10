@@ -173,7 +173,7 @@ static int open_file( char *psz_filename, hnd_t *p_handle, video_info_t *info, c
 #endif
 
     int i = 0;
-    while( i < h->lavf->nb_streams && h->lavf->streams[i]->codec->codec_type != CODEC_TYPE_VIDEO )
+    while( i < h->lavf->nb_streams && h->lavf->streams[i]->codec->codec_type != AVMEDIA_TYPE_VIDEO )
         i++;
     FAIL_IF_ERROR( i == h->lavf->nb_streams, "could not find video stream\n" )
     h->stream_id       = i;

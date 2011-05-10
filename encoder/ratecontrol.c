@@ -29,7 +29,6 @@
 
 #define _ISOC99_SOURCE
 #undef NDEBUG // always check asserts, the speed effect is far too small to disable them
-#include <math.h>
 
 #include "common/common.h"
 #include "ratecontrol.h"
@@ -736,7 +735,8 @@ int x264_ratecontrol_new( x264_t *h )
             CMP_OPT_FIRST_PASS( "bframes", h->param.i_bframe );
             CMP_OPT_FIRST_PASS( "b_pyramid", h->param.i_bframe_pyramid );
             CMP_OPT_FIRST_PASS( "intra_refresh", h->param.b_intra_refresh );
-            CMP_OPT_FIRST_PASS( "open_gop", h->param.i_open_gop );
+            CMP_OPT_FIRST_PASS( "open_gop", h->param.b_open_gop );
+            CMP_OPT_FIRST_PASS( "bluray_compat", h->param.b_bluray_compat );
 
             if( (p = strstr( opts, "keyint=" )) )
             {
@@ -1209,8 +1209,7 @@ void x264_ratecontrol_start( x264_t *h, int i_force_qp, int overhead )
 
         int mincr = l->mincr;
 
-        /* Blu-ray requires this */
-        if( l->level_idc == 41 && h->param.i_nal_hrd )
+        if( h->param.b_bluray_compat )
             mincr = 4;
 
         /* High 10 doesn't require minCR, so just set the maximum to a large value. */
@@ -1689,7 +1688,14 @@ static double get_qscale(x264_t *h, ratecontrol_entry_t *rce, double rate_factor
 {
     x264_ratecontrol_t *rcc= h->rc;
     x264_zone_t *zone = get_zone( h, frame_num );
-    double q = pow( rce->blurred_complexity, 1 - rcc->qcompress );
+    double q;
+    if( h->param.rc.b_mb_tree )
+    {
+        double timescale = (double)h->sps->vui.i_num_units_in_tick / h->sps->vui.i_time_scale;
+        q = pow( BASE_FRAME_DURATION / CLIP_DURATION(rce->i_duration * timescale), 1 - h->param.rc.f_qcompress );
+    }
+    else
+        q = pow( rce->blurred_complexity, 1 - rcc->qcompress );
 
     // avoid NaN's in the rc_eq
     if( !isfinite(q) || rce->tex_bits + rce->mv_bits == 0 )
@@ -1829,7 +1835,8 @@ static int update_vbv( x264_t *h, int bits )
 
     if( h->sps->vui.hrd.b_cbr_hrd && rct->buffer_fill_final > buffer_size )
     {
-        filler = ceil( (rct->buffer_fill_final - buffer_size) / (8. * h->sps->vui.i_time_scale) );
+        int64_t scale = (int64_t)h->sps->vui.i_time_scale * 8;
+        filler = (rct->buffer_fill_final - buffer_size + scale - 1) / scale;
         bits = X264_MAX( (FILLER_OVERHEAD - h->param.b_annexb), filler ) * 8;
         rct->buffer_fill_final -= (uint64_t)bits * h->sps->vui.i_time_scale;
     }
@@ -2199,6 +2206,7 @@ static float rate_estimate_qscale( x264_t *h )
             rce.s_count = 0;
             rce.qscale = 1;
             rce.pict_type = pict_type;
+            rce.i_duration = h->fenc->i_duration;
 
             if( h->param.rc.i_rc_method == X264_RC_CRF )
             {
