@@ -101,13 +101,17 @@ typedef struct
     int i_brand_3gpp;
     int b_brand_m4a;
     int b_brand_qt;
+    int b_stdout;
     char *psz_chapter;
     char *psz_language;
+    uint32_t i_movie_timescale;
+    uint32_t i_video_timescale;
     uint32_t i_track;
     uint32_t i_sample_entry;
     uint64_t i_time_inc;
     int64_t i_start_offset;
-    uint64_t prev_dts;
+    uint64_t i_first_cts;
+    uint64_t i_prev_dts;
     uint32_t i_sei_size;
     uint8_t *p_sei_buffer;
     int i_numframe;
@@ -606,6 +610,11 @@ static int write_audio_frames( mp4_hnd_t *p_mp4, double video_dts, int finish )
          * means while( audio_dts <= video_dts )
          * FIXME: I wonder if there's any way more effective.
          */
+
+        if( !video_dts && p_mp4->b_fragments && !finish )
+            MP4_LOG_IF_ERR( lsmash_create_explicit_timeline_map( p_mp4->p_root, p_audio->i_track, UINT32_MAX, 0, ISOM_EDIT_MODE_NORMAL ),
+                            "failed to set timeline map for audio.\n" );
+
         if( !finish && ((audio_timestamp / (double)p_audio->summary->frequency > video_dts) || !video_dts) )
             break;
 
@@ -649,10 +658,10 @@ static int write_audio_frames( mp4_hnd_t *p_mp4, double video_dts, int finish )
     return 0;
 }
 
-static int close_file_audio( mp4_hnd_t* p_mp4, double actual_duration, uint32_t movie_timescale )
+static int close_file_audio( mp4_hnd_t* p_mp4, double actual_duration )
 {
     mp4_audio_hnd_t *p_audio = p_mp4->audio_hnd;
-    MP4_LOG_IF_ERR( ( write_audio_frames( p_mp4, actual_duration / movie_timescale, 0 ) || // FIXME: I wonder why is this needed?
+    MP4_LOG_IF_ERR( ( write_audio_frames( p_mp4, actual_duration / p_mp4->i_movie_timescale, 0 ) || // FIXME: I wonder why is this needed?
                       write_audio_frames( p_mp4, 0, 1 ) ),
                     "failed to flush audio frame(s).\n" );
     uint32_t last_delta;
@@ -666,9 +675,17 @@ static int close_file_audio( mp4_hnd_t* p_mp4, double actual_duration, uint32_t 
 #endif
     MP4_LOG_IF_ERR( lsmash_flush_pooled_samples( p_mp4->p_root, p_audio->i_track, last_delta ),
                     "failed to flush the rest of audio samples.\n" );
+    actual_duration = ((p_audio->i_numframe - 1) * p_audio->summary->samples_in_frame) + last_delta;
+    if( actual_duration )
+        actual_duration *= (double)p_mp4->i_movie_timescale / p_audio->summary->frequency;
     if( !p_mp4->b_fragments )
-        MP4_LOG_IF_ERR( lsmash_create_explicit_timeline_map( p_mp4->p_root, p_audio->i_track, 0, 0, ISOM_EDIT_MODE_NORMAL ),
+    {
+        MP4_LOG_IF_ERR( lsmash_create_explicit_timeline_map( p_mp4->p_root, p_audio->i_track, actual_duration, 0, ISOM_EDIT_MODE_NORMAL ),
                         "failed to set timeline map for audio.\n" );
+    }
+    else if( !p_mp4->b_stdout )
+        MP4_LOG_IF_ERR( lsmash_modify_timeline_map( p_mp4->p_root, p_audio->i_track, 1, actual_duration, 0, ISOM_EDIT_MODE_NORMAL ),
+                        "failed to update timeline map for audio.\n" );
     return 0;
 }
 #endif /* #if HAVE_ANY_AUDIO */
@@ -704,9 +721,7 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
 
     if( p_mp4->p_root )
     {
-        double actual_duration   = 0;   /* FIXME: This may be inside block of "if( p_mp4->i_track )" if audio does not use this. */
-        uint32_t movie_timescale = 1;   /* FIXME: This may be inside block of "if( p_mp4->i_track )" if audio does not use this.
-                                         *        And to avoid devision by zero, use 1 as default. */
+        double actual_duration = 0;     /* FIXME: This may be inside block of "if( p_mp4->i_track )" if audio does not use this. */
         if( p_mp4->i_track )
         {
             /* Flush the rest of samples and add the last sample_delta. */
@@ -714,12 +729,10 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
             MP4_LOG_IF_ERR( lsmash_flush_pooled_samples( p_mp4->p_root, p_mp4->i_track, (last_delta ? last_delta : 1) * p_mp4->i_time_inc ),
                             "failed to flush the rest of samples.\n" );
 
-                     movie_timescale = lsmash_get_movie_timescale( p_mp4->p_root );
-            uint32_t media_timescale = lsmash_get_media_timescale( p_mp4->p_root, p_mp4->i_track );
-            if( media_timescale != 0 )  /* avoid zero division */
-                actual_duration = (double)((largest_pts + last_delta) * p_mp4->i_time_inc) * movie_timescale / media_timescale;
+            if( p_mp4->i_movie_timescale != 0 && p_mp4->i_video_timescale != 0 )    /* avoid zero division */
+                actual_duration = ((double)((largest_pts + last_delta) * p_mp4->i_time_inc) / p_mp4->i_video_timescale) * p_mp4->i_movie_timescale;
             else
-                MP4_LOG_ERROR( "media timescale is broken.\n" );
+                MP4_LOG_ERROR( "timescale is broken.\n" );
 
             if( !p_mp4->b_fragments )
             {
@@ -735,14 +748,16 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
                  * So, we add Edit Box here to avoid this implicit media_rate could distort track's presentation timestamps slightly.
                  * Note: Any demuxers should follow the Edit List Box if it exists.
                  */
-                int64_t first_cts = p_mp4->b_dts_compress ? 0 : p_mp4->i_start_offset * p_mp4->i_time_inc;
-                MP4_LOG_IF_ERR( lsmash_create_explicit_timeline_map( p_mp4->p_root, p_mp4->i_track, actual_duration, first_cts, ISOM_EDIT_MODE_NORMAL ),
+                MP4_LOG_IF_ERR( lsmash_create_explicit_timeline_map( p_mp4->p_root, p_mp4->i_track, actual_duration, p_mp4->i_first_cts, ISOM_EDIT_MODE_NORMAL ),
                                 "failed to set timeline map for video.\n" );
             }
+            else if( !p_mp4->b_stdout )
+                MP4_LOG_IF_ERR( lsmash_modify_timeline_map( p_mp4->p_root, p_mp4->i_track, 1, actual_duration, p_mp4->i_first_cts, ISOM_EDIT_MODE_NORMAL ),
+                                "failed to update timeline map for video.\n" );
         }
 
 #if HAVE_ANY_AUDIO
-        MP4_LOG_IF_ERR( p_mp4->audio_hnd && p_mp4->audio_hnd->i_track && close_file_audio( p_mp4, actual_duration, movie_timescale ),
+        MP4_LOG_IF_ERR( p_mp4->audio_hnd && p_mp4->audio_hnd->i_track && close_file_audio( p_mp4, actual_duration ),
                         "failed to close audio.\n" );
 #endif
 
@@ -820,6 +835,7 @@ static int open_file( char *psz_filename, hnd_t *p_handle, cli_output_opt_t *opt
     p_mp4->b_force_display_size = p_mp4->i_display_height || p_mp4->i_display_height;
     p_mp4->scaling_method = p_mp4->b_force_display_size ? ISOM_SCALING_METHOD_FILL : ISOM_SCALING_METHOD_MEET;
     p_mp4->b_fragments = opt->fragments;
+    p_mp4->b_stdout = !strcmp( psz_filename, "-" );
 
     p_mp4->p_root = lsmash_open_movie( psz_filename, p_mp4->b_fragments ? LSMASH_FILE_MODE_WRITE_FRAGMENTED : LSMASH_FILE_MODE_WRITE );
     MP4_FAIL_IF_ERR_EX( !p_mp4->p_root, "failed to create root.\n" );
@@ -912,6 +928,8 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     lsmash_initialize_movie_parameters( &movie_param );
     MP4_FAIL_IF_ERR( lsmash_set_movie_parameters( p_mp4->p_root, &movie_param ),
                      "failed to set movie parameters.\n" );
+    p_mp4->i_movie_timescale = lsmash_get_movie_timescale( p_mp4->p_root );
+    MP4_FAIL_IF_ERR( !p_mp4->i_movie_timescale, "movie timescale is broken.\n" );
 
     /* Create a video track. */
     p_mp4->i_track = lsmash_create_track( p_mp4->p_root, ISOM_MEDIA_HANDLER_TYPE_VIDEO_TRACK );
@@ -971,6 +989,8 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
         media_param.data_handler_name = "X264 URL Data Handler";
     MP4_FAIL_IF_ERR( lsmash_set_media_parameters( p_mp4->p_root, p_mp4->i_track, &media_param ),
                      "failed to set media parameters for video.\n" );
+    p_mp4->i_video_timescale = lsmash_get_media_timescale( p_mp4->p_root, p_mp4->i_track );
+    MP4_FAIL_IF_ERR( !p_mp4->i_video_timescale, "media timescale for video is broken.\n" );
 
     /* Add a sample entry. */
     p_mp4->i_sample_entry = lsmash_add_sample_entry( p_mp4->p_root, p_mp4->i_track, ISOM_CODEC_TYPE_AVC1_VIDEO, p_mp4->summary );
@@ -1043,9 +1063,13 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
     if( !p_mp4->i_numframe )
     {
         p_mp4->i_start_offset = p_picture->i_dts * -1;
+        p_mp4->i_first_cts = p_mp4->b_dts_compress ? 0 : p_mp4->i_start_offset * p_mp4->i_time_inc;
         if( p_mp4->psz_chapter && (p_mp4->b_brand_qt || p_mp4->b_brand_m4a) )
             MP4_FAIL_IF_ERR( lsmash_create_reference_chapter_track( p_mp4->p_root, p_mp4->i_track, p_mp4->psz_chapter ),
                              "failed to create reference chapter track.\n" );
+        if( p_mp4->b_fragments )
+            MP4_LOG_IF_ERR( lsmash_create_explicit_timeline_map( p_mp4->p_root, p_mp4->i_track, UINT32_MAX, p_mp4->i_first_cts, ISOM_EDIT_MODE_NORMAL ),
+                            "failed to set timeline map for video.\n" );
     }
 
     lsmash_sample_t *p_sample = lsmash_create_sample( i_size + p_mp4->i_sei_size );
@@ -1124,7 +1148,7 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
 
     if( p_mp4->b_fragments && p_mp4->i_numframe && p_sample->prop.random_access_type )
     {
-        MP4_FAIL_IF_ERR( lsmash_flush_pooled_samples( p_mp4->p_root, p_mp4->i_track, p_sample->dts - p_mp4->prev_dts ),
+        MP4_FAIL_IF_ERR( lsmash_flush_pooled_samples( p_mp4->p_root, p_mp4->i_track, p_sample->dts - p_mp4->i_prev_dts ),
                          "failed to flush the rest of samples.\n" );
 #if HAVE_ANY_AUDIO
         if( p_audio )
@@ -1139,7 +1163,7 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
     MP4_FAIL_IF_ERR( lsmash_append_sample( p_mp4->p_root, p_mp4->i_track, p_sample ),
                      "failed to append a video frame.\n" );
 
-    p_mp4->prev_dts = dts;
+    p_mp4->i_prev_dts = dts;
     p_mp4->i_numframe++;
 
     return i_size;
