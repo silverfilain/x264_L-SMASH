@@ -665,8 +665,11 @@ static int close_file_audio( mp4_hnd_t* p_mp4, double actual_duration )
                       write_audio_frames( p_mp4, 0, 1 ) ),
                     "failed to flush audio frame(s).\n" );
     uint32_t last_delta;
-    if( p_audio->codec_type == QT_CODEC_TYPE_SOWT_AUDIO || p_audio->codec_type == QT_CODEC_TYPE_TWOS_AUDIO )
-        last_delta = 1;
+    if( p_audio->codec_type == QT_CODEC_TYPE_RAW_AUDIO
+     || p_audio->codec_type == QT_CODEC_TYPE_SOWT_AUDIO || p_audio->codec_type == QT_CODEC_TYPE_TWOS_AUDIO
+     || p_audio->codec_type == QT_CODEC_TYPE_FL64_AUDIO || p_audio->codec_type == QT_CODEC_TYPE_FL32_AUDIO
+     || p_audio->codec_type == QT_CODEC_TYPE_IN24_AUDIO || p_audio->codec_type == QT_CODEC_TYPE_IN32_AUDIO )
+        last_delta = 1;     /* Actual sample duration of each LPCMFrame is one. */
     else
 #if HAVE_AUDIO
         last_delta = p_audio->info->last_delta;
