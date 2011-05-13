@@ -152,7 +152,7 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     h->info.extradata       = h->ctx->extradata;
     h->info.extradata_size  = h->ctx->extradata_size;
     h->info.framelen        = h->ctx->frame_size;
-    h->info.chansize        = av_get_bits_per_sample_format( h->ctx->sample_fmt ) / 8;
+    h->info.chansize        = av_get_bits_per_sample_fmt( h->ctx->sample_fmt ) / 8;
     h->info.samplesize      = h->info.chansize * h->info.channels;
     h->info.framesize       = h->info.framelen * h->info.samplesize;
     h->info.timebase        = (timebase_t) { 1, h->ctx->sample_rate };
