@@ -170,7 +170,7 @@ static int open_file( char *psz_filename, hnd_t *p_handle, video_info_t *info, c
     h->filename = strdup( psz_filename );
     int j = 0;
     while( j < h->lavf->nb_streams )
-        h->has_audio |= !!(h->lavf->streams[j++]->codec->codec_type == CODEC_TYPE_AUDIO );
+        h->has_audio |= !!(h->lavf->streams[j++]->codec->codec_type == AVMEDIA_TYPE_AUDIO );
 #endif
 
     int i = 0;
