@@ -7,7 +7,7 @@
 #include "filters/filters.h"
 
 // Ripped from ffmpeg's audioconvert.h
-#ifndef CH_FRONT_LEFT
+#ifndef AV_CH_FRONT_LEFT
 #define AV_CH_FRONT_LEFT             0x00000001
 #define AV_CH_FRONT_RIGHT            0x00000002
 #define AV_CH_FRONT_CENTER           0x00000004
