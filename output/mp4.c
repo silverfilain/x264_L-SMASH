@@ -168,21 +168,21 @@ static void set_recovery_param( mp4_hnd_t *p_mp4, x264_param_t *p_param )
 #if HAVE_AUDIO
 static void set_channel_layout( mp4_audio_hnd_t *p_audio )
 {
-#define CH_LAYOUT_MONO              (CH_FRONT_CENTER)
-#define CH_LAYOUT_STEREO            (CH_FRONT_LEFT|CH_FRONT_RIGHT)
-#define CH_LAYOUT_2_1               (CH_LAYOUT_STEREO|CH_BACK_CENTER)
-#define CH_LAYOUT_SURROUND          (CH_LAYOUT_STEREO|CH_FRONT_CENTER)
-#define CH_LAYOUT_4POINT0           (CH_LAYOUT_SURROUND|CH_BACK_CENTER)
-#define CH_LAYOUT_2_2               (CH_LAYOUT_STEREO|CH_SIDE_LEFT|CH_SIDE_RIGHT)
-#define CH_LAYOUT_QUAD              (CH_LAYOUT_STEREO|CH_BACK_LEFT|CH_BACK_RIGHT)
-#define CH_LAYOUT_5POINT0           (CH_LAYOUT_SURROUND|CH_SIDE_LEFT|CH_SIDE_RIGHT)
-#define CH_LAYOUT_5POINT1           (CH_LAYOUT_5POINT0|CH_LOW_FREQUENCY)
-#define CH_LAYOUT_5POINT0_BACK      (CH_LAYOUT_SURROUND|CH_BACK_LEFT|CH_BACK_RIGHT)
-#define CH_LAYOUT_5POINT1_BACK      (CH_LAYOUT_5POINT0_BACK|CH_LOW_FREQUENCY)
-#define CH_LAYOUT_7POINT0           (CH_LAYOUT_5POINT0|CH_BACK_LEFT|CH_BACK_RIGHT)
-#define CH_LAYOUT_7POINT1           (CH_LAYOUT_5POINT1|CH_BACK_LEFT|CH_BACK_RIGHT)
-#define CH_LAYOUT_7POINT1_WIDE      (CH_LAYOUT_5POINT1_BACK|CH_FRONT_LEFT_OF_CENTER|CH_FRONT_RIGHT_OF_CENTER)
-#define CH_LAYOUT_STEREO_DOWNMIX    (CH_STEREO_LEFT|CH_STEREO_RIGHT)
+#define AV_CH_LAYOUT_MONO              (AV_CH_FRONT_CENTER)
+#define AV_CH_LAYOUT_STEREO            (AV_CH_FRONT_LEFT|AV_CH_FRONT_RIGHT)
+#define AV_CH_LAYOUT_2_1               (AV_CH_LAYOUT_STEREO|AV_CH_BACK_CENTER)
+#define AV_CH_LAYOUT_SURROUND          (AV_CH_LAYOUT_STEREO|AV_CH_FRONT_CENTER)
+#define AV_CH_LAYOUT_4POINT0           (AV_CH_LAYOUT_SURROUND|AV_CH_BACK_CENTER)
+#define AV_CH_LAYOUT_2_2               (AV_CH_LAYOUT_STEREO|AV_CH_SIDE_LEFT|AV_CH_SIDE_RIGHT)
+#define AV_CH_LAYOUT_QUAD              (AV_CH_LAYOUT_STEREO|AV_CH_BACK_LEFT|AV_CH_BACK_RIGHT)
+#define AV_CH_LAYOUT_5POINT0           (AV_CH_LAYOUT_SURROUND|AV_CH_SIDE_LEFT|AV_CH_SIDE_RIGHT)
+#define AV_CH_LAYOUT_5POINT1           (AV_CH_LAYOUT_5POINT0|AV_CH_LOW_FREQUENCY)
+#define AV_CH_LAYOUT_5POINT0_BACK      (AV_CH_LAYOUT_SURROUND|AV_CH_BACK_LEFT|AV_CH_BACK_RIGHT)
+#define AV_CH_LAYOUT_5POINT1_BACK      (AV_CH_LAYOUT_5POINT0_BACK|AV_CH_LOW_FREQUENCY)
+#define AV_CH_LAYOUT_7POINT0           (AV_CH_LAYOUT_5POINT0|AV_CH_BACK_LEFT|AV_CH_BACK_RIGHT)
+#define AV_CH_LAYOUT_7POINT1           (AV_CH_LAYOUT_5POINT1|AV_CH_BACK_LEFT|AV_CH_BACK_RIGHT)
+#define AV_CH_LAYOUT_7POINT1_WIDE      (AV_CH_LAYOUT_5POINT1_BACK|AV_CH_FRONT_LEFT_OF_CENTER|AV_CH_FRONT_RIGHT_OF_CENTER)
+#define AV_CH_LAYOUT_STEREO_DOWNMIX    (AV_CH_STEREO_LEFT|AV_CH_STEREO_RIGHT)
 
     lsmash_channel_layout_tag_code layout_tag = QT_CHANNEL_LAYOUT_UNKNOWN;
     lsmash_channel_bitmap_code bitmap = 0;
@@ -214,21 +214,21 @@ static void set_channel_layout( mp4_audio_hnd_t *p_audio )
         /* Channel order is unknown, so we guess it from ffmpeg's channel layout flags. */
         typedef struct { lsmash_channel_bitmap_code bitmap; lsmash_channel_layout_tag_code layout_tag; } qt_channel_map;
         static const qt_channel_map channel_table[] = {
-            { CH_LAYOUT_MONO,           QT_CHANNEL_LAYOUT_MONO },
-            { CH_LAYOUT_STEREO,         QT_CHANNEL_LAYOUT_STEREO },
-            { CH_LAYOUT_STEREO_DOWNMIX, QT_CHANNEL_LAYOUT_STEREO },
-            { CH_LAYOUT_2_1,            QT_CHANNEL_LAYOUT_AAC_3_0 },
-            { CH_LAYOUT_SURROUND,       QT_CHANNEL_LAYOUT_AAC_3_0 },
-            { CH_LAYOUT_4POINT0,        QT_CHANNEL_LAYOUT_AAC_4_0 },
-            { CH_LAYOUT_2_2,            QT_CHANNEL_LAYOUT_AAC_QUADRAPHONIC },
-            { CH_LAYOUT_QUAD,           QT_CHANNEL_LAYOUT_AAC_QUADRAPHONIC },
-            { CH_LAYOUT_5POINT0,        QT_CHANNEL_LAYOUT_AAC_5_0 },
-            { CH_LAYOUT_5POINT0_BACK,   QT_CHANNEL_LAYOUT_AAC_5_0 },
-            { CH_LAYOUT_5POINT1,        QT_CHANNEL_LAYOUT_AAC_5_1 },
-            { CH_LAYOUT_5POINT1_BACK,   QT_CHANNEL_LAYOUT_AAC_5_1 },
-            { CH_LAYOUT_7POINT0,        QT_CHANNEL_LAYOUT_AAC_7_0 },
-            { CH_LAYOUT_7POINT1,        QT_CHANNEL_LAYOUT_AAC_7_1 },
-            { CH_LAYOUT_7POINT1_WIDE,   QT_CHANNEL_LAYOUT_AAC_7_1 }
+            { AV_CH_LAYOUT_MONO,           QT_CHANNEL_LAYOUT_MONO },
+            { AV_CH_LAYOUT_STEREO,         QT_CHANNEL_LAYOUT_STEREO },
+            { AV_CH_LAYOUT_STEREO_DOWNMIX, QT_CHANNEL_LAYOUT_STEREO },
+            { AV_CH_LAYOUT_2_1,            QT_CHANNEL_LAYOUT_AAC_3_0 },
+            { AV_CH_LAYOUT_SURROUND,       QT_CHANNEL_LAYOUT_AAC_3_0 },
+            { AV_CH_LAYOUT_4POINT0,        QT_CHANNEL_LAYOUT_AAC_4_0 },
+            { AV_CH_LAYOUT_2_2,            QT_CHANNEL_LAYOUT_AAC_QUADRAPHONIC },
+            { AV_CH_LAYOUT_QUAD,           QT_CHANNEL_LAYOUT_AAC_QUADRAPHONIC },
+            { AV_CH_LAYOUT_5POINT0,        QT_CHANNEL_LAYOUT_AAC_5_0 },
+            { AV_CH_LAYOUT_5POINT0_BACK,   QT_CHANNEL_LAYOUT_AAC_5_0 },
+            { AV_CH_LAYOUT_5POINT1,        QT_CHANNEL_LAYOUT_AAC_5_1 },
+            { AV_CH_LAYOUT_5POINT1_BACK,   QT_CHANNEL_LAYOUT_AAC_5_1 },
+            { AV_CH_LAYOUT_7POINT0,        QT_CHANNEL_LAYOUT_AAC_7_0 },
+            { AV_CH_LAYOUT_7POINT1,        QT_CHANNEL_LAYOUT_AAC_7_1 },
+            { AV_CH_LAYOUT_7POINT1_WIDE,   QT_CHANNEL_LAYOUT_AAC_7_1 }
         };
         for( int i = 0; i < sizeof(channel_table)/sizeof(qt_channel_map); i++ )
             if( p_audio->info->chanlayout == channel_table[i].bitmap )
