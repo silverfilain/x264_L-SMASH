@@ -168,11 +168,11 @@ uint8_t *x264_af_convert( enum SampleFmt outfmt, uint8_t *in, enum SampleFmt fmt
     CONVERT( SMPFMT_S32, SMPFMT_S16, int16_t,  INPUT( int32_t ) >> 16 );
     CONVERT( SMPFMT_S32, SMPFMT_FLT, float,    INPUT( int32_t ) * (1.0 / (1<<31)) );
     CONVERT( SMPFMT_S32, SMPFMT_DBL, double,   INPUT( int32_t ) * (1.0 / (1<<31)) );
-    CONVERT( SMPFMT_FLT, SMPFMT_U8,  uint8_t, clip8(  lrintf(  INPUT( float ) * (1<<7) ) + 0x80 ) );
-    CONVERT( SMPFMT_FLT, SMPFMT_S16, int16_t, clip16( lrintf(  INPUT( float ) * (1<<15) ) ) );
-    CONVERT( SMPFMT_FLT, SMPFMT_S32, int32_t, clip32( llrintf( INPUT( float ) * (1U<<31) ) ) );
+    CONVERT( SMPFMT_FLT, SMPFMT_U8,  uint8_t,  clip8( lrintf(  INPUT( float )  * (1<<7) ) + 0x80 ) );
+    CONVERT( SMPFMT_FLT, SMPFMT_S16, int16_t, clip16( lrintf(  INPUT( float )  * (1<<15) ) ) );
+    CONVERT( SMPFMT_FLT, SMPFMT_S32, int32_t, clip32( llrintf( INPUT( float )  * (1U<<31) ) ) );
     CONVERT( SMPFMT_FLT, SMPFMT_DBL, double,   INPUT( float ) );
-    CONVERT( SMPFMT_DBL, SMPFMT_U8,  uint8_t, clip8(  lrintf(  INPUT( double ) * (1<<7) ) + 0x80 ) );
+    CONVERT( SMPFMT_DBL, SMPFMT_U8,  uint8_t,  clip8( lrintf(  INPUT( double ) * (1<<7) ) + 0x80 ) );
     CONVERT( SMPFMT_DBL, SMPFMT_S16, int16_t, clip16( lrintf(  INPUT( double ) * (1<<15) ) ) );
     CONVERT( SMPFMT_DBL, SMPFMT_S32, int32_t, clip32( llrintf( INPUT( double ) * (1U<<31) ) ) );
     CONVERT( SMPFMT_DBL, SMPFMT_FLT, float,    INPUT( double ) );
