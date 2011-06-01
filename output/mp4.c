@@ -790,14 +790,17 @@ static int open_file( char *psz_filename, hnd_t *p_handle, cli_output_opt_t *opt
     mp4_hnd_t *p_mp4;
 
     *p_handle = NULL;
-    FILE *fh = fopen( psz_filename, "wb" );
-    MP4_FAIL_IF_ERR( !fh, "cannot open output file `%s'.\n", psz_filename );
-    if( !opt->fragments && !x264_is_regular_file( fh ) )
+    FILE *fh;
+
+    int b_regular = strcmp( psz_filename, "-" );
+    b_regular = b_regular && x264_is_regular_file_path( psz_filename );
+    if( b_regular )
     {
+        fh = fopen( psz_filename, "wb" );
+        MP4_FAIL_IF_ERR( !fh, "cannot open output file `%s'.\n", psz_filename );
+        b_regular = x264_is_regular_file( fh );
         fclose( fh );
-        MP4_FAIL_IF_ERR( -1, "Non-fragmented MP4 output is incompatible with non-regular file `%s'\n", psz_filename );
     }
-    fclose( fh );
 
     p_mp4 = malloc( sizeof(mp4_hnd_t) );
     MP4_FAIL_IF_ERR( !p_mp4, "failed to allocate memory for muxer information.\n" );
@@ -837,7 +840,7 @@ static int open_file( char *psz_filename, hnd_t *p_handle, cli_output_opt_t *opt
     p_mp4->i_display_height = opt->display_height * (1<<16);
     p_mp4->b_force_display_size = p_mp4->i_display_height || p_mp4->i_display_height;
     p_mp4->scaling_method = p_mp4->b_force_display_size ? ISOM_SCALING_METHOD_FILL : ISOM_SCALING_METHOD_MEET;
-    p_mp4->b_fragments = opt->fragments;
+    p_mp4->b_fragments = !b_regular || opt->fragments;
     p_mp4->b_stdout = !strcmp( psz_filename, "-" );
 
     p_mp4->p_root = lsmash_open_movie( psz_filename, p_mp4->b_fragments ? LSMASH_FILE_MODE_WRITE_FRAGMENTED : LSMASH_FILE_MODE_WRITE );
