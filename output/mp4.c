@@ -379,91 +379,48 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
                 else
                     p_audio->has_sbr = 0; // SBR presence isn't specified, so assume implicit signaling
             }
-            else if( !strcmp( info->codec_name, "raw" ) )
-            {
-#ifdef WORDS_BIGENDIAN
-                p_audio->codec_type = QT_CODEC_TYPE_TWOS_AUDIO;
-                p_audio->summary->endianness    = 0;
-#else
-                p_audio->codec_type = QT_CODEC_TYPE_SOWT_AUDIO;
-                p_audio->summary->endianness    = 1;
-#endif
-                p_audio->summary->sample_format = 0;
-                p_audio->summary->signedness    = 1;
-            }
             else if( p_audio->b_copy )
                 break;      /* We haven't supported LPCM copying yet. */
-            else if( !strcmp( info->codec_name, "pcm_f64be" ) )
+            else
             {
-                p_audio->codec_type = QT_CODEC_TYPE_FL64_AUDIO;
-                p_audio->summary->sample_format = 1;
-                p_audio->summary->endianness    = 0;
-            }
-            else if( !strcmp( info->codec_name, "pcm_f64le" ) )
-            {
-                p_audio->codec_type = QT_CODEC_TYPE_FL64_AUDIO;
-                p_audio->summary->sample_format = 1;
-                p_audio->summary->endianness    = 1;
-            }
-            else if( !strcmp( info->codec_name, "pcm_f32be" ) )
-            {
-                p_audio->codec_type = QT_CODEC_TYPE_FL32_AUDIO;
-                p_audio->summary->sample_format = 1;
-                p_audio->summary->endianness    = 0;
-            }
-            else if( !strcmp( info->codec_name, "pcm_f32le" ) )
-            {
-                p_audio->codec_type = QT_CODEC_TYPE_FL32_AUDIO;
-                p_audio->summary->sample_format = 1;
-                p_audio->summary->endianness    = 1;
-            }
-            else if( !strcmp( info->codec_name, "pcm_s16be" ) || !strcmp( info->codec_name, "pcm_s8" ) )
-            {
-                p_audio->codec_type = QT_CODEC_TYPE_TWOS_AUDIO;
-                p_audio->summary->sample_format = 0;
-                p_audio->summary->endianness    = 0;
-                p_audio->summary->signedness    = 1;
-            }
-            else if( !strcmp( info->codec_name, "pcm_s16le" ) )
-            {
-                p_audio->codec_type = QT_CODEC_TYPE_SOWT_AUDIO;
-                p_audio->summary->sample_format = 0;
-                p_audio->summary->endianness    = 1;
-                p_audio->summary->signedness    = 1;
-            }
-            else if( !strcmp( info->codec_name, "pcm_s24be" ) )
-            {
-                p_audio->codec_type = QT_CODEC_TYPE_IN24_AUDIO;
-                p_audio->summary->sample_format = 0;
-                p_audio->summary->endianness    = 0;
-                p_audio->summary->signedness    = 1;
-            }
-            else if( !strcmp( info->codec_name, "pcm_s24le" ) )
-            {
-                p_audio->codec_type = QT_CODEC_TYPE_IN24_AUDIO;
-                p_audio->summary->sample_format = 0;
-                p_audio->summary->endianness    = 1;
-                p_audio->summary->signedness    = 1;
-            }
-            else if( !strcmp( info->codec_name, "pcm_s32be" ) )
-            {
-                p_audio->codec_type = QT_CODEC_TYPE_IN32_AUDIO;
-                p_audio->summary->sample_format = 0;
-                p_audio->summary->endianness    = 0;
-                p_audio->summary->signedness    = 1;
-            }
-            else if( !strcmp( info->codec_name, "pcm_s32le" ) )
-            {
-                p_audio->codec_type = QT_CODEC_TYPE_IN32_AUDIO;
-                p_audio->summary->sample_format = 0;
-                p_audio->summary->endianness    = 1;
-                p_audio->summary->signedness    = 1;
-            }
-            else if( !strcmp( info->codec_name, "pcm_u8" ) )
-            {
-                p_audio->codec_type = QT_CODEC_TYPE_RAW_AUDIO;
-                p_audio->summary->sample_format = 0;
-                p_audio->summary->signedness    = 0;
+                typedef struct {
+                    const char* name;
+                    lsmash_codec_type_code codec_type;
+                    uint8_t sample_format;
+                    uint8_t endianness;
+                    uint8_t signedness;
+                    uint8_t dummy; /* for align */
+                } qt_lpcm_detail;
+
+                static const qt_lpcm_detail qt_lpcm_table[] = {
+#ifdef WORDS_BIGENDIAN
+                    { "raw",        QT_CODEC_TYPE_TWOS_AUDIO, 0, 0, 1, 0 },
+#else
+                    { "raw",        QT_CODEC_TYPE_SOWT_AUDIO, 0, 1, 1, 0 },
+#endif
+                    { "pcm_f32be",  QT_CODEC_TYPE_FL32_AUDIO, 1, 0, 0, 0 },
+                    { "pcm_f32le",  QT_CODEC_TYPE_FL32_AUDIO, 1, 1, 0, 0 },
+                    { "pcm_f64be",  QT_CODEC_TYPE_FL64_AUDIO, 1, 0, 0, 0 },
+                    { "pcm_f64le",  QT_CODEC_TYPE_FL64_AUDIO, 1, 1, 0, 0 },
+                    { "pcm_s16be",  QT_CODEC_TYPE_TWOS_AUDIO, 0, 0, 1, 0 },
+                    { "pcm_s16le",  QT_CODEC_TYPE_SOWT_AUDIO, 0, 1, 1, 0 },
+                    { "pcm_s24be",  QT_CODEC_TYPE_IN24_AUDIO, 0, 0, 1, 0 },
+                    { "pcm_s24le",  QT_CODEC_TYPE_IN24_AUDIO, 0, 1, 1, 0 },
+                    { "pcm_s32be",  QT_CODEC_TYPE_IN32_AUDIO, 0, 0, 1, 0 },
+                    { "pcm_s32le",  QT_CODEC_TYPE_IN32_AUDIO, 0, 1, 1, 0 },
+                    { "pcm_s8",     QT_CODEC_TYPE_TWOS_AUDIO, 0, 0, 1, 0 },
+                    { "pcm_u8",     QT_CODEC_TYPE_RAW_AUDIO,  0, 0, 0, 0 }
+                };
+
+                for( int i = 0; i < sizeof(qt_lpcm_table)/sizeof(qt_lpcm_detail); i++ )
+                    if( !strcmp( info->codec_name, qt_lpcm_table[i].name ) )
+                    {
+                        p_audio->codec_type             = qt_lpcm_table[i].codec_type;
+                        p_audio->summary->sample_format = qt_lpcm_table[i].sample_format;
+                        p_audio->summary->endianness    = qt_lpcm_table[i].endianness;
+                        p_audio->summary->signedness    = qt_lpcm_table[i].signedness;
+                        break;
+                    }
             }
             break;
         default :
