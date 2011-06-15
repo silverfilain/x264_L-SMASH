@@ -510,16 +510,19 @@ static void read_AudioSpecificConfig( UInt8 *esds_buf, UInt32 size, UInt8 **asc,
 static hnd_t qtaac_init( hnd_t filter_chain, const char *opt_str )
 {
     assert( filter_chain );
+
+    char **opts     = x264_split_options( opt_str, (const char*[]){ AUDIO_CODEC_COMMON_OPTIONS, "samplerate", "sbr", "mode", NULL } );
+    if( !opts )
+    {
+        x264_cli_log( "qtaac", X264_LOG_ERROR, "wrong audio options.\n" );
+        return NULL;
+    }
+
     audio_hnd_t *chain = filter_chain;
     enc_qtaac_t *h = calloc( 1, sizeof( enc_qtaac_t ) );
     h->filter_chain = chain;
     h->info = chain->info;
     h->info.codec_name = "aac";
-
-    AudioStreamBasicDescription indesc, outdesc;
-
-    char **opts     = x264_split_options( opt_str, (const char*[]){ AUDIO_CODEC_COMMON_OPTIONS, "samplerate", "sbr", "mode", NULL } );
-    assert( opts );
 
     h->config.he_flag = x264_otob( x264_get_option( "sbr", opts ), 0 );
 
@@ -568,6 +571,8 @@ static hnd_t qtaac_init( hnd_t filter_chain, const char *opt_str )
 
     if( configure_quicktime_component( h ) != noErr )
         goto error;
+
+    AudioStreamBasicDescription indesc, outdesc;
 
     if( QTGetComponentProperty( h->ci, kQTPropertyClass_SCAudio, kQTSCAudioPropertyID_InputBasicDescription, sizeof(indesc), &indesc, NULL ) != noErr )
         goto error;
