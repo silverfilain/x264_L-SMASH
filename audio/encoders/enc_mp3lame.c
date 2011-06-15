@@ -83,6 +83,7 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     h->info.framesize  = h->info.framelen * 2;
     h->info.chansize   = 2;
     h->info.samplesize = 2 * h->info.channels;
+    h->info.depth      = 16;
     h->info.timebase   = (timebase_t) { 1, h->info.samplerate };
     h->info.last_delta = h->info.framelen;
 

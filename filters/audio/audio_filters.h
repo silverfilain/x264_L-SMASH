@@ -54,6 +54,7 @@ typedef struct audio_info_t
     size_t      framesize;  // Frame size in bytes
     int         chansize;   // Bytes per channel per sample (from the encoded audio)
     int         samplesize; // Bytes per sample (from the encoded audio)
+    int         depth;      // Bit depth
     timebase_t  timebase;
     uint8_t    *extradata;
     int         extradata_size;
