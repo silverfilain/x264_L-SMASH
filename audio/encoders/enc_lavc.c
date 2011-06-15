@@ -181,7 +181,7 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     h->info.depth           = av_get_bits_per_sample( h->ctx->codec->id );
     h->info.chansize        = IS_LPCM_CODEC_ID( h->ctx->codec->id )
                             ? h->info.depth / 8
-                            : av_get_bits_per_sample_fmt( h->ctx->sample_fmt ) / 8;
+                            : av_get_bytes_per_sample( h->ctx->sample_fmt );
     h->info.samplesize      = h->info.chansize * h->info.channels;
     h->info.framesize       = h->info.framelen * h->info.samplesize;
 
