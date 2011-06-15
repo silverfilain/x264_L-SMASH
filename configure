@@ -840,7 +840,7 @@ if [ "$audio" = "auto" ]; then
             audio_mp3="no"
         fi
     fi
-    if [ "$audio_qtaac" = "auto" -a "$SYS" = "MINGW" ]; then
+    if [ "$audio_qtaac" = "auto" -a "$SYS" = "WINDOWS" ]; then
         if cc_check QTML.h "-D__CFTREE__" "InitializeQTML(0);"; then
             audio_qtaac="yes"
             audio_encs="$audio_encs, qtaac"
