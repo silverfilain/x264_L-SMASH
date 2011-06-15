@@ -29,13 +29,18 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
         x264_cli_log( "lame", X264_LOG_ERROR, "only mono or stereo audio is supported\n" );
         return 0;
     }
+
+    char **opts = x264_split_options( opt_str, (const char*[]){ AUDIO_CODEC_COMMON_OPTIONS, "samplerate", NULL } );
+    if( !opts )
+    {
+        x264_cli_log( "lame", X264_LOG_ERROR, "wrong audio options.\n" );
+        return 0;
+    }
+
     enc_lame_t *h   = calloc( 1, sizeof( enc_lame_t ) );
     h->filter_chain = chain;
     h->info         = chain->info;
     h->info.codec_name = "mp3";
-
-    char **opts = x264_split_options( opt_str, (const char*[]){ AUDIO_CODEC_COMMON_OPTIONS, "samplerate", NULL } );
-    assert( opts );
 
     int is_vbr  = x264_otob( x264_get_option( "is_vbr", opts ), 1 );
     float brval;

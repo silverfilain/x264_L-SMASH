@@ -38,6 +38,13 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
         return NULL;
     }
 
+    char **opts = x264_split_options( opt_str, (const char*[]){ AUDIO_CODEC_COMMON_OPTIONS, "dtx", NULL } );
+    if( !opts )
+    {
+        x264_cli_log( "amrwb_3gpp", X264_LOG_ERROR, "wrong audio options.\n" );
+        return NULL;
+    }
+
     enc_amrwb_3gpp_t *h     = calloc( 1, sizeof( enc_amrwb_3gpp_t ) );
     h->filter_chain         = chain;
     h->info                 = chain->info;
@@ -53,9 +60,6 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
 
     h->info.extradata       = NULL; /* These are created in muxer modules. AMR-WB does not have general structure. */
     h->info.extradata_size  = 0;
-
-    char **opts = x264_split_options( opt_str, (const char*[]){ AUDIO_CODEC_COMMON_OPTIONS, "dtx", NULL } );
-    assert( opts );
 
     h->dtx = (Word16)x264_otob( x264_get_option( "dtx", opts ), 1 );
     float bitrate = x264_otof( x264_get_option( "bitrate", opts ), 23.85 );

@@ -41,15 +41,19 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
         return NULL;
     }
 
+    char **opts = x264_split_options( opt_str, (const char*[]){ AUDIO_CODEC_COMMON_OPTIONS, "cutoff", "midside", "tns", "shortctl", NULL } );
+    if( !opts )
+    {
+        x264_cli_log( "faac", X264_LOG_ERROR, "wrong audio options.\n" );
+        return NULL;
+    }
+
     enc_faac_t *h      = calloc( 1, sizeof( enc_faac_t ) );
     h->filter_chain    = chain;
     h->info            = chain->info;
     h->info.codec_name = "aac";
     h->info.samplerate = chain->info.samplerate;
     h->info.channels   = chain->info.channels;
-
-    char **opts = x264_split_options( opt_str, (const char*[]){ AUDIO_CODEC_COMMON_OPTIONS, "cutoff", "midside", "tns", "shortctl", NULL } );
-    assert( opts );
 
     int is_vbr  = x264_otob( x264_get_option( "is_vbr", opts ), 1 );
     float brval;

@@ -83,7 +83,11 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     h->preinfo = h->info = chain->info;
 
     char **opts = x264_split_options( opt_str, (const char*[]){ AUDIO_CODEC_COMMON_OPTIONS, NULL } );
-    assert( opts );
+    if( !opts )
+    {
+        x264_cli_log( "lavc", X264_LOG_ERROR, "wrong audio options.\n" );
+        return NULL;
+    }
 
     const char *codecname = x264_get_option( "codec", opts );
     RETURN_IF_ERR( !codecname, "lavc", NULL, "codec not specified" );
