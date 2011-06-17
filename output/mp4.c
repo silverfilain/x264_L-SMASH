@@ -950,6 +950,11 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     media_param.media_handler_name = "X264 Video Media Handler";
     if( p_mp4->b_brand_qt )
         media_param.data_handler_name = "X264 URL Data Handler";
+    if( p_mp4->major_brand != ISOM_BRAND_TYPE_QT )
+    {
+        media_param.roll_grouping = p_param->b_intra_refresh;
+        media_param.rap_grouping = p_param->b_open_gop;
+    }
     MP4_FAIL_IF_ERR( lsmash_set_media_parameters( p_mp4->p_root, p_mp4->i_track, &media_param ),
                      "failed to set media parameters for video.\n" );
     p_mp4->i_video_timescale = lsmash_get_media_timescale( p_mp4->p_root, p_mp4->i_track );
@@ -966,15 +971,6 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     if( p_mp4->b_brand_qt && !p_mp4->b_no_pasp )
         MP4_FAIL_IF_ERR( lsmash_set_track_aperture_modes( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry ),
                          "failed to set track aperture mode.\n" );
-    if( p_mp4->major_brand != ISOM_BRAND_TYPE_QT )
-    {
-        if( p_param->b_intra_refresh )
-            MP4_FAIL_IF_ERR( lsmash_create_grouping( p_mp4->p_root, p_mp4->i_track, ISOM_GROUP_TYPE_ROLL ),
-                             "failed to create random access recovery point sample grouping\n" );
-        if( p_param->b_open_gop )
-            MP4_FAIL_IF_ERR( lsmash_create_grouping( p_mp4->p_root, p_mp4->i_track, ISOM_GROUP_TYPE_RAP ),
-                             "failed to create random access point sample grouping\n" );
-    }
 
 #if HAVE_ANY_AUDIO
     MP4_FAIL_IF_ERR( p_mp4->audio_hnd && set_param_audio( p_mp4, i_media_timescale, track_mode ),
