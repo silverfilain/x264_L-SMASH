@@ -920,11 +920,7 @@ if [ "$audio" = "yes" ]; then
         LDFLAGSCLI="-lamrwb_3gpp_enc $LDFLAGSCLI"
     fi
     if [ "$nonfree" = "yes" ]; then
-        if [ "$audio_faac" = "yes" -o "$audio_amrwb" = "yes" ]; then
-            define HAVE_NONFREE
-        else
-            nonfree="no"
-        fi
+        define HAVE_NONFREE
     fi
 fi
 
