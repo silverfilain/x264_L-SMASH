@@ -844,7 +844,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     p_mp4->i_time_inc = p_param->i_timebase_num * p_mp4->i_dts_compress_multiplier;
     FAIL_IF_ERR( i_media_timescale > UINT32_MAX, "mp4", "MP4 media timescale %"PRIu64" exceeds maximum\n", i_media_timescale );
 
-    /* Set brands. */
+    /* Select brands. */
     lsmash_brand_type_code brands[10] = { 0 };
     uint32_t minor_version = 0;
     uint32_t brand_count = 0;
@@ -883,12 +883,14 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
             }
         }
     }
-    MP4_FAIL_IF_ERR( lsmash_set_brands( p_mp4->p_root, p_mp4->major_brand, minor_version, brands, brand_count ),
-                     "failed to set brands / ftyp.\n" );
 
     /* Set movie parameters. */
     lsmash_movie_parameters_t movie_param;
     lsmash_initialize_movie_parameters( &movie_param );
+    movie_param.major_brand = p_mp4->major_brand;
+    movie_param.brands = brands;
+    movie_param.number_of_brands = brand_count;
+    movie_param.minor_version = minor_version;
     MP4_FAIL_IF_ERR( lsmash_set_movie_parameters( p_mp4->p_root, &movie_param ),
                      "failed to set movie parameters.\n" );
     p_mp4->i_movie_timescale = lsmash_get_movie_timescale( p_mp4->p_root );
@@ -1006,10 +1008,6 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
                      "failed to allocate sei transition buffer.\n" );
     memcpy( p_mp4->p_sei_buffer, sei, sei_size );
     p_mp4->i_sei_size = sei_size;
-
-    /* Write ftyp. */
-    MP4_FAIL_IF_ERR( lsmash_write_ftyp( p_mp4->p_root ),
-                     "failed to write brands / ftyp.\n" );
 
     return sei_size + sps_size + pps_size;
 }

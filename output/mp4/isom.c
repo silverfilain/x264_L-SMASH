@@ -2696,157 +2696,136 @@ static void isom_remove_chan( isom_chan_t *chan )
     isom_remove_box( chan, isom_audio_entry_t );
 }
 
+static void isom_remove_sample_description( isom_sample_entry_t *sample )
+{
+    if( !sample )
+        return;
+    switch( sample->type )
+    {
+        case ISOM_CODEC_TYPE_AVC1_VIDEO :
+        case ISOM_CODEC_TYPE_AVC2_VIDEO :
+        case ISOM_CODEC_TYPE_AVCP_VIDEO :
+        case ISOM_CODEC_TYPE_SVC1_VIDEO :
+        case ISOM_CODEC_TYPE_MVC1_VIDEO :
+        case ISOM_CODEC_TYPE_MVC2_VIDEO :
+        case ISOM_CODEC_TYPE_MP4V_VIDEO :
+        case ISOM_CODEC_TYPE_DRAC_VIDEO :
+        case ISOM_CODEC_TYPE_ENCV_VIDEO :
+        case ISOM_CODEC_TYPE_MJP2_VIDEO :
+        case ISOM_CODEC_TYPE_S263_VIDEO :
+        case ISOM_CODEC_TYPE_VC_1_VIDEO :
+        {
+            isom_visual_entry_t *visual = (isom_visual_entry_t *)sample;
+            isom_remove_visual_extensions( (isom_visual_entry_t *)visual );
+            free( visual );
+            break;
+        }
+        case ISOM_CODEC_TYPE_MP4A_AUDIO :
+        case ISOM_CODEC_TYPE_AC_3_AUDIO :
+        case ISOM_CODEC_TYPE_ALAC_AUDIO :
+        case ISOM_CODEC_TYPE_SAMR_AUDIO :
+        case ISOM_CODEC_TYPE_SAWB_AUDIO :
+        case QT_CODEC_TYPE_23NI_AUDIO :
+        case QT_CODEC_TYPE_NONE_AUDIO :
+        case QT_CODEC_TYPE_LPCM_AUDIO :
+        case QT_CODEC_TYPE_RAW_AUDIO :
+        case QT_CODEC_TYPE_SOWT_AUDIO :
+        case QT_CODEC_TYPE_TWOS_AUDIO :
+        case QT_CODEC_TYPE_FL32_AUDIO :
+        case QT_CODEC_TYPE_FL64_AUDIO :
+        case QT_CODEC_TYPE_IN24_AUDIO :
+        case QT_CODEC_TYPE_IN32_AUDIO :
+        case QT_CODEC_TYPE_NOT_SPECIFIED :
+        case ISOM_CODEC_TYPE_DRA1_AUDIO :
+        case ISOM_CODEC_TYPE_DTSC_AUDIO :
+        case ISOM_CODEC_TYPE_DTSH_AUDIO :
+        case ISOM_CODEC_TYPE_DTSL_AUDIO :
+        case ISOM_CODEC_TYPE_EC_3_AUDIO :
+        case ISOM_CODEC_TYPE_ENCA_AUDIO :
+        case ISOM_CODEC_TYPE_G719_AUDIO :
+        case ISOM_CODEC_TYPE_G726_AUDIO :
+        case ISOM_CODEC_TYPE_M4AE_AUDIO :
+        case ISOM_CODEC_TYPE_MLPA_AUDIO :
+        //case ISOM_CODEC_TYPE_RAW_AUDIO :
+        case ISOM_CODEC_TYPE_SAWP_AUDIO :
+        case ISOM_CODEC_TYPE_SEVC_AUDIO :
+        case ISOM_CODEC_TYPE_SQCP_AUDIO :
+        case ISOM_CODEC_TYPE_SSMV_AUDIO :
+        //case ISOM_CODEC_TYPE_TWOS_AUDIO :
+        {
+            isom_audio_entry_t *audio = (isom_audio_entry_t *)sample;
+            isom_remove_esds( audio->esds );
+            isom_remove_wave( audio->wave );
+            isom_remove_chan( audio->chan );
+            if( audio->exdata )
+                free( audio->exdata );
+            free( audio );
+            break;
+        }
+        case ISOM_CODEC_TYPE_FDP_HINT :
+        case ISOM_CODEC_TYPE_M2TS_HINT :
+        case ISOM_CODEC_TYPE_PM2T_HINT :
+        case ISOM_CODEC_TYPE_PRTP_HINT :
+        case ISOM_CODEC_TYPE_RM2T_HINT :
+        case ISOM_CODEC_TYPE_RRTP_HINT :
+        case ISOM_CODEC_TYPE_RSRP_HINT :
+        case ISOM_CODEC_TYPE_RTP_HINT  :
+        case ISOM_CODEC_TYPE_SM2T_HINT :
+        case ISOM_CODEC_TYPE_SRTP_HINT :
+        {
+            isom_hint_entry_t *hint = (isom_hint_entry_t *)sample;
+            if( hint->data )
+                free( hint->data );
+            free( hint );
+            break;
+        }
+        case ISOM_CODEC_TYPE_IXSE_META :
+        case ISOM_CODEC_TYPE_METT_META :
+        case ISOM_CODEC_TYPE_METX_META :
+        case ISOM_CODEC_TYPE_MLIX_META :
+        case ISOM_CODEC_TYPE_OKSD_META :
+        case ISOM_CODEC_TYPE_SVCM_META :
+        //case ISOM_CODEC_TYPE_TEXT_META :
+        case ISOM_CODEC_TYPE_URIM_META :
+        case ISOM_CODEC_TYPE_XML_META  :
+        {
+            isom_metadata_entry_t *metadata = (isom_metadata_entry_t *)sample;
+            free( metadata );
+            break;
+        }
+        case ISOM_CODEC_TYPE_TX3G_TEXT :
+        {
+            isom_tx3g_entry_t *tx3g = (isom_tx3g_entry_t *)sample;
+            if( tx3g->ftab )
+                isom_remove_ftab( tx3g->ftab );
+            free( tx3g );
+            break;
+        }
+        case QT_CODEC_TYPE_TEXT_TEXT :
+        {
+            isom_text_entry_t *text = (isom_text_entry_t *)sample;
+            if( text->font_name )
+                free( text->font_name );
+            free( text );
+            break;
+        }
+        case ISOM_CODEC_TYPE_MP4S_SYSTEM :
+        {
+            isom_mp4s_entry_t *mp4s = (isom_mp4s_entry_t *)sample;
+            isom_remove_esds( mp4s->esds );
+            free( mp4s );
+            break;
+        }
+        default :
+            break;
+    }
+}
+
 static void isom_remove_stsd( isom_stsd_t *stsd )
 {
     if( !stsd )
         return;
-    if( !stsd->list )
-    {
-        free( stsd );
-        return;
-    }
-    for( lsmash_entry_t *entry = stsd->list->head; entry; )
-    {
-        isom_sample_entry_t *sample = (isom_sample_entry_t *)entry->data;
-        if( !sample )
-        {
-            lsmash_entry_t *next = entry->next;
-            free( entry );
-            entry = next;
-            continue;
-        }
-        switch( sample->type )
-        {
-            case ISOM_CODEC_TYPE_AVC1_VIDEO :
-#if 0
-            case ISOM_CODEC_TYPE_AVC2_VIDEO :
-            case ISOM_CODEC_TYPE_AVCP_VIDEO :
-            case ISOM_CODEC_TYPE_SVC1_VIDEO :
-            case ISOM_CODEC_TYPE_MVC1_VIDEO :
-            case ISOM_CODEC_TYPE_MVC2_VIDEO :
-            case ISOM_CODEC_TYPE_MP4V_VIDEO :
-            case ISOM_CODEC_TYPE_DRAC_VIDEO :
-            case ISOM_CODEC_TYPE_ENCV_VIDEO :
-            case ISOM_CODEC_TYPE_MJP2_VIDEO :
-            case ISOM_CODEC_TYPE_S263_VIDEO :
-            case ISOM_CODEC_TYPE_VC_1_VIDEO :
-#endif
-            {
-                isom_visual_entry_t *visual = (isom_visual_entry_t *)entry->data;
-                isom_remove_visual_extensions( (isom_visual_entry_t *)visual );
-                free( visual );
-                break;
-            }
-#if 0
-            case ISOM_CODEC_TYPE_MP4S_SYSTEM :
-            {
-                isom_mp4s_entry_t *mp4s = (isom_mp4s_entry_t *)entry->data;
-                isom_remove_esds( mp4s->esds );
-                free( mp4s );
-                break;
-            }
-#endif
-            case ISOM_CODEC_TYPE_MP4A_AUDIO :
-            case ISOM_CODEC_TYPE_AC_3_AUDIO :
-            case ISOM_CODEC_TYPE_ALAC_AUDIO :
-            case ISOM_CODEC_TYPE_SAMR_AUDIO :
-            case ISOM_CODEC_TYPE_SAWB_AUDIO :
-            case QT_CODEC_TYPE_23NI_AUDIO :
-            case QT_CODEC_TYPE_NONE_AUDIO :
-            case QT_CODEC_TYPE_LPCM_AUDIO :
-            case QT_CODEC_TYPE_RAW_AUDIO :
-            case QT_CODEC_TYPE_SOWT_AUDIO :
-            case QT_CODEC_TYPE_TWOS_AUDIO :
-            case QT_CODEC_TYPE_FL32_AUDIO :
-            case QT_CODEC_TYPE_FL64_AUDIO :
-            case QT_CODEC_TYPE_IN24_AUDIO :
-            case QT_CODEC_TYPE_IN32_AUDIO :
-            case QT_CODEC_TYPE_NOT_SPECIFIED :
-#if 0
-            case ISOM_CODEC_TYPE_DRA1_AUDIO :
-            case ISOM_CODEC_TYPE_DTSC_AUDIO :
-            case ISOM_CODEC_TYPE_DTSH_AUDIO :
-            case ISOM_CODEC_TYPE_DTSL_AUDIO :
-            case ISOM_CODEC_TYPE_EC_3_AUDIO :
-            case ISOM_CODEC_TYPE_ENCA_AUDIO :
-            case ISOM_CODEC_TYPE_G719_AUDIO :
-            case ISOM_CODEC_TYPE_G726_AUDIO :
-            case ISOM_CODEC_TYPE_M4AE_AUDIO :
-            case ISOM_CODEC_TYPE_MLPA_AUDIO :
-            case ISOM_CODEC_TYPE_RAW_AUDIO :
-            case ISOM_CODEC_TYPE_SAWP_AUDIO :
-            case ISOM_CODEC_TYPE_SEVC_AUDIO :
-            case ISOM_CODEC_TYPE_SQCP_AUDIO :
-            case ISOM_CODEC_TYPE_SSMV_AUDIO :
-            case ISOM_CODEC_TYPE_TWOS_AUDIO :
-#endif
-            {
-                isom_audio_entry_t *audio = (isom_audio_entry_t *)entry->data;
-                isom_remove_esds( audio->esds );
-                isom_remove_wave( audio->wave );
-                isom_remove_chan( audio->chan );
-                if( audio->exdata )
-                    free( audio->exdata );
-                free( audio );
-                break;
-            }
-#if 0
-            case ISOM_CODEC_TYPE_FDP_HINT :
-            case ISOM_CODEC_TYPE_M2TS_HINT :
-            case ISOM_CODEC_TYPE_PM2T_HINT :
-            case ISOM_CODEC_TYPE_PRTP_HINT :
-            case ISOM_CODEC_TYPE_RM2T_HINT :
-            case ISOM_CODEC_TYPE_RRTP_HINT :
-            case ISOM_CODEC_TYPE_RSRP_HINT :
-            case ISOM_CODEC_TYPE_RTP_HINT  :
-            case ISOM_CODEC_TYPE_SM2T_HINT :
-            case ISOM_CODEC_TYPE_SRTP_HINT :
-            {
-                isom_hint_entry_t *hint = (isom_hint_entry_t *)entry->data;
-                if( hint->data )
-                    free( hint->data );
-                free( hint );
-                break;
-            }
-            case ISOM_CODEC_TYPE_IXSE_META :
-            case ISOM_CODEC_TYPE_METT_META :
-            case ISOM_CODEC_TYPE_METX_META :
-            case ISOM_CODEC_TYPE_MLIX_META :
-            case ISOM_CODEC_TYPE_OKSD_META :
-            case ISOM_CODEC_TYPE_SVCM_META :
-            case ISOM_CODEC_TYPE_TEXT_META :
-            case ISOM_CODEC_TYPE_URIM_META :
-            case ISOM_CODEC_TYPE_XML_META  :
-            {
-                isom_metadata_entry_t *metadata = (isom_metadata_entry_t *)entry->data;
-                free( metadata );
-                break;
-            }
-#endif
-            case ISOM_CODEC_TYPE_TX3G_TEXT :
-            {
-                isom_tx3g_entry_t *tx3g = (isom_tx3g_entry_t *)entry->data;
-                if( tx3g->ftab )
-                    isom_remove_ftab( tx3g->ftab );
-                free( tx3g );
-                break;
-            }
-            case QT_CODEC_TYPE_TEXT_TEXT :
-            {
-                isom_text_entry_t *text = (isom_text_entry_t *)entry->data;
-                if( text->font_name )
-                    free( text->font_name );
-                free( text );
-                break;
-            }
-            default :
-                break;
-        }
-        lsmash_entry_t *next = entry->next;
-        free( entry );
-        entry = next;
-    }
-    free( stsd->list );
+    lsmash_remove_list( stsd->list, isom_remove_sample_description );
     isom_remove_box( stsd, isom_stbl_t );
 }
 
@@ -4721,11 +4700,18 @@ int isom_check_compatibility( lsmash_root_t *root )
 {
     if( !root )
         return -1;
+    root->qt_compatible = 0;
     /* Check brand to decide mandatory boxes. */
     if( !root->ftyp || !root->ftyp->brand_count )
     {
-        /* We assume this file is not a QuickTime but MP4 version 1 format file. */
-        root->mp4_version1 = 1;
+        /* No brand declaration means this file is a MP4 version 1 or QuickTime file format. */
+        if( root->moov && root->moov->iods )
+        {
+            root->mp4_version1 = 1;
+            root->isom_compatible = 1;
+        }
+        else
+            root->qt_compatible = 1;
         return 0;
     }
     for( uint32_t i = 0; i < root->ftyp->brand_count; i++ )
@@ -6811,8 +6797,12 @@ lsmash_root_t *lsmash_open_movie( const char *filename, lsmash_file_mode_code mo
     if( !root->bs->stream )
         goto fail;
     root->flags = mode;
-    if( (mode & LSMASH_FILE_MODE_WRITE) && (isom_add_moov( root ) || isom_add_mvhd( root->moov )) )
-        goto fail;
+    if( mode & LSMASH_FILE_MODE_WRITE )
+    {
+        if( isom_add_moov( root ) || isom_add_mvhd( root->moov ) )
+            goto fail;
+        root->qt_compatible = 1;    /* QTFF is default file format. */
+    }
 #ifdef LSMASH_DEMUXER_ENABLED
     if( (mode & (LSMASH_FILE_MODE_READ | LSMASH_FILE_MODE_DUMP)) && isom_read_root( root ) )
         goto fail;
@@ -6858,23 +6848,58 @@ int lsmash_create_fragment_movie( lsmash_root_t *root )
     return lsmash_remove_entry( root->moof_list, 1, isom_remove_moof );
 }
 
+static int isom_set_brands( lsmash_root_t *root, lsmash_brand_type_code major_brand, uint32_t minor_version, lsmash_brand_type_code *brands, uint32_t brand_count )
+{
+    if( brand_count > 50 )
+        return -1;      /* We support setting brands up to 50. */
+    if( !brand_count )
+    {
+        /* Absence of File Type Box means this file is a QuickTime or MP4 version 1 format file. */
+        if( root->ftyp )
+        {
+            if( root->ftyp->compatible_brands )
+                free( root->ftyp->compatible_brands );
+            free( root->ftyp );
+            root->ftyp = NULL;
+        }
+        return 0;
+    }
+    if( !root->ftyp && isom_add_ftyp( root ) )
+        return -1;
+    isom_ftyp_t *ftyp = root->ftyp;
+    ftyp->major_brand = major_brand;
+    ftyp->minor_version = minor_version;
+    lsmash_brand_type_code *compatible_brands;
+    if( !ftyp->compatible_brands )
+        compatible_brands = malloc( brand_count * sizeof(uint32_t) );
+    else
+        compatible_brands = realloc( ftyp->compatible_brands, brand_count * sizeof(uint32_t) );
+    if( !compatible_brands )
+        return -1;
+    ftyp->compatible_brands = compatible_brands;
+    for( uint32_t i = 0; i < brand_count; i++ )
+    {
+        ftyp->compatible_brands[i] = brands[i];
+        ftyp->size += 4;
+    }
+    ftyp->brand_count = brand_count;
+    return isom_check_compatibility( root );
+}
+
 void lsmash_initialize_movie_parameters( lsmash_movie_parameters_t *param )
 {
+    memset( param, 0, sizeof(lsmash_movie_parameters_t) );
     param->max_chunk_duration  = 0.5;
     param->max_async_tolerance = 2.0;
     param->timescale           = 600;
-    param->duration            = 0;
     param->playback_rate       = 0x00010000;
     param->playback_volume     = 0x0100;
-    param->preview_time        = 0;
-    param->preview_duration    = 0;
-    param->poster_time         = 0;
-    param->number_of_tracks    = 0;
 }
 
 int lsmash_set_movie_parameters( lsmash_root_t *root, lsmash_movie_parameters_t *param )
 {
-    if( !root || !root->moov || !root->moov->mvhd )
+    if( !root || !root->moov || !root->moov->mvhd
+     || isom_set_brands( root, param->major_brand, param->minor_version, param->brands, param->number_of_brands ) )
         return -1;
     isom_mvhd_t *mvhd = root->moov->mvhd;
     root->max_chunk_duration  = param->max_chunk_duration;
@@ -6904,6 +6929,17 @@ int lsmash_get_movie_parameters( lsmash_root_t *root, lsmash_movie_parameters_t 
     if( !root || !root->moov || !root->moov->mvhd )
         return -1;
     isom_mvhd_t *mvhd = root->moov->mvhd;
+    if( root->ftyp )
+    {
+        isom_ftyp_t *ftyp = root->ftyp;
+        uint32_t brand_count = LSMASH_MIN( ftyp->brand_count, 50 );     /* brands up to 50 */
+        for( uint32_t i = 0; i < brand_count; i++ )
+            param->brands_shadow[i] = ftyp->compatible_brands[i];
+        param->major_brand      = ftyp->major_brand;
+        param->brands           = param->brands_shadow;
+        param->number_of_brands = brand_count;
+        param->minor_version    = ftyp->minor_version;
+    }
     param->max_chunk_duration  = root->max_chunk_duration;
     param->max_async_tolerance = root->max_async_tolerance;
     param->timescale           = mvhd->timescale;
@@ -6924,43 +6960,8 @@ uint32_t lsmash_get_movie_timescale( lsmash_root_t *root )
     return root->moov->mvhd->timescale;
 }
 
-int lsmash_set_brands( lsmash_root_t *root, lsmash_brand_type_code major_brand, uint32_t minor_version, lsmash_brand_type_code *brands, uint32_t brand_count )
+static int isom_write_ftyp( lsmash_root_t *root )
 {
-    if( !root )
-        return -1;
-    if( !brand_count )
-    {
-        /* Absence of ftyp box means this file is a QuickTime or MP4 version 1 format file. */
-        if( root->ftyp )
-        {
-            if( root->ftyp->compatible_brands )
-                free( root->ftyp->compatible_brands );
-            free( root->ftyp );
-            root->ftyp = NULL;
-        }
-        return 0;
-    }
-    if( !root->ftyp && isom_add_ftyp( root ) )
-        return -1;
-    isom_ftyp_t *ftyp = root->ftyp;
-    ftyp->major_brand = major_brand;
-    ftyp->minor_version = minor_version;
-    ftyp->compatible_brands = malloc( brand_count * sizeof(uint32_t) );
-    if( !ftyp->compatible_brands )
-        return -1;
-    for( uint32_t i = 0; i < brand_count; i++ )
-    {
-        ftyp->compatible_brands[i] = brands[i];
-        ftyp->size += 4;
-    }
-    ftyp->brand_count = brand_count;
-    return isom_check_compatibility( root );
-}
-
-int lsmash_write_ftyp( lsmash_root_t *root )
-{
-    if( !root )
-        return -1;
     isom_ftyp_t *ftyp = root->ftyp;
     if( !ftyp || !ftyp->brand_count )
         return 0;
@@ -6973,6 +6974,7 @@ int lsmash_write_ftyp( lsmash_root_t *root )
     if( lsmash_bs_write_data( bs ) )
         return -1;
     root->size += ftyp->size;
+    root->file_type_written = 1;
     return 0;
 }
 
@@ -7419,6 +7421,10 @@ static int isom_finish_fragment_initial_movie( lsmash_root_t *root )
             for( lsmash_entry_t* stco_entry = stco->list->head ; stco_entry ; stco_entry = stco_entry->next )
                 ((isom_stco_entry_t*)stco_entry->data)->chunk_offset += moov->size;
     }
+    /* Write File Type Box here if it was not written yet. */
+    if( !root->file_type_written && isom_write_ftyp( root ) )
+        return -1;
+    /* Write Movie Box. */
     if( isom_write_moov( root ) )
         return -1;
     root->size += moov->size;
@@ -7508,6 +7514,9 @@ static int isom_finish_fragment_movie( lsmash_root_t *root )
             int useful_default_sample_flags = 1;
             if( trun->sample_count == 1 )
             {
+                /* It is enough to check only if first_sample_flags equals default_sample_flags or not.
+                 * If it is equal, just use default_sample_flags.
+                 * If not, just use first_sample_flags of this run. */
                 if( !memcmp( &trun->first_sample_flags, &tfhd->default_sample_flags, sizeof(isom_sample_flags_t) ) )
                     useful_first_sample_flags = 0;
             }
@@ -7516,29 +7525,20 @@ static int isom_finish_fragment_movie( lsmash_root_t *root )
                 lsmash_entry_t *optional_entry = trun->optional->head->next;
                 isom_trun_optional_row_t *row = (isom_trun_optional_row_t *)optional_entry->data;
                 isom_sample_flags_t representative_sample_flags = row->sample_flags;
+                if( memcmp( &tfhd->default_sample_flags, &representative_sample_flags, sizeof(isom_sample_flags_t) ) )
+                    useful_default_sample_flags = 0;
                 if( !memcmp( &trun->first_sample_flags, &representative_sample_flags, sizeof(isom_sample_flags_t) ) )
                     useful_first_sample_flags = 0;
-                if( memcmp( &tfhd->default_sample_flags, &representative_sample_flags, sizeof(isom_sample_flags_t) ) )
-                {
-                    useful_first_sample_flags = 0;
-                    useful_default_sample_flags = 0;
-                }
                 if( useful_default_sample_flags )
                     for( optional_entry = optional_entry->next; optional_entry; optional_entry = optional_entry->next )
                     {
                         row = (isom_trun_optional_row_t *)optional_entry->data;
                         if( memcmp( &representative_sample_flags, &row->sample_flags, sizeof(isom_sample_flags_t) ) )
                         {
-                            useful_first_sample_flags = 0;
                             useful_default_sample_flags = 0;
                             break;
                         }
                     }
-            }
-            if( useful_first_sample_flags )
-            {
-                assert( useful_default_sample_flags );
-                trun->flags |= ISOM_TR_FLAGS_FIRST_SAMPLE_FLAGS_PRESENT;
             }
             if( useful_default_sample_flags )
             {
@@ -7546,7 +7546,12 @@ static int isom_finish_fragment_movie( lsmash_root_t *root )
                 trun->flags &= ~ISOM_TR_FLAGS_SAMPLE_FLAGS_PRESENT;
             }
             else
+            {
+                useful_first_sample_flags = 0;
                 trun->flags |= ISOM_TR_FLAGS_SAMPLE_FLAGS_PRESENT;
+            }
+            if( useful_first_sample_flags )
+                trun->flags |= ISOM_TR_FLAGS_FIRST_SAMPLE_FLAGS_PRESENT;
         }
         if( useful_default_sample_duration && tfhd->default_sample_duration != trex->default_sample_duration )
             tfhd->flags |= ISOM_TF_FLAGS_DEFAULT_SAMPLE_DURATION_PRESENT;
@@ -8934,6 +8939,9 @@ int lsmash_append_sample( lsmash_root_t *root, uint32_t track_ID, lsmash_sample_
      * This means removal of a feature that we used to have, but anyway very alone chunk does not make sense. */
     if( !root || !root->bs || !sample || !sample->data || !track_ID
      || root->max_chunk_duration == 0 || root->max_async_tolerance == 0 )
+        return -1;
+    /* Write File Type Box here if it was not written yet. */
+    if( !root->file_type_written && isom_write_ftyp( root ) )
         return -1;
     if( root->fragment && root->fragment->pool )
         return isom_append_fragment_sample( root, track_ID, sample );
