@@ -941,6 +941,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     track_param.mode = track_mode;
     track_param.display_width = p_mp4->i_display_width;
     track_param.display_height = p_mp4->i_display_height;
+    track_param.aperture_modes = p_mp4->b_brand_qt && !p_mp4->b_no_pasp;
     MP4_FAIL_IF_ERR( lsmash_set_track_parameters( p_mp4->p_root, p_mp4->i_track, &track_param ),
                      "failed to set track parameters for video.\n" );
 
@@ -970,9 +971,6 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     if( p_mp4->major_brand != ISOM_BRAND_TYPE_QT )
         MP4_FAIL_IF_ERR( lsmash_add_btrt( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry ),
                          "failed to add btrt.\n" );
-    if( p_mp4->b_brand_qt && !p_mp4->b_no_pasp )
-        MP4_FAIL_IF_ERR( lsmash_set_track_aperture_modes( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry ),
-                         "failed to set track aperture mode.\n" );
 
 #if HAVE_ANY_AUDIO
     MP4_FAIL_IF_ERR( p_mp4->audio_hnd && set_param_audio( p_mp4, i_media_timescale, track_mode ),

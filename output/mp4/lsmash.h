@@ -200,11 +200,14 @@ typedef enum
 
     ISOM_BOX_TYPE_CHPL  = LSMASH_4CC( 'c', 'h', 'p', 'l' ),
 
+    ISOM_BOX_TYPE_ALAC  = LSMASH_4CC( 'a', 'l', 'a', 'c' ),
     ISOM_BOX_TYPE_DAC3  = LSMASH_4CC( 'd', 'a', 'c', '3' ),
     ISOM_BOX_TYPE_DAMR  = LSMASH_4CC( 'd', 'a', 'm', 'r' ),
+    ISOM_BOX_TYPE_DEC3  = LSMASH_4CC( 'd', 'e', 'c', '3' ),
 
     ISOM_BOX_TYPE_FTAB  = LSMASH_4CC( 'f', 't', 'a', 'b' ),
 
+    QT_BOX_TYPE_ALAC    = LSMASH_4CC( 'a', 'l', 'a', 'c' ),
     QT_BOX_TYPE_CHAN    = LSMASH_4CC( 'c', 'h', 'a', 'n' ),
     QT_BOX_TYPE_CLEF    = LSMASH_4CC( 'c', 'l', 'e', 'f' ),
     QT_BOX_TYPE_CLIP    = LSMASH_4CC( 'c', 'l', 'i', 'p' ),
@@ -1124,14 +1127,15 @@ typedef enum
     ISOM_SAMPLE_RANDOM_ACCESS_TYPE_NONE         = 0,        /* not random access point */
     ISOM_SAMPLE_RANDOM_ACCESS_TYPE_SYNC         = 1,        /* sync sample */
     ISOM_SAMPLE_RANDOM_ACCESS_TYPE_CLOSED_RAP   = 1,        /* the first sample of a closed GOP */
-    ISOM_SAMPLE_RANDOM_ACCESS_TYPE_OPEN_RAP     = 2,        /* the first sample of an open GOP  */
-    ISOM_SAMPLE_RANDOM_ACCESS_TYPE_RECOVERY     = 3,        /* starting point of gradual decoder refresh */
+    ISOM_SAMPLE_RANDOM_ACCESS_TYPE_OPEN_RAP     = 2,        /* the first sample of an open GOP */
+    ISOM_SAMPLE_RANDOM_ACCESS_TYPE_UNKNOWN_RAP  = 3,        /* the first sample of an open or closed GOP */
+    ISOM_SAMPLE_RANDOM_ACCESS_TYPE_RECOVERY     = 4,        /* starting point of gradual decoder refresh */
 
     QT_SAMPLE_RANDOM_ACCESS_TYPE_NONE           = 0,        /* not random access point */
     QT_SAMPLE_RANDOM_ACCESS_TYPE_SYNC           = 1,        /* sync sample */
     QT_SAMPLE_RANDOM_ACCESS_TYPE_PARTIAL_SYNC   = 2,        /* partial sync sample */
     QT_SAMPLE_RANDOM_ACCESS_TYPE_CLOSED_RAP     = 1,        /* the first sample of a closed GOP */
-    QT_SAMPLE_RANDOM_ACCESS_TYPE_OPEN_RAP       = 2,        /* the first sample of an open GOP  */
+    QT_SAMPLE_RANDOM_ACCESS_TYPE_OPEN_RAP       = 2,        /* the first sample of an open GOP */
 } lsmash_random_access_type;
 
 
@@ -1266,8 +1270,22 @@ typedef struct
                                      * and different for tracks belonging to different such groups.
                                      * Only one track within an alternate group should be played or streamed at any one time. */
     int16_t  audio_volume;          /* fixed point 8.8 number. 0x0100 is full volume. */
+    int32_t  matrix[9];             /* transformation matrix for the video
+                                     * Each value represents, in order, a, b, u, c, d, v, x, y and w.
+                                     * All the values in a matrix are stored as 16.16 fixed-point values,
+                                     * except for u, v and w, which are stored as 2.30 fixed-point values.
+                                     * Not all derived specifications use matrices.
+                                     * If a matrix is used, the point (p, q) is transformed into (p', q') using the matrix as follows:
+                                     *             | a b u |
+                                     * (p, q, 1) * | c d v | = z * (p', q', 1)
+                                     *             | x y w |
+                                     * p' = (a * p + c * q + x) / z; q' = (b * p + d * q + y) / z; z = u * p + v * q + w
+                                     * Note: transformation matrix is applied after scaling to display size up to display_width and display_height. */
     uint32_t display_width;         /* visual presentation region size of horizontal direction as fixed point 16.16 number.  */
     uint32_t display_height;        /* visual presentation region size of vertical direction as fixed point 16.16 number. */
+    uint8_t  aperture_modes;        /* track aperture modes present
+                                     * This feature is only available under QuickTime file format.
+                                     * Automatically disabled if multiple sample description is present or scaling method is specified. */
 } lsmash_track_parameters_t;
 
 typedef struct
@@ -1279,6 +1297,8 @@ typedef struct
     double   max_chunk_duration;            /* max duration per chunk in seconds. 0.5 is default value. */
     double   max_async_tolerance;           /* max tolerance, in seconds, for amount of interleaving asynchronization between tracks.
                                              * 2.0 is default value. At least twice of max_chunk_duration is used. */
+    uint64_t max_chunk_size;                /* max size per chunk in bytes. 4*1024*1024 (4MiB) is default value. */
+    uint64_t max_read_size;                 /* max size of reading from a chunk at a time. 4*1024*1024 (4MiB) is default value. */
     uint32_t timescale;                     /* movie timescale: timescale for the entire presentation */
     uint64_t duration;                      /* the duration, expressed in movie timescale, of the longest track
                                              * You can't set this parameter manually. */
@@ -1314,7 +1334,6 @@ uint32_t lsmash_get_last_sample_delta( lsmash_root_t *root, uint32_t track_ID );
 uint32_t lsmash_get_start_time_offset( lsmash_root_t *root, uint32_t track_ID );
 uint32_t lsmash_get_movie_timescale( lsmash_root_t *root );
 
-int lsmash_set_track_aperture_modes( lsmash_root_t *root, uint32_t track_ID, uint32_t entry_number );
 int lsmash_set_avc_config( lsmash_root_t *root, uint32_t track_ID, uint32_t entry_number,
                            uint8_t configurationVersion, uint8_t AVCProfileIndication, uint8_t profile_compatibility,
                            uint8_t AVCLevelIndication, uint8_t lengthSizeMinusOne,
@@ -1353,6 +1372,7 @@ void lsmash_delete_sample( lsmash_sample_t *sample );
 int lsmash_append_sample( lsmash_root_t *root, uint32_t track_ID, lsmash_sample_t *sample );
 int lsmash_flush_pooled_samples( lsmash_root_t *root, uint32_t track_ID, uint32_t last_sample_delta );
 int lsmash_finish_movie( lsmash_root_t *root, lsmash_adhoc_remux_t* remux );
+void lsmash_discard_boxes( lsmash_root_t *root );
 void lsmash_destroy_root( lsmash_root_t *root );
 
 int lsmash_create_fragment_movie( lsmash_root_t *root );
@@ -1364,6 +1384,15 @@ void lsmash_delete_tyrant_chapter( lsmash_root_t *root );
 
 #ifdef LSMASH_DEMUXER_ENABLED
 int lsmash_print_movie( lsmash_root_t *root );
+
+int lsmash_copy_timeline_map( lsmash_root_t *dst, uint32_t dst_track_ID, lsmash_root_t *src, uint32_t src_track_ID );
+int lsmash_copy_decoder_specific_info( lsmash_root_t *dst, uint32_t dst_track_ID, lsmash_root_t *src, uint32_t src_track_ID );
+int lsmash_construct_timeline( lsmash_root_t *root, uint32_t track_ID );
+void lsmash_destruct_timeline( lsmash_root_t *root, uint32_t track_ID );
+int lsmash_get_last_sample_delta_from_media_timeline( lsmash_root_t *root, uint32_t track_ID, uint32_t *last_sample_delta );
+int lsmash_get_dts_from_media_timeline( lsmash_root_t *root, uint32_t track_ID, uint32_t sample_number, uint64_t *dts );
+lsmash_sample_t *lsmash_get_sample_from_media_timeline( lsmash_root_t *root, uint32_t track_ID, uint32_t sample_number );
+int lsmash_check_sample_existence_in_media_timeline( lsmash_root_t *root, uint32_t track_ID, uint32_t sample_number );
 #endif
 
 /* to facilitate to make exdata (typically DecoderSpecificInfo or AudioSpecificConfig). */

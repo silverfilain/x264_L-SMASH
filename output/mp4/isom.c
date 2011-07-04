@@ -34,6 +34,7 @@
 #ifdef LSMASH_DEMUXER_ENABLED
 #include "read.h"
 #include "print.h"
+#include "timeline.h"
 #endif
 
 
@@ -194,7 +195,7 @@ static void isom_bs_put_box_common( lsmash_bs_t *bs, void *box )
         isom_bs_put_basebox_common( bs, (isom_box_t *)box );
 }
 
-static isom_trak_entry_t *isom_get_trak( lsmash_root_t *root, uint32_t track_ID )
+isom_trak_entry_t *isom_get_trak( lsmash_root_t *root, uint32_t track_ID )
 {
     if( !track_ID || !root || !root->moov || !root->moov->trak_list )
         return NULL;
@@ -336,7 +337,7 @@ static int isom_add_dref_entry( isom_dref_t *dref, uint32_t flags, char *name, c
     return 0;
 }
 
-static isom_avcC_ps_entry_t *isom_create_ps_entry( uint8_t *ps, uint32_t ps_size )
+isom_avcC_ps_entry_t *isom_create_ps_entry( uint8_t *ps, uint32_t ps_size )
 {
     isom_avcC_ps_entry_t *entry = malloc( sizeof(isom_avcC_ps_entry_t) );
     if( !entry )
@@ -424,9 +425,7 @@ int lsmash_add_spsext_entry( lsmash_root_t *root, uint32_t track_ID, uint32_t en
     return 0;
 }
 
-static void isom_remove_avcC( isom_avcC_t *avcC );
-
-static int isom_add_avcC( isom_visual_entry_t *visual )
+int isom_add_avcC( isom_visual_entry_t *visual )
 {
     if( !visual )
         return -1;
@@ -453,18 +452,7 @@ static int isom_add_avcC( isom_visual_entry_t *visual )
     return 0;
 }
 
-static int isom_add_pasp( isom_visual_entry_t *visual )
-{
-    if( !visual || visual->pasp )
-        return -1;
-    isom_create_box( pasp, visual, ISOM_BOX_TYPE_PASP );
-    pasp->hSpacing = 1;
-    pasp->vSpacing = 1;
-    visual->pasp = pasp;
-    return 0;
-}
-
-static int isom_add_clap( isom_visual_entry_t *visual )
+int isom_add_clap( isom_visual_entry_t *visual )
 {
     if( !visual || visual->clap )
         return -1;
@@ -481,7 +469,18 @@ static int isom_add_clap( isom_visual_entry_t *visual )
     return 0;
 }
 
-static int isom_add_colr( isom_visual_entry_t *visual )
+int isom_add_pasp( isom_visual_entry_t *visual )
+{
+    if( !visual || visual->pasp )
+        return -1;
+    isom_create_box( pasp, visual, ISOM_BOX_TYPE_PASP );
+    pasp->hSpacing = 1;
+    pasp->vSpacing = 1;
+    visual->pasp = pasp;
+    return 0;
+}
+
+int isom_add_colr( isom_visual_entry_t *visual )
 {
     if( !visual || visual->colr )
         return -1;
@@ -495,7 +494,7 @@ static int isom_add_colr( isom_visual_entry_t *visual )
     return 0;
 }
 
-static int isom_add_stsl( isom_visual_entry_t *visual )
+int isom_add_stsl( isom_visual_entry_t *visual )
 {
     if( !visual || visual->stsl )
         return -1;
@@ -510,8 +509,19 @@ static void isom_remove_visual_extensions( isom_visual_entry_t *visual );
 
 static int isom_add_visual_extensions( isom_visual_entry_t *visual, lsmash_video_summary_t *summary )
 {
+    /* Check if set up Track Aperture Modes. */
+    isom_trak_entry_t *trak = (isom_trak_entry_t *)visual->parent->parent->parent->parent->parent;
+    int qt_compatible = trak->root->qt_compatible;
+    isom_tapt_t *tapt = trak->tapt;
+    int set_aperture_modes = qt_compatible                      /* Track Aperture Modes is only available under QuickTime file format. */
+        && !summary->scaling_method                             /* Sample scaling method might conflict with this feature. */
+        && tapt && tapt->clef && tapt->prof && tapt->enof       /* Check if required boxes exist. */
+        && !((isom_stsd_t *)visual->parent)->list->entry_count; /* Multiple sample description might conflict with this, so in that case, disable this feature.
+                                                                 * Note: this sample description isn't added yet here. */
+    if( !set_aperture_modes )
+        isom_remove_tapt( trak->tapt );
     /* Set up Clean Aperture. */
-    if( summary->crop_top || summary->crop_left || summary->crop_bottom || summary->crop_right )
+    if( set_aperture_modes || summary->crop_top || summary->crop_left || summary->crop_bottom || summary->crop_right )
     {
         if( isom_add_clap( visual ) )
         {
@@ -539,7 +549,7 @@ static int isom_add_visual_extensions( isom_visual_entry_t *visual, lsmash_video
             clap->vertOffD = 2;
     }
     /* Set up Pixel Aspect Ratio. */
-    if( summary->par_h && summary->par_v )
+    if( set_aperture_modes || (summary->par_h && summary->par_v) )
     {
         if( isom_add_pasp( visual ) )
         {
@@ -551,7 +561,7 @@ static int isom_add_visual_extensions( isom_visual_entry_t *visual, lsmash_video
         pasp->vSpacing = summary->par_v;
     }
     /* Set up Color Parameter. */
-    if( summary->primaries || summary->transfer || summary->matrix )
+    if( qt_compatible && (summary->primaries || summary->transfer || summary->matrix) )
     {
         if( isom_add_colr( visual ) )
         {
@@ -587,7 +597,7 @@ static int isom_add_visual_extensions( isom_visual_entry_t *visual, lsmash_video
             colr->matrix_index = (matrix == 1 || matrix == 6 || matrix == 7 ) ? matrix : 2;
     }
     /* Set up Sample Scaling. */
-    if( summary->scaling_method )
+    if( !qt_compatible && summary->scaling_method )
     {
         if( isom_add_stsl( visual ) )
         {
@@ -612,6 +622,31 @@ static int isom_add_visual_extensions( isom_visual_entry_t *visual, lsmash_video
                 return -1;
             break;
         }
+    /* Set up Track Apeture Modes. */
+    if( set_aperture_modes )
+    {
+        uint32_t width  = visual->width  << 16;
+        uint32_t height = visual->height << 16;
+        double clap_width  = ((double)visual->clap->cleanApertureWidthN  / visual->clap->cleanApertureWidthD)  * (1<<16);
+        double clap_height = ((double)visual->clap->cleanApertureHeightN / visual->clap->cleanApertureHeightD) * (1<<16);
+        double par = (double)visual->pasp->hSpacing / visual->pasp->vSpacing;
+        if( par >= 1.0 )
+        {
+            tapt->clef->width  = clap_width * par;
+            tapt->clef->height = clap_height;
+            tapt->prof->width  = width * par;
+            tapt->prof->height = height;
+        }
+        else
+        {
+            tapt->clef->width  = clap_width;
+            tapt->clef->height = clap_height / par;
+            tapt->prof->width  = width;
+            tapt->prof->height = height / par;
+        }
+        tapt->enof->width  = width;
+        tapt->enof->height = height;
+    }
     return 0;
 }
 
@@ -674,10 +709,7 @@ static int isom_add_mp4s_entry( isom_stsd_t *stsd )
 }
 #endif
 
-static void isom_remove_wave( isom_wave_t *wave );
-static void isom_remove_chan( isom_chan_t *chan );
-
-static int isom_add_wave( isom_audio_entry_t *audio )
+int isom_add_wave( isom_audio_entry_t *audio )
 {
     if( !audio || audio->wave )
         return -1;
@@ -686,7 +718,7 @@ static int isom_add_wave( isom_audio_entry_t *audio )
     return 0;
 }
 
-static int isom_add_frma( isom_wave_t *wave )
+int isom_add_frma( isom_wave_t *wave )
 {
     if( !wave || wave->frma )
         return -1;
@@ -695,7 +727,7 @@ static int isom_add_frma( isom_wave_t *wave )
     return 0;
 }
 
-static int isom_add_enda( isom_wave_t *wave )
+int isom_add_enda( isom_wave_t *wave )
 {
     if( !wave || wave->enda )
         return -1;
@@ -704,7 +736,7 @@ static int isom_add_enda( isom_wave_t *wave )
     return 0;
 }
 
-static int isom_add_mp4a( isom_wave_t *wave )
+int isom_add_mp4a( isom_wave_t *wave )
 {
     if( !wave || wave->mp4a )
         return -1;
@@ -713,7 +745,7 @@ static int isom_add_mp4a( isom_wave_t *wave )
     return 0;
 }
 
-static int isom_add_terminator( isom_wave_t *wave )
+int isom_add_terminator( isom_wave_t *wave )
 {
     if( !wave || wave->terminator )
         return -1;
@@ -722,7 +754,7 @@ static int isom_add_terminator( isom_wave_t *wave )
     return 0;
 }
 
-static int isom_add_chan( isom_audio_entry_t *audio )
+int isom_add_chan( isom_audio_entry_t *audio )
 {
     if( !audio || audio->chan )
         return -1;
@@ -1018,7 +1050,7 @@ static int isom_add_text_entry( isom_stsd_t *stsd )
     return 0;
 }
 
-static int isom_add_ftab( isom_tx3g_entry_t *tx3g )
+int isom_add_ftab( isom_tx3g_entry_t *tx3g )
 {
     if( !tx3g )
         return -1;
@@ -1369,7 +1401,7 @@ static int isom_add_stco_entry( isom_stbl_t *stbl, uint64_t chunk_offset )
     return 0;
 }
 
-static isom_sgpd_entry_t *isom_get_sample_group_description( isom_stbl_t *stbl, uint32_t grouping_type )
+isom_sgpd_entry_t *isom_get_sample_group_description( isom_stbl_t *stbl, uint32_t grouping_type )
 {
     if( !stbl->sgpd_list )
         return NULL;
@@ -1384,7 +1416,7 @@ static isom_sgpd_entry_t *isom_get_sample_group_description( isom_stbl_t *stbl, 
     return NULL;
 }
 
-static isom_sbgp_entry_t *isom_get_sample_to_group( isom_stbl_t *stbl, uint32_t grouping_type )
+isom_sbgp_entry_t *isom_get_sample_to_group( isom_stbl_t *stbl, uint32_t grouping_type )
 {
     if( !stbl->sbgp_list )
         return NULL;
@@ -1677,12 +1709,14 @@ static int isom_scan_trak_profileLevelIndication( isom_trak_entry_t* trak, mp4a_
             case ISOM_CODEC_TYPE_ALAC_AUDIO :
             case ISOM_CODEC_TYPE_SAMR_AUDIO :
             case ISOM_CODEC_TYPE_SAWB_AUDIO :
+#ifdef LSMASH_DEMUXER_ENABLED
+            case ISOM_CODEC_TYPE_EC_3_AUDIO :
+#endif
 #if 0
             case ISOM_CODEC_TYPE_DRA1_AUDIO :
             case ISOM_CODEC_TYPE_DTSC_AUDIO :
             case ISOM_CODEC_TYPE_DTSH_AUDIO :
             case ISOM_CODEC_TYPE_DTSL_AUDIO :
-            case ISOM_CODEC_TYPE_EC_3_AUDIO :
             case ISOM_CODEC_TYPE_ENCA_AUDIO :
             case ISOM_CODEC_TYPE_G719_AUDIO :
             case ISOM_CODEC_TYPE_G726_AUDIO :
@@ -1828,7 +1862,7 @@ static int isom_add_tapt( isom_trak_entry_t *trak )
     return 0;
 }
 
-static int isom_add_elst( isom_edts_t *edts )
+int isom_add_elst( isom_edts_t *edts )
 {
     if( edts->elst )
         return 0;
@@ -1837,7 +1871,7 @@ static int isom_add_elst( isom_edts_t *edts )
     return 0;
 }
 
-static int isom_add_edts( isom_trak_entry_t *trak )
+int isom_add_edts( isom_trak_entry_t *trak )
 {
     if( trak->edts )
         return 0;
@@ -2073,17 +2107,22 @@ static int isom_add_stsd( isom_stbl_t *stbl )
     return 0;
 }
 
+int isom_add_btrt( isom_visual_entry_t *visual )
+{
+    if( !visual || visual->btrt )
+        return -1;
+    isom_create_box( btrt, visual, ISOM_BOX_TYPE_BTRT );
+    visual->btrt = btrt;
+    return 0;
+}
+
 int lsmash_add_btrt( lsmash_root_t *root, uint32_t track_ID, uint32_t entry_number )
 {
     isom_trak_entry_t *trak = isom_get_trak( root, track_ID );
     if( !trak || !trak->mdia || !trak->mdia->minf || !trak->mdia->minf->stbl || !trak->mdia->minf->stbl->stsd || !trak->mdia->minf->stbl->stsd->list )
         return -1;
     isom_visual_entry_t *data = (isom_visual_entry_t *)lsmash_get_entry_data( trak->mdia->minf->stbl->stsd->list, entry_number );
-    if( !data )
-        return -1;
-    isom_create_box( btrt, data, ISOM_BOX_TYPE_BTRT );
-    data->btrt = btrt;
-    return 0;
+    return isom_add_btrt( data );
 }
 
 static int isom_add_stts( isom_stbl_t *stbl )
@@ -2411,7 +2450,7 @@ static void isom_remove_enof( isom_enof_t *enof )
     isom_remove_box( enof, isom_tapt_t );
 }
 
-static void isom_remove_tapt( isom_tapt_t *tapt )
+void isom_remove_tapt( isom_tapt_t *tapt )
 {
     if( !tapt )
         return;
@@ -2531,28 +2570,28 @@ static void isom_remove_hdlr( isom_hdlr_t *hdlr )
     free( hdlr );
 }
 
-static void isom_remove_clap( isom_clap_t *clap )
+void isom_remove_clap( isom_clap_t *clap )
 {
     if( !clap )
         return;
     isom_remove_box( clap, isom_visual_entry_t );
 }
 
-static void isom_remove_pasp( isom_pasp_t *pasp )
+void isom_remove_pasp( isom_pasp_t *pasp )
 {
     if( !pasp )
         return;
     isom_remove_box( pasp, isom_visual_entry_t );
 }
 
-static void isom_remove_colr( isom_colr_t *colr )
+void isom_remove_colr( isom_colr_t *colr )
 {
     if( !colr )
         return;
     isom_remove_box( colr, isom_visual_entry_t );
 }
 
-static void isom_remove_stsl( isom_stsl_t *stsl )
+void isom_remove_stsl( isom_stsl_t *stsl )
 {
     if( !stsl )
         return;
@@ -2600,7 +2639,7 @@ static void isom_remove_esds( isom_esds_t *esds )
     free( esds );
 }
 
-static void isom_remove_avcC( isom_avcC_t *avcC )
+void isom_remove_avcC( isom_avcC_t *avcC )
 {
     if( !avcC )
         return;
@@ -2610,7 +2649,7 @@ static void isom_remove_avcC( isom_avcC_t *avcC )
     isom_remove_box( avcC, isom_visual_entry_t );
 }
 
-static void isom_remove_btrt( isom_btrt_t *btrt )
+void isom_remove_btrt( isom_btrt_t *btrt )
 {
     if( !btrt )
         return;
@@ -2639,7 +2678,7 @@ static void isom_remove_font_record( isom_font_record_t *font_record )
     free( font_record );
 }
 
-static void isom_remove_ftab( isom_ftab_t *ftab )
+void isom_remove_ftab( isom_ftab_t *ftab )
 {
     if( !ftab )
         return;
@@ -2647,35 +2686,35 @@ static void isom_remove_ftab( isom_ftab_t *ftab )
     isom_remove_box( ftab, isom_tx3g_entry_t );
 }
 
-static void isom_remove_frma( isom_frma_t *frma )
+void isom_remove_frma( isom_frma_t *frma )
 {
     if( !frma )
         return;
     isom_remove_box( frma, isom_wave_t );
 }
 
-static void isom_remove_enda( isom_enda_t *enda )
+void isom_remove_enda( isom_enda_t *enda )
 {
     if( !enda )
         return;
     isom_remove_box( enda, isom_wave_t );
 }
 
-static void isom_remove_mp4a( isom_mp4a_t *mp4a )
+void isom_remove_mp4a( isom_mp4a_t *mp4a )
 {
     if( !mp4a )
         return;
     isom_remove_box( mp4a, isom_wave_t );
 }
 
-static void isom_remove_terminator( isom_terminator_t *terminator )
+void isom_remove_terminator( isom_terminator_t *terminator )
 {
     if( !terminator )
         return;
     isom_remove_box( terminator, isom_wave_t );
 }
 
-static void isom_remove_wave( isom_wave_t *wave )
+void isom_remove_wave( isom_wave_t *wave )
 {
     if( !wave )
         return;
@@ -2684,10 +2723,12 @@ static void isom_remove_wave( isom_wave_t *wave )
     isom_remove_mp4a( wave->mp4a );
     isom_remove_esds( wave->esds );
     isom_remove_terminator( wave->terminator );
+    if( wave->exdata )
+        free( wave->exdata );
     isom_remove_box( wave, isom_audio_entry_t );
 }
 
-static void isom_remove_chan( isom_chan_t *chan )
+void isom_remove_chan( isom_chan_t *chan )
 {
     if( !chan )
         return;
@@ -2696,7 +2737,7 @@ static void isom_remove_chan( isom_chan_t *chan )
     isom_remove_box( chan, isom_audio_entry_t );
 }
 
-static void isom_remove_sample_description( isom_sample_entry_t *sample )
+void isom_remove_sample_description( isom_sample_entry_t *sample )
 {
     if( !sample )
         return;
@@ -3650,8 +3691,12 @@ static int isom_write_wave( lsmash_bs_t *bs, isom_wave_t *wave )
         return -1;
     if( isom_write_frma( bs, wave->frma )
      || isom_write_enda( bs, wave->enda )
-     || isom_write_mp4a( bs, wave->mp4a )
-     || isom_write_esds( bs, wave->esds ) )
+     || isom_write_mp4a( bs, wave->mp4a ) )
+        return -1;
+    lsmash_bs_put_bytes( bs, wave->exdata, wave->exdata_length );
+    if( lsmash_bs_write_data( bs ) )
+        return -1;
+    if( isom_write_esds( bs, wave->esds ) )
         return -1;
     return isom_write_terminator( bs, wave->terminator );
 }
@@ -3907,12 +3952,14 @@ static int isom_write_stsd( lsmash_bs_t *bs, isom_trak_entry_t *trak )
             case QT_CODEC_TYPE_IN24_AUDIO :
             case QT_CODEC_TYPE_IN32_AUDIO :
             case QT_CODEC_TYPE_NOT_SPECIFIED :
+#ifdef LSMASH_DEMUXER_ENABLED
+            case ISOM_CODEC_TYPE_EC_3_AUDIO :
+#endif
 #if 0
             case ISOM_CODEC_TYPE_DRA1_AUDIO :
             case ISOM_CODEC_TYPE_DTSC_AUDIO :
             case ISOM_CODEC_TYPE_DTSH_AUDIO :
             case ISOM_CODEC_TYPE_DTSL_AUDIO :
-            case ISOM_CODEC_TYPE_EC_3_AUDIO :
             case ISOM_CODEC_TYPE_ENCA_AUDIO :
             case ISOM_CODEC_TYPE_G719_AUDIO :
             case ISOM_CODEC_TYPE_G726_AUDIO :
@@ -5213,8 +5260,15 @@ static int isom_update_bitrate_info( isom_mdia_t *mdia )
         case ISOM_CODEC_TYPE_ALAC_AUDIO :
         {
             isom_audio_entry_t *alac = (isom_audio_entry_t *)sample_entry;
-            if( !alac || alac->exdata_length < 36 || !alac->exdata )
+            if( !alac )
                 return -1;
+            if( alac->exdata_length < 36 || !alac->exdata )
+            {
+                isom_wave_t *wave = alac->wave;
+                if( !wave || wave->exdata_length < 36 || !wave->exdata )
+                    return -1;
+                break;      /* Apparently, average bitrate field is 0. */
+            }
             uint8_t *exdata = (uint8_t *)alac->exdata + 28;
             exdata[0] = (info.avgBitrate >> 24) & 0xff;
             exdata[1] = (info.avgBitrate >> 16) & 0xff;
@@ -5711,7 +5765,8 @@ static uint64_t isom_update_wave_size( isom_wave_t *wave )
         + isom_update_enda_size( wave->enda )
         + isom_update_mp4a_size( wave->mp4a )
         + isom_update_esds_size( wave->esds )
-        + isom_update_terminator_size( wave->terminator );
+        + isom_update_terminator_size( wave->terminator )
+        + (uint64_t)wave->exdata_length;
     CHECK_LARGESIZE( wave->size );
     return wave->size;
 }
@@ -5821,12 +5876,14 @@ static uint64_t isom_update_stsd_size( isom_stsd_t *stsd )
             case QT_CODEC_TYPE_IN24_AUDIO :
             case QT_CODEC_TYPE_IN32_AUDIO :
             case QT_CODEC_TYPE_NOT_SPECIFIED :
+#ifdef LSMASH_DEMUXER_ENABLED
+            case ISOM_CODEC_TYPE_EC_3_AUDIO :
+#endif
 #if 0
             case ISOM_CODEC_TYPE_DRA1_AUDIO :
             case ISOM_CODEC_TYPE_DTSC_AUDIO :
             case ISOM_CODEC_TYPE_DTSH_AUDIO :
             case ISOM_CODEC_TYPE_DTSL_AUDIO :
-            case ISOM_CODEC_TYPE_EC_3_AUDIO :
             case ISOM_CODEC_TYPE_ENCA_AUDIO :
             case ISOM_CODEC_TYPE_G719_AUDIO :
             case ISOM_CODEC_TYPE_G726_AUDIO :
@@ -6332,14 +6389,11 @@ uint32_t lsmash_get_track_ID( lsmash_root_t *root, uint32_t track_number )
 
 void lsmash_initialize_track_parameters( lsmash_track_parameters_t *param )
 {
-    param->mode            = 0;
-    param->track_ID        = 0;
-    param->duration        = 0;
-    param->video_layer     = 0;
-    param->alternate_group = 0;
-    param->audio_volume    = 0x0100;
-    param->display_width   = 0;
-    param->display_height  = 0;
+    memset( param, 0, sizeof(lsmash_track_parameters_t) );
+    param->audio_volume = 0x0100;
+    param->matrix[0] = 0x00010000;
+    param->matrix[4] = 0x00010000;
+    param->matrix[8] = 0x40000000;
 }
 
 int lsmash_set_track_parameters( lsmash_root_t *root, uint32_t track_ID, lsmash_track_parameters_t *param )
@@ -6347,6 +6401,20 @@ int lsmash_set_track_parameters( lsmash_root_t *root, uint32_t track_ID, lsmash_
     isom_trak_entry_t *trak = isom_get_trak( root, track_ID );
     if( !trak || !trak->mdia || !trak->mdia->hdlr || !root->moov->mvhd )
         return -1;
+    /* Prepare Track Aperture Modes if required. */
+    if( root->qt_compatible && param->aperture_modes )
+    {
+        if( !trak->tapt && isom_add_tapt( trak ) )
+            return -1;
+        isom_tapt_t *tapt = trak->tapt;
+        if( (!tapt->clef && isom_add_clef( tapt ))
+         || (!tapt->prof && isom_add_prof( tapt ))
+         || (!tapt->enof && isom_add_enof( tapt )) )
+            return -1;
+    }
+    else
+        isom_remove_tapt( trak->tapt );
+    /* Set up Track Header. */
     uint32_t media_type = trak->mdia->hdlr->componentSubtype;
     isom_tkhd_t *tkhd = trak->tkhd;
     tkhd->flags           = param->mode;
@@ -6363,6 +6431,8 @@ int lsmash_set_track_parameters( lsmash_root_t *root, uint32_t track_ID, lsmash_
         tkhd->layer       = 0;
         tkhd->volume      = media_type == ISOM_MEDIA_HANDLER_TYPE_AUDIO_TRACK ? 0x0100                : 0;
     }
+    for( int i = 0; i < 9; i++ )
+        tkhd->matrix[i]   = media_type == ISOM_MEDIA_HANDLER_TYPE_VIDEO_TRACK ? param->matrix[i]      : 0;
     tkhd->width           = media_type == ISOM_MEDIA_HANDLER_TYPE_VIDEO_TRACK ? param->display_width  : 0;
     tkhd->height          = media_type == ISOM_MEDIA_HANDLER_TYPE_VIDEO_TRACK ? param->display_height : 0;
     /* Update next_track_ID if needed. */
@@ -6383,8 +6453,11 @@ int lsmash_get_track_parameters( lsmash_root_t *root, uint32_t track_ID, lsmash_
     param->video_layer     = tkhd->layer;
     param->alternate_group = tkhd->alternate_group;
     param->audio_volume    = tkhd->volume;
+    for( int i = 0; i < 9; i++ )
+        param->matrix[i]   = tkhd->matrix[i];
     param->display_width   = tkhd->width;
     param->display_height  = tkhd->height;
+    param->aperture_modes  = !!trak->tapt;
     return 0;
 }
 
@@ -6680,89 +6753,6 @@ int lsmash_get_media_parameters( lsmash_root_t *root, uint32_t track_ID, lsmash_
     return 0;
 }
 
-static int isom_confirm_visual_type( uint32_t sample_type )
-{
-    switch( sample_type )
-    {
-        case ISOM_CODEC_TYPE_AVC1_VIDEO :
-#if 0
-        case ISOM_CODEC_TYPE_AVC2_VIDEO :
-        case ISOM_CODEC_TYPE_AVCP_VIDEO :
-        case ISOM_CODEC_TYPE_SVC1_VIDEO :
-        case ISOM_CODEC_TYPE_MVC1_VIDEO :
-        case ISOM_CODEC_TYPE_MVC2_VIDEO :
-        case ISOM_CODEC_TYPE_MP4V_VIDEO :
-        case ISOM_CODEC_TYPE_DRAC_VIDEO :
-        case ISOM_CODEC_TYPE_ENCV_VIDEO :
-        case ISOM_CODEC_TYPE_MJP2_VIDEO :
-        case ISOM_CODEC_TYPE_S263_VIDEO :
-        case ISOM_CODEC_TYPE_VC_1_VIDEO :
-#endif
-            break;
-        default :
-            return -1;
-    }
-    return 0;
-}
-
-int lsmash_set_track_aperture_modes( lsmash_root_t *root, uint32_t track_ID, uint32_t entry_number )
-{
-    if( !root->qt_compatible )
-        return -1;
-    isom_trak_entry_t *trak = isom_get_trak( root, track_ID );
-    if( !trak || !trak->mdia || !trak->mdia->minf || !trak->mdia->minf->stbl || !trak->mdia->minf->stbl->stsd || !trak->mdia->minf->stbl->stsd->list )
-        return -1;
-    isom_visual_entry_t *data = (isom_visual_entry_t *)lsmash_get_entry_data( trak->mdia->minf->stbl->stsd->list, entry_number );
-    if( !data || isom_confirm_visual_type( data->type ) )
-        return -1;
-    uint32_t width = data->width << 16;
-    uint32_t height = data->height << 16;
-    if( !trak->tapt && isom_add_tapt( trak ) )
-        return -1;
-    isom_tapt_t *tapt = trak->tapt;
-    if( (!tapt->clef && isom_add_clef( tapt ))
-     || (!tapt->prof && isom_add_prof( tapt ))
-     || (!tapt->enof && isom_add_enof( tapt )) )
-        return -1;
-    if( !data->pasp && isom_add_pasp( data ) )
-        return -1;
-    isom_pasp_t *pasp = data->pasp;
-    isom_clap_t *clap = data->clap;
-    if( !clap )
-    {
-        if( isom_add_clap( data ) )
-            return -1;
-        clap = data->clap;
-        clap->cleanApertureWidthN  = data->width;
-        clap->cleanApertureHeightN = data->height;
-    }
-    if( !pasp->hSpacing || !pasp->vSpacing
-     || !clap->cleanApertureWidthN || !clap->cleanApertureWidthD
-     || !clap->cleanApertureHeightN || !clap->cleanApertureHeightD
-     || !clap->horizOffD || !clap->vertOffD )
-        return -1;
-    double par = (double)pasp->hSpacing / pasp->vSpacing;
-    double clap_width  = ((double)clap->cleanApertureWidthN / clap->cleanApertureWidthD) * (1<<16);
-    double clap_height = ((double)clap->cleanApertureHeightN / clap->cleanApertureHeightD) * (1<<16);
-    if( par >= 1.0 )
-    {
-        tapt->clef->width  = clap_width * par;
-        tapt->clef->height = clap_height;
-        tapt->prof->width  = width * par;
-        tapt->prof->height = height;
-    }
-    else
-    {
-        tapt->clef->width  = clap_width;
-        tapt->clef->height = clap_height / par;
-        tapt->prof->width  = width;
-        tapt->prof->height = height / par;
-    }
-    tapt->enof->width  = width;
-    tapt->enof->height = height;
-    return 0;
-}
-
 /*---- movie manipulators ----*/
 
 lsmash_root_t *lsmash_open_movie( const char *filename, lsmash_file_mode_code mode )
@@ -6804,8 +6794,12 @@ lsmash_root_t *lsmash_open_movie( const char *filename, lsmash_file_mode_code mo
         root->qt_compatible = 1;    /* QTFF is default file format. */
     }
 #ifdef LSMASH_DEMUXER_ENABLED
-    if( (mode & (LSMASH_FILE_MODE_READ | LSMASH_FILE_MODE_DUMP)) && isom_read_root( root ) )
-        goto fail;
+    if( (mode & (LSMASH_FILE_MODE_READ | LSMASH_FILE_MODE_DUMP)) )
+    {
+        if( isom_read_root( root ) )
+            goto fail;
+        root->max_read_size = 4 * 1024 * 1024;
+    }
 #endif
     if( mode & LSMASH_FILE_MODE_FRAGMENTED )
     {
@@ -6891,6 +6885,8 @@ void lsmash_initialize_movie_parameters( lsmash_movie_parameters_t *param )
     memset( param, 0, sizeof(lsmash_movie_parameters_t) );
     param->max_chunk_duration  = 0.5;
     param->max_async_tolerance = 2.0;
+    param->max_chunk_size      = 4 * 1024 * 1024;
+    param->max_read_size       = 4 * 1024 * 1024;
     param->timescale           = 600;
     param->playback_rate       = 0x00010000;
     param->playback_volume     = 0x0100;
@@ -6904,6 +6900,8 @@ int lsmash_set_movie_parameters( lsmash_root_t *root, lsmash_movie_parameters_t 
     isom_mvhd_t *mvhd = root->moov->mvhd;
     root->max_chunk_duration  = param->max_chunk_duration;
     root->max_async_tolerance = LSMASH_MAX( param->max_async_tolerance, 2 * param->max_chunk_duration );
+    root->max_chunk_size      = param->max_chunk_size;
+    root->max_read_size       = param->max_read_size;
     mvhd->timescale           = param->timescale;
     if( root->qt_compatible || root->itunes_audio )
     {
@@ -6942,6 +6940,8 @@ int lsmash_get_movie_parameters( lsmash_root_t *root, lsmash_movie_parameters_t 
     }
     param->max_chunk_duration  = root->max_chunk_duration;
     param->max_async_tolerance = root->max_async_tolerance;
+    param->max_chunk_size      = root->max_chunk_size;
+    param->max_read_size       = root->max_read_size;
     param->timescale           = mvhd->timescale;
     param->duration            = mvhd->duration;
     param->playback_rate       = mvhd->rate;
@@ -7353,11 +7353,11 @@ static int isom_output_fragment_media_data( lsmash_root_t *root )
         if( !sample || !sample->data )
             return -1;
         lsmash_bs_put_bytes( root->bs, sample->data, sample->length );
-        if( lsmash_bs_write_data( root->bs ) )
-            return -1;
     }
-    lsmash_remove_entries( fragment->pool, lsmash_delete_sample );
+    if( lsmash_bs_write_data( root->bs ) )
+        return -1;
     root->size += root->mdat->size;
+    lsmash_remove_entries( fragment->pool, lsmash_delete_sample );
     fragment->pool_size = 0;
     return 0;
 }
@@ -7755,19 +7755,33 @@ int lsmash_set_last_sample_delta( lsmash_root_t *root, uint32_t track_ID, uint32
     return lsmash_update_track_duration( root, track_ID, sample_delta );
 }
 
-void lsmash_destroy_root( lsmash_root_t *root )
+void lsmash_discard_boxes( lsmash_root_t *root )
 {
     if( !root )
         return;
-#ifdef LSMASH_DEMUXER_ENABLED
-    isom_remove_print_funcs( root );
-#endif
     isom_remove_ftyp( root->ftyp );
     isom_remove_moov( root );
     lsmash_remove_list( root->moof_list, isom_remove_moof );
     isom_remove_mdat( root->mdat );
     isom_remove_free( root->free );
     isom_remove_mfra( root->mfra );
+    root->ftyp = NULL;
+    root->moov = NULL;
+    root->moof_list = NULL;
+    root->mdat = NULL;
+    root->free = NULL;
+    root->mfra = NULL;
+}
+
+void lsmash_destroy_root( lsmash_root_t *root )
+{
+    if( !root )
+        return;
+#ifdef LSMASH_DEMUXER_ENABLED
+    isom_remove_print_funcs( root );
+    isom_remove_timelines( root );
+#endif
+    lsmash_discard_boxes( root );
     if( root->bs )
     {
         if( root->bs->stream )
@@ -8108,6 +8122,7 @@ static int isom_group_random_access( isom_trak_entry_t *trak, lsmash_sample_prop
         return 0;
     uint8_t is_rap = prop->random_access_type == ISOM_SAMPLE_RANDOM_ACCESS_TYPE_CLOSED_RAP
                   || prop->random_access_type == ISOM_SAMPLE_RANDOM_ACCESS_TYPE_OPEN_RAP
+                  || prop->random_access_type == ISOM_SAMPLE_RANDOM_ACCESS_TYPE_UNKNOWN_RAP
                   || (prop->random_access_type == ISOM_SAMPLE_RANDOM_ACCESS_TYPE_RECOVERY && prop->recovery.identifier == prop->recovery.complete);
     isom_rap_group_t *group = trak->cache->rap;
     if( !group )
@@ -8334,14 +8349,13 @@ static int isom_add_chunk( isom_trak_entry_t *trak, lsmash_sample_t *sample )
         return 0;
     }
     if( sample->dts < current->first_dts )
-        return -1; /* easy error check. */
-    double chunk_duration = (double)(sample->dts - current->first_dts) / trak->mdia->mdhd->timescale;
-    if( root->max_chunk_duration >= chunk_duration && current->sample_description_index == sample->index )
-        return 0; /* no need to flush current cached chunk, the current sample must be put into that. */
-
+        return -1;  /* easy error check. */
+    if( (root->max_chunk_duration >= ((double)(sample->dts - current->first_dts) / trak->mdia->mdhd->timescale))
+     && (root->max_chunk_size >= current->pool_size + sample->length)
+     && (current->sample_description_index == sample->index) )
+        return 0;   /* No need to flush current cached chunk, the current sample must be put into that. */
     /* NOTE: chunk relative stuff must be pushed into root after a chunk is fully determined with its contents. */
     /* now current cached chunk is fixed, actually add chunk relative properties to root accordingly. */
-
     isom_stbl_t *stbl = trak->mdia->minf->stbl;
     lsmash_entry_t *last_stsc_entry = stbl->stsc->list->tail;
     /* Create a new chunk sequence in this track if needed. */
@@ -8363,31 +8377,25 @@ static int isom_add_chunk( isom_trak_entry_t *trak, lsmash_sample_t *sample )
     return 1;
 }
 
-static int isom_write_sample_data( lsmash_root_t *root, lsmash_sample_t *sample )
+static int isom_write_pooled_samples( lsmash_root_t *root, isom_chunk_t *chunk )
 {
-    if( !root->mdat || !root->bs || !root->bs->stream )
+    if( !root || !root->mdat || !root->bs || !root->bs->stream )
         return -1;
-    lsmash_bs_put_bytes( root->bs, sample->data, sample->length );
-    if( lsmash_bs_write_data( root->bs ) )
-        return -1;
-    root->mdat->size += sample->length;
-    return 0;
-}
-
-static int isom_write_pooled_samples( isom_trak_entry_t *trak, lsmash_entry_list_t *pool )
-{
-    if( !trak->root || !trak->cache || !trak->tkhd )
-        return -1;
-    lsmash_root_t *root = trak->root;
-    for( lsmash_entry_t *entry = pool->head; entry; entry = entry->next )
+    uint64_t chunk_size = 0;
+    for( lsmash_entry_t *entry = chunk->pool->head; entry; entry = entry->next )
     {
         lsmash_sample_t *sample = (lsmash_sample_t *)entry->data;
-        if( !sample || !sample->data
-         || isom_write_sample_data( root, sample ) )
+        if( !sample || !sample->data )
             return -1;
-        root->size += sample->length;
+        lsmash_bs_put_bytes( root->bs, sample->data, sample->length );
+        chunk_size += sample->length;
     }
-    lsmash_remove_entries( pool, lsmash_delete_sample );
+    if( lsmash_bs_write_data( root->bs ) )
+        return -1;
+    root->mdat->size += chunk_size;
+    root->size += chunk_size;
+    lsmash_remove_entries( chunk->pool, lsmash_delete_sample );
+    chunk->pool_size = 0;
     return 0;
 }
 
@@ -8464,7 +8472,7 @@ static int isom_output_cached_chunk( isom_trak_entry_t *trak )
     if( isom_add_stco_entry( stbl, root->size ) )
         return -1;
     /* Output pooled samples in this track. */
-    return isom_write_pooled_samples( trak, chunk->pool );
+    return isom_write_pooled_samples( root, chunk );
 }
 
 static int isom_append_sample_internal( isom_trak_entry_t *trak, lsmash_sample_t *sample )
@@ -8473,15 +8481,15 @@ static int isom_append_sample_internal( isom_trak_entry_t *trak, lsmash_sample_t
     if( flush < 0 )
         return -1;
     /* flush == 1 means pooled samples must be flushed. */
+    lsmash_root_t *root = trak->root;
     isom_chunk_t *current = &trak->cache->chunk;
-    if( flush == 1 && isom_write_pooled_samples( trak, current->pool ) )
+    if( flush == 1 && isom_write_pooled_samples( root, current ) )
         return -1;
     /* Arbitration system between tracks with extremely scattering dts.
      * Here, we check whether asynchronization between the tracks exceeds the tolerance.
      * If a track has too old "first DTS" in its cached chunk than current sample's DTS, then its pooled samples must be flushed.
      * We don't consider presentation of media since any edit can pick an arbitrary portion of media in track.
      * Note: you needn't read this loop until you grasp the basic handling of chunks. */
-    lsmash_root_t *root = trak->root;
     double tolerance = root->max_async_tolerance;
     for( lsmash_entry_t *entry = root->moov->trak_list->head; entry; entry = entry->next )
     {
@@ -8712,7 +8720,8 @@ static int isom_update_fragment_sample_tables( isom_traf_entry_t *traf, lsmash_s
     isom_cache_t *cache = traf->cache;
     /* Create a new track run if the duration exceeds max_chunk_duration.
      * Old one will be appended to the pool of this movie fragment. */
-    int delimit = root->max_chunk_duration < (double)(sample->dts - traf->cache->chunk.first_dts) / lsmash_get_media_timescale( root, tfhd->track_ID );
+    int delimit = (root->max_chunk_duration < ((double)(sample->dts - traf->cache->chunk.first_dts) / lsmash_get_media_timescale( root, tfhd->track_ID )))
+               || (root->max_chunk_size < (cache->chunk.pool_size + sample->length));
     isom_trun_entry_t *trun = NULL;
     if( !traf->trun_list || !traf->trun_list->entry_count || delimit )
     {
@@ -8844,9 +8853,11 @@ static int isom_append_fragment_sample_internal_initial( isom_trak_entry_t *trak
     else if( delimit == 1 )
         isom_append_fragment_track_run( trak->root, &trak->cache->chunk );
     /* Add a new sample into the pool of this track fragment. */
+    if( lsmash_add_entry( trak->cache->chunk.pool, sample ) )
+        return -1;
     trak->cache->chunk.pool_size += sample->length;
     trak->cache->fragment->has_samples = 1;
-    return lsmash_add_entry( trak->cache->chunk.pool, sample );
+    return 0;
 }
 
 static int isom_append_fragment_sample_internal( isom_traf_entry_t *traf, lsmash_sample_t *sample )
@@ -8860,9 +8871,11 @@ static int isom_append_fragment_sample_internal( isom_traf_entry_t *traf, lsmash
     else if( delimit == 1 )
         isom_append_fragment_track_run( traf->root, &traf->cache->chunk );
     /* Add a new sample into the pool of this track fragment. */
+    if( lsmash_add_entry( traf->cache->chunk.pool, sample ) )
+        return -1;
     traf->cache->chunk.pool_size += sample->length;
     traf->cache->fragment->has_samples = 1;
-    return lsmash_add_entry( traf->cache->chunk.pool, sample );
+    return 0;
 }
 
 static int isom_append_fragment_sample( lsmash_root_t *root, uint32_t track_ID, lsmash_sample_t *sample )

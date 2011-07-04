@@ -111,13 +111,16 @@ struct lsmash_entry_tag
 
 typedef struct
 {
-    uint32_t entry_count;
     lsmash_entry_t *head;
     lsmash_entry_t *tail;
+    lsmash_entry_t *last_accessed_entry;
+    uint32_t last_accessed_number;
+    uint32_t entry_count;
 } lsmash_entry_list_t;
 
 typedef void (*lsmash_entry_data_eliminator)(void* data); /* very same as free() of standard c lib; void free(void *); */
 
+void lsmash_init_entry_list( lsmash_entry_list_t *list );
 lsmash_entry_list_t *lsmash_create_entry_list( void );
 int lsmash_add_entry( lsmash_entry_list_t *list, void *data );
 int lsmash_remove_entry_direct( lsmash_entry_list_t *list, lsmash_entry_t *entry, void* eliminator );
