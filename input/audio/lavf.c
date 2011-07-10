@@ -73,7 +73,7 @@ static int init( hnd_t *handle, const char *opt_str )
     if( !strcmp( filename, "-" ) )
         filename = "pipe:";
 
-    if( av_open_input_file( &h->lavf, filename, NULL, 0, NULL ) )
+    if( avformat_open_input( &h->lavf, filename, NULL, NULL ) )
     {
         AF_LOG_ERR( h, "could not open audio file\n" );
         goto fail;
