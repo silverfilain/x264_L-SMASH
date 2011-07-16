@@ -81,7 +81,7 @@ typedef struct
     uint32_t i_sample_entry;
     uint64_t i_video_timescale;    /* For interleaving. */
     lsmash_audio_summary_t *summary;
-    lsmash_codec_type_code codec_type;
+    lsmash_codec_type codec_type;
 #if HAVE_AUDIO
     audio_info_t *info;
     hnd_t encoder;
@@ -96,7 +96,7 @@ typedef struct
 typedef struct
 {
     lsmash_root_t *p_root;
-    lsmash_brand_type_code major_brand;
+    lsmash_brand_type major_brand;
     lsmash_video_summary_t *summary;
     int i_brand_3gpp;
     int b_brand_m4a;
@@ -129,7 +129,7 @@ typedef struct
     int b_no_pasp;
     int b_force_display_size;
     int b_fragments;
-    lsmash_scaling_method_code scaling_method;
+    lsmash_scaling_method scaling_method;
 #if HAVE_ANY_AUDIO
     mp4_audio_hnd_t *audio_hnd;
 #endif
@@ -184,8 +184,8 @@ static void set_channel_layout( mp4_audio_hnd_t *p_audio )
 #define AV_CH_LAYOUT_7POINT1_WIDE      (AV_CH_LAYOUT_5POINT1_BACK|AV_CH_FRONT_LEFT_OF_CENTER|AV_CH_FRONT_RIGHT_OF_CENTER)
 #define AV_CH_LAYOUT_STEREO_DOWNMIX    (AV_CH_STEREO_LEFT|AV_CH_STEREO_RIGHT)
 
-    lsmash_channel_layout_tag_code layout_tag = QT_CHANNEL_LAYOUT_UNKNOWN;
-    lsmash_channel_bitmap_code bitmap = 0;
+    lsmash_channel_layout_tag layout_tag = QT_CHANNEL_LAYOUT_UNKNOWN;
+    lsmash_channel_bitmap bitmap = 0;
 
     /* Lavcodec always returns SMPTE/ITU-R channel order, but its copying doesn't do reordering. */
     if( !p_audio->b_copy )
@@ -195,7 +195,7 @@ static void set_channel_layout( mp4_audio_hnd_t *p_audio )
         /* Avisynth input doesn't return channel order, so we guess it from the number of channels. */
         if( !p_audio->info->chanlayout && p_audio->info->channels <= 8 )
         {
-            static const lsmash_channel_layout_tag_code channel_table[] = {
+            static const lsmash_channel_layout_tag channel_table[] = {
                 QT_CHANNEL_LAYOUT_USE_CHANNEL_BITMAP,
                 QT_CHANNEL_LAYOUT_ITU_1_0,
                 QT_CHANNEL_LAYOUT_ITU_2_0,
@@ -212,7 +212,7 @@ static void set_channel_layout( mp4_audio_hnd_t *p_audio )
     else if( p_audio->codec_type == ISOM_CODEC_TYPE_MP4A_AUDIO )
     {
         /* Channel order is unknown, so we guess it from ffmpeg's channel layout flags. */
-        typedef struct { lsmash_channel_bitmap_code bitmap; lsmash_channel_layout_tag_code layout_tag; } qt_channel_map;
+        typedef struct { lsmash_channel_bitmap bitmap; lsmash_channel_layout_tag layout_tag; } qt_channel_map;
         static const qt_channel_map channel_table[] = {
             { AV_CH_LAYOUT_MONO,           QT_CHANNEL_LAYOUT_MONO },
             { AV_CH_LAYOUT_STEREO,         QT_CHANNEL_LAYOUT_STEREO },
@@ -385,7 +385,7 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
             {
                 typedef struct {
                     const char* name;
-                    lsmash_codec_type_code codec_type;
+                    lsmash_codec_type codec_type;
                     uint8_t sample_format;
                     uint8_t endianness;
                     uint8_t signedness;
@@ -447,7 +447,7 @@ error:
 #endif /* #if HAVE_AUDIO */
 
 #if HAVE_ANY_AUDIO
-static int set_param_audio( mp4_hnd_t* p_mp4, uint64_t i_media_timescale, lsmash_track_mode_code track_mode )
+static int set_param_audio( mp4_hnd_t* p_mp4, uint64_t i_media_timescale, lsmash_track_mode track_mode )
 {
     mp4_audio_hnd_t *p_audio = p_mp4->audio_hnd;
 
@@ -533,7 +533,7 @@ static int set_param_audio( mp4_hnd_t* p_mp4, uint64_t i_media_timescale, lsmash
     lsmash_media_parameters_t media_param;
     lsmash_initialize_media_parameters( &media_param );
     media_param.timescale = p_audio->summary->frequency;
-    media_param.ISO_language = p_mp4->psz_language;
+    media_param.ISO_language = lsmash_pack_iso_language( p_mp4->psz_language );
     media_param.media_handler_name = "X264 Sound Media Handler";
     if( p_mp4->b_brand_qt )
         media_param.data_handler_name = "X264 URL Data Handler";
@@ -845,7 +845,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     FAIL_IF_ERR( i_media_timescale > UINT32_MAX, "mp4", "MP4 media timescale %"PRIu64" exceeds maximum\n", i_media_timescale );
 
     /* Select brands. */
-    lsmash_brand_type_code brands[10] = { 0 };
+    lsmash_brand_type brands[10] = { 0 };
     uint32_t minor_version = 0;
     uint32_t brand_count = 0;
     if( p_mp4->b_brand_qt )
@@ -935,7 +935,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     /* Set video track parameters. */
     lsmash_track_parameters_t track_param;
     lsmash_initialize_track_parameters( &track_param );
-    lsmash_track_mode_code track_mode = ISOM_TRACK_ENABLED | ISOM_TRACK_IN_MOVIE | ISOM_TRACK_IN_PREVIEW;
+    lsmash_track_mode track_mode = ISOM_TRACK_ENABLED | ISOM_TRACK_IN_MOVIE | ISOM_TRACK_IN_PREVIEW;
     if( p_mp4->b_brand_qt )
         track_mode |= QT_TRACK_IN_POSTER;
     track_param.mode = track_mode;
@@ -949,7 +949,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     lsmash_media_parameters_t media_param;
     lsmash_initialize_media_parameters( &media_param );
     media_param.timescale = i_media_timescale;
-    media_param.ISO_language = p_mp4->psz_language;
+    media_param.ISO_language = lsmash_pack_iso_language( p_mp4->psz_language );
     media_param.media_handler_name = "X264 Video Media Handler";
     if( p_mp4->b_brand_qt )
         media_param.data_handler_name = "X264 URL Data Handler";
