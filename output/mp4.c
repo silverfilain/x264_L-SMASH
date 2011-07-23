@@ -644,7 +644,7 @@ static int close_file_audio( mp4_hnd_t* p_mp4, double actual_duration )
                         "failed to set timeline map for audio.\n" );
     }
     else if( !p_mp4->b_stdout )
-        MP4_LOG_IF_ERR( lsmash_modify_timeline_map( p_mp4->p_root, p_audio->i_track, 1, actual_duration, 0, ISOM_EDIT_MODE_NORMAL ),
+        MP4_LOG_IF_ERR( lsmash_modify_explicit_timeline_map( p_mp4->p_root, p_audio->i_track, 1, actual_duration, 0, ISOM_EDIT_MODE_NORMAL ),
                         "failed to update timeline map for audio.\n" );
     return 0;
 }
@@ -712,7 +712,7 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
                                 "failed to set timeline map for video.\n" );
             }
             else if( !p_mp4->b_stdout )
-                MP4_LOG_IF_ERR( lsmash_modify_timeline_map( p_mp4->p_root, p_mp4->i_track, 1, actual_duration, p_mp4->i_first_cts, ISOM_EDIT_MODE_NORMAL ),
+                MP4_LOG_IF_ERR( lsmash_modify_explicit_timeline_map( p_mp4->p_root, p_mp4->i_track, 1, actual_duration, p_mp4->i_first_cts, ISOM_EDIT_MODE_NORMAL ),
                                 "failed to update timeline map for video.\n" );
         }
 
