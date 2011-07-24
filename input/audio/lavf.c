@@ -114,7 +114,7 @@ static int init( hnd_t *handle, const char *opt_str )
 
     h->ctx = h->lavf->streams[tid]->codec;
     h->codec = avcodec_find_decoder( h->ctx->codec_id );
-    if( !h->codec || avcodec_open( h->ctx, h->codec ) < 0 )
+    if( !h->codec || avcodec_open2( h->ctx, h->codec, NULL ) < 0 )
         goto codecnotfound;
 
     h->samplefmt  = h->ctx->sample_fmt;

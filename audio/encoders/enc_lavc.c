@@ -121,7 +121,7 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
         else if( h->smpfmt < codec->sample_fmts[j] ) // or the best possible sample format (is this really The Right Thing?)
             h->smpfmt = codec->sample_fmts[j];
     }
-    h->ctx                  = avcodec_alloc_context();
+    h->ctx                  = avcodec_alloc_context3( NULL );
     h->ctx->sample_fmt      = h->smpfmt;
     h->ctx->sample_rate     = h->info.samplerate;
     h->ctx->channels        = h->info.channels;
@@ -152,7 +152,7 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     else
         h->ctx->bit_rate = lrintf( brval * 1000.0f );
 
-    RETURN_IF_ERR( avcodec_open( h->ctx, codec ), "lavc", NULL, "could not open the %s encoder\n", codec->name );
+    RETURN_IF_ERR( avcodec_open2( h->ctx, codec, NULL ), "lavc", NULL, "could not open the %s encoder\n", codec->name );
 
     if( ISCODEC( ac3 ) )
     {
