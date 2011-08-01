@@ -79,7 +79,7 @@ static int init( hnd_t *handle, const char *opt_str )
         goto fail;
     }
 
-    if( av_find_stream_info( h->lavf ) < 0 )
+    if( avformat_find_stream_info( h->lavf, NULL ) < 0 )
     {
         AF_LOG_ERR( h, "could not find stream info\n" );
         goto fail;
