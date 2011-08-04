@@ -1,3 +1,13 @@
+/*
+   This file contains the code from the following software:
+   <http://tmkk.pv.land.to/qtaacenc/>.
+
+   Copyright (c) 2010-2011 tmkk <tmkk@smoug.net>
+   
+   For the complete copyright notice and disclaimer
+   by the original author, see COPYING.qtaacenc.
+*/
+
 /* escape conflicting float_t and redefining NAN, defined in fp.h of QuickTime SDK. */
 #define float_t escape_float_t
 #define NAN escape_NAN
