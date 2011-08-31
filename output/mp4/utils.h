@@ -86,6 +86,7 @@ typedef struct {
 
 void lsmash_bits_init( lsmash_bits_t* bits, lsmash_bs_t *bs );
 lsmash_bits_t* lsmash_bits_create( lsmash_bs_t *bs );
+void lsmash_bits_empty( lsmash_bits_t *bits );
 void lsmash_bits_put_align( lsmash_bits_t *bits );
 void lsmash_bits_get_align( lsmash_bits_t *bits );
 void lsmash_bits_cleanup( lsmash_bits_t *bits );
@@ -138,5 +139,38 @@ double lsmash_int2float64( uint64_t value );
 
 /*---- allocator ----*/
 void *lsmash_memdup( void *src, size_t size );
+
+typedef enum
+{
+    LSMASH_LOG_ERROR,
+    LSMASH_LOG_WARNING,
+    LSMASH_LOG_INFO,
+} lsmash_log_level;
+
+/*---- others ----*/
+void lsmash_log( lsmash_log_level level, const char* message, ... );
+int lsmash_compare_dts( const lsmash_media_ts_t *a, const lsmash_media_ts_t *b );
+int lsmash_compare_cts( const lsmash_media_ts_t *a, const lsmash_media_ts_t *b );
+
+static inline uint64_t lsmash_get_gcd( uint64_t a, uint64_t b )
+{
+    if( !b )
+        return a;
+    while( 1 )
+    {
+        uint64_t c = a % b;
+        if( !c )
+            return b;
+        a = b;
+        b = c;
+    }
+}
+
+static inline uint64_t lsmash_get_lcm( uint64_t a, uint64_t b )
+{
+    if( !a )
+        return 0;
+    return (a / lsmash_get_gcd( a, b )) * b;
+}
 
 #endif

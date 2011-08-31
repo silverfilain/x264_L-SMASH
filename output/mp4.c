@@ -482,7 +482,7 @@ static int set_param_audio( mp4_hnd_t* p_mp4, uint64_t i_media_timescale, lsmash
             else
                 p_audio->summary->aot = MP4A_AUDIO_OBJECT_TYPE_AAC_LC;
             p_audio->summary->sbr_mode      = p_audio->has_sbr ? MP4A_AAC_SBR_BACKWARD_COMPATIBLE : MP4A_AAC_SBR_NOT_SPECIFIED;
-            MP4_FAIL_IF_ERR( lsmash_summary_add_exdata( p_audio->summary, p_audio->info->extradata, p_audio->info->extradata_size ),
+            MP4_FAIL_IF_ERR( lsmash_summary_add_exdata( (lsmash_summary_t *)p_audio->summary, p_audio->info->extradata, p_audio->info->extradata_size ),
                              "failed to create mp4a specific info.\n" );
             break;
         case ISOM_CODEC_TYPE_AC_3_AUDIO :
@@ -498,7 +498,7 @@ static int set_param_audio( mp4_hnd_t* p_mp4, uint64_t i_media_timescale, lsmash
             break;
         default :
             p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_NONE;
-            MP4_FAIL_IF_ERR( lsmash_summary_add_exdata( p_audio->summary, p_audio->info->extradata, p_audio->info->extradata_size ),
+            MP4_FAIL_IF_ERR( lsmash_summary_add_exdata( (lsmash_summary_t *)p_audio->summary, p_audio->info->extradata, p_audio->info->extradata_size ),
                              "failed to create unknown specific info.\n" );
             break;
     }

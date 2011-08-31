@@ -975,7 +975,15 @@ typedef struct
 {
     LSMASH_BASE_SUMMARY
     // mp4sys_visualProfileLevelIndication pli;    /* I wonder we should have this or not. */
+    lsmash_codec_type sample_type;              /* Video codec type. */
     // lsmash_mp4v_VideoObjectType vot;            /* Detailed codec type. If not mp4v, just ignored. */
+    uint32_t timescale;                         /* media timescale
+                                                 * User can't set this parameter manually. */
+    uint32_t timebase;                          /* increment unit of timestamp
+                                                 * User can't set this parameter manually. */
+    uint8_t vfr;                                /* whether a stream is assumed as variable frame rate
+                                                 * User can't set this parameter manually. */
+    uint8_t full_range;
     uint32_t width;                             /* pixel counts of width samples have */
     uint32_t height;                            /* pixel counts of height samples have */
     uint32_t crop_top;
@@ -1020,11 +1028,13 @@ typedef struct
                                      * Zero value don't override established track_ID. */
     uint64_t duration;              /* the duration of this track expressed in the movie timescale units
                                      * If there is any edit, your setting is ignored. */
-    int16_t  video_layer;           /* the front-to-back ordering of video tracks; tracks with lower numbers are closer to the viewer. */
     int16_t  alternate_group;       /* an integer that specifies a group or collection of tracks
                                      * If this field is not 0, it should be the same for tracks that contain alternate data for one another
                                      * and different for tracks belonging to different such groups.
-                                     * Only one track within an alternate group should be played or streamed at any one time. */
+                                     * Only one track within an alternate group should be played or streamed at any one time.
+                                     * Note: alternate_group is ignored when a file is read as an MPEG-4. */
+    /* The following parameters are ignored when a file is read as an MPEG-4 or 3GPP file format. */
+    int16_t  video_layer;           /* the front-to-back ordering of video tracks; tracks with lower numbers are closer to the viewer. */
     int16_t  audio_volume;          /* fixed point 8.8 number. 0x0100 is full volume. */
     int32_t  matrix[9];             /* transformation matrix for the video
                                      * Each value represents, in order, a, b, u, c, d, v, x, y and w.
@@ -1037,8 +1047,10 @@ typedef struct
                                      *             | x y w |
                                      * p' = (a * p + c * q + x) / z; q' = (b * p + d * q + y) / z; z = u * p + v * q + w
                                      * Note: transformation matrix is applied after scaling to display size up to display_width and display_height. */
-    uint32_t display_width;         /* visual presentation region size of horizontal direction as fixed point 16.16 number.  */
+    /* visual presentation region size */
+    uint32_t display_width;         /* visual presentation region size of horizontal direction as fixed point 16.16 number. */
     uint32_t display_height;        /* visual presentation region size of vertical direction as fixed point 16.16 number. */
+    /* */
     uint8_t  aperture_modes;        /* track aperture modes present
                                      * This feature is only available under QuickTime file format.
                                      * Automatically disabled if multiple sample description is present or scaling method is specified. */
@@ -1058,13 +1070,14 @@ typedef struct
     uint32_t timescale;                     /* movie timescale: timescale for the entire presentation */
     uint64_t duration;                      /* the duration, expressed in movie timescale, of the longest track
                                              * You can't set this parameter manually. */
+    uint32_t number_of_tracks;              /* the number of tracks in the movie
+                                             * You can't set this parameter manually. */
+    /* The following parameters are recognized only when a file is read as an Apple MPEG-4 or QuickTime file fromat. */
     int32_t  playback_rate;                 /* fixed point 16.16 number. 0x00010000 is normal forward playback and default value. */
     int32_t  playback_volume;               /* fixed point 8.8 number. 0x0100 is full volume and default value. */
     int32_t  preview_time;                  /* the time value in the movie at which the preview begins */
     int32_t  preview_duration;              /* the duration of the movie preview in movie timescale units */
     int32_t  poster_time;                   /* the time value of the time of the movie poster */
-    uint32_t number_of_tracks;              /* the number of tracks in the movie
-                                             * You can't set this parameter manually. */
     /* Any user shouldn't use the following parameter. */
     PRIVATE lsmash_brand_type brands_shadow[50];
 } lsmash_movie_parameters_t;
@@ -1162,12 +1175,15 @@ int lsmash_get_media_timeline_shift( lsmash_root_t *root, uint32_t track_ID, int
 
 /* to facilitate to make exdata (typically DecoderSpecificInfo or AudioSpecificConfig). */
 int lsmash_setup_AudioSpecificConfig( lsmash_audio_summary_t* summary );
-int lsmash_summary_add_exdata( lsmash_audio_summary_t* summary, void* exdata, uint32_t exdata_length );
+int lsmash_summary_add_exdata( lsmash_summary_t *summary, void* exdata, uint32_t exdata_length );
 
 /* FIXME: these functions may change in the future.
    I wonder these functions should be for generic (not limited to audio) summary. */
 lsmash_audio_summary_t* lsmash_create_audio_summary();
-void lsmash_cleanup_audio_summary( lsmash_audio_summary_t* summary );
+void lsmash_cleanup_audio_summary( lsmash_audio_summary_t *summary );
+
+lsmash_video_summary_t *lsmash_create_video_summary();
+void lsmash_cleanup_video_summary( lsmash_video_summary_t *summary );
 
 #undef PRIVATE
 

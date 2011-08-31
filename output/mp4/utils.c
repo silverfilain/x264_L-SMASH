@@ -24,6 +24,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 
 #include "utils.h"
 
@@ -322,6 +323,15 @@ lsmash_bits_t* lsmash_bits_create( lsmash_bs_t *bs )
         return NULL;
     lsmash_bits_init( bits, bs );
     return bits;
+}
+
+void lsmash_bits_empty( lsmash_bits_t *bits )
+{
+    debug_if( !bits )
+        return;
+    lsmash_bs_empty( bits->bs );
+    bits->store = 0;
+    bits->cache = 0;
 }
 
 #define BITS_IN_BYTE 8
@@ -659,4 +669,46 @@ void *lsmash_memdup( void *src, size_t size )
         return NULL;
     memcpy( dst, src, size );
     return dst;
+}
+/*---- ----*/
+
+/*---- others ----*/
+void lsmash_log( lsmash_log_level level, const char* message, ... )
+{
+    char *prefix;
+    va_list args;
+
+    va_start( args, message );
+    switch( level )
+    {
+        case LSMASH_LOG_ERROR:
+            prefix = "Error";
+            break;
+        case LSMASH_LOG_WARNING:
+            prefix = "Warning";
+            break;
+        case LSMASH_LOG_INFO:
+            prefix = "Info";
+            break;
+        default:
+            prefix = "Unknown";
+            break;
+    }
+
+    fprintf( stderr, "[%s]: ", prefix );
+    vfprintf( stderr, message, args );
+    va_end( args );
+}
+
+/* for qsort function */
+int lsmash_compare_dts( const lsmash_media_ts_t *a, const lsmash_media_ts_t *b )
+{
+    int64_t diff = (int64_t)(a->dts - b->dts);
+    return diff > 0 ? 1 : (diff == 0 ? 0 : -1);
+}
+
+int lsmash_compare_cts( const lsmash_media_ts_t *a, const lsmash_media_ts_t *b )
+{
+    int64_t diff = (int64_t)(a->cts - b->cts);
+    return diff > 0 ? 1 : (diff == 0 ? 0 : -1);
 }

@@ -162,21 +162,26 @@ static void lsmash_close( hnd_t handle )
 static audio_packet_t *get_next_au( hnd_t handle )
 {
     lsmash_source_t *h = handle;
-    int ret;
 
     audio_packet_t *out = calloc( 1, sizeof( audio_packet_t ) );
+    if( !out )
+        return NULL;
     out->info        = h->info;
     out->channels    = h->info.channels;
     out->samplecount = h->info.framelen;
-    out->size        = h->summary->max_au_length;
-    out->data        = malloc( h->summary->max_au_length );
+    out->dts         = h->last_dts;
 
-    ret = mp4sys_importer_get_access_unit( h->importer, 1, out->data, (uint32_t *)&out->size );
+    lsmash_sample_t sample = { 0 };
+    lsmash_sample_alloc( &sample, h->summary->max_au_length );
+
+    int ret = mp4sys_importer_get_access_unit( h->importer, 1, &sample );
 
     if( ret || !out->size )
        goto error;
 
-    out->dts     = h->last_dts;
+    out->size = sample.length;
+    out->data = sample.data;
+
     h->last_dts += h->info.framelen;
     h->frame_count++;
 

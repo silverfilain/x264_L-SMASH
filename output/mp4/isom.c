@@ -78,6 +78,7 @@ int isom_is_fullbox( void *box )
         ISOM_BOX_TYPE_SBGP,
         ISOM_BOX_TYPE_CHPL,
         ISOM_BOX_TYPE_META,
+        QT_BOX_TYPE_KEYS,
         ISOM_BOX_TYPE_MEAN,
         ISOM_BOX_TYPE_NAME,
         ISOM_BOX_TYPE_MEHD,
@@ -621,6 +622,22 @@ static int isom_add_visual_extensions( isom_visual_entry_t *visual, lsmash_video
     for( int i = 0; i < sizeof(avc_type)/sizeof(avc_type[0]); i++ )
         if( visual->type == avc_type[i] )
         {
+            if( summary->exdata_length >= 15 )
+            {
+                /* Chech if avcC is constructed as exdata. */
+                uint8_t *exdata = (uint8_t *)summary->exdata;
+                uint32_t length = (exdata[0] << 24) | (exdata[1] << 16) | (exdata[2] << 8) | exdata[3];
+                if( length == summary->exdata_length
+                 && LSMASH_4CC( exdata[4], exdata[5], exdata[6], exdata[7] ) == ISOM_BOX_TYPE_AVCC )
+                {
+                    visual->exdata_length = summary->exdata_length;
+                    visual->exdata = malloc( visual->exdata_length );
+                    if( !visual->exdata )
+                        return -1;
+                    memcpy( visual->exdata, summary->exdata, visual->exdata_length );
+                    break;
+                }
+            }
             if( isom_add_avcC( visual ) )
                 return -1;
             break;
@@ -1695,8 +1712,18 @@ static int isom_scan_trak_profileLevelIndication( isom_trak_entry_t* trak, mp4a_
                     *visual_pli = MP4SYS_VISUAL_PLI_H264_AVC;
                 break;
             case ISOM_CODEC_TYPE_MP4A_AUDIO :
-                *audio_pli = mp4a_max_audioProfileLevelIndication( *audio_pli, mp4a_get_audioProfileLevelIndication( &((isom_audio_entry_t*)sample_entry)->summary ) );
+            {
+                isom_audio_entry_t *audio = (isom_audio_entry_t *)sample_entry;
+#ifdef LSMASH_DEMUXER_ENABLED
+                if( !audio->esds || !audio->esds->ES )
+                    return -1;
+                if( audio->summary.sample_type != ISOM_CODEC_TYPE_MP4A_AUDIO )
+                    /* This is needed when copying descriptions. */
+                    mp4sys_setup_summary_from_DecoderSpecificInfo( &audio->summary, audio->esds->ES );
+#endif
+                *audio_pli = mp4a_max_audioProfileLevelIndication( *audio_pli, mp4a_get_audioProfileLevelIndication( &audio->summary ) );
                 break;
+            }
 #if 0
             case ISOM_CODEC_TYPE_DRAC_VIDEO :
             case ISOM_CODEC_TYPE_ENCV_VIDEO :
@@ -3139,6 +3166,23 @@ static void isom_remove_udta( isom_udta_t *udta )
     free( udta );
 }
 
+static void isom_remove_keys_entry( isom_keys_entry_t *data )
+{
+    if( !data )
+        return;
+    if( data->key_value )
+        free( data->key_value );
+    free( data );
+}
+
+static void isom_remove_keys( isom_keys_t *keys )
+{
+    if( !keys )
+        return;
+    lsmash_remove_list( keys->list, isom_remove_keys_entry );
+    isom_remove_box( keys, isom_meta_t );
+}
+
 static void isom_remove_mean( isom_mean_t *mean )
 {
     if( !mean )
@@ -3190,6 +3234,7 @@ static void isom_remove_meta( isom_meta_t *meta )
         return;
     isom_remove_hdlr( meta->hdlr );
     isom_remove_dinf( meta->dinf );
+    isom_remove_keys( meta->keys );
     isom_remove_ilst( meta->ilst );
     if( meta->parent )
     {
@@ -3887,6 +3932,7 @@ static int isom_write_visual_entry( lsmash_bs_t *bs, lsmash_entry_t *entry )
     lsmash_bs_put_bytes( bs, data->compressorname, 32 );
     lsmash_bs_put_be16( bs, data->depth );
     lsmash_bs_put_be16( bs, data->color_table_ID );
+    lsmash_bs_put_bytes( bs, data->exdata, data->exdata_length );
     if( lsmash_bs_write_data( bs ) )
         return -1;
     return isom_write_visual_extensions( bs, data );
@@ -4983,6 +5029,7 @@ int isom_check_compatibility( lsmash_root_t *root )
             case ISOM_BRAND_TYPE_MP42 :
                 root->mp4_version2 = 1;
                 break;
+            case ISOM_BRAND_TYPE_AVC1 :
             case ISOM_BRAND_TYPE_ISOM :
                 root->max_isom_version = LSMASH_MAX( root->max_isom_version, 1 );
                 break;
@@ -5948,7 +5995,8 @@ static uint64_t isom_update_visual_entry_size( isom_visual_entry_t *visual )
         + isom_update_stsl_size( visual->stsl )
         + isom_update_esds_size( visual->esds )
         + isom_update_avcC_size( visual->avcC )
-        + isom_update_btrt_size( visual->btrt );
+        + isom_update_btrt_size( visual->btrt )
+        + (uint64_t)visual->exdata_length;
     CHECK_LARGESIZE( visual->size );
     return visual->size;
 }
@@ -6729,24 +6777,39 @@ int lsmash_set_track_parameters( lsmash_root_t *root, uint32_t track_ID, lsmash_
     /* Set up Track Header. */
     uint32_t media_type = trak->mdia->hdlr->componentSubtype;
     isom_tkhd_t *tkhd = trak->tkhd;
-    tkhd->flags           = param->mode;
-    tkhd->track_ID        = param->track_ID ? param->track_ID : tkhd->track_ID;
-    tkhd->duration        = !trak->edts || !trak->edts->elst ? param->duration : tkhd->duration;
+    tkhd->flags    = param->mode;
+    tkhd->track_ID = param->track_ID ? param->track_ID : tkhd->track_ID;
+    tkhd->duration = !trak->edts || !trak->edts->elst ? param->duration : tkhd->duration;
+    /* Template fields
+     * According to 14496-14, these value are all set to defaut values in 14496-12.
+     * And when a file is read as an MPEG-4 file, these values shall be ignored.
+     * If a file complies with other specifications, then those fields may have non-default values
+     * as required by those other specifications. */
     tkhd->alternate_group = root->qt_compatible || root->itunes_audio || root->max_3gpp_version >= 4 ? param->alternate_group : 0;
     if( root->qt_compatible || root->itunes_audio )
     {
-        tkhd->layer       = media_type == ISOM_MEDIA_HANDLER_TYPE_VIDEO_TRACK ? param->video_layer    : 0;
-        tkhd->volume      = media_type == ISOM_MEDIA_HANDLER_TYPE_AUDIO_TRACK ? param->audio_volume   : 0;
+        tkhd->layer  = media_type == ISOM_MEDIA_HANDLER_TYPE_VIDEO_TRACK ? param->video_layer  : 0;
+        tkhd->volume = media_type == ISOM_MEDIA_HANDLER_TYPE_AUDIO_TRACK ? param->audio_volume : 0;
+        if( media_type == ISOM_MEDIA_HANDLER_TYPE_VIDEO_TRACK )
+            for( int i = 0; i < 9; i++ )
+                tkhd->matrix[i] = param->matrix[i];
+        else
+            for( int i = 0; i < 9; i++ )
+                tkhd->matrix[i] = 0;
     }
     else
     {
-        tkhd->layer       = 0;
-        tkhd->volume      = media_type == ISOM_MEDIA_HANDLER_TYPE_AUDIO_TRACK ? 0x0100                : 0;
+        tkhd->layer     = 0;
+        tkhd->volume    = media_type == ISOM_MEDIA_HANDLER_TYPE_AUDIO_TRACK ? 0x0100     : 0;
+        tkhd->matrix[0] = media_type == ISOM_MEDIA_HANDLER_TYPE_VIDEO_TRACK ? 0x00010000 : 0;
+        tkhd->matrix[1] = tkhd->matrix[2] = tkhd->matrix[3] = 0;
+        tkhd->matrix[4] = media_type == ISOM_MEDIA_HANDLER_TYPE_VIDEO_TRACK ? 0x00010000 : 0;
+        tkhd->matrix[5] = tkhd->matrix[6] = tkhd->matrix[7] = 0;
+        tkhd->matrix[8] = media_type == ISOM_MEDIA_HANDLER_TYPE_VIDEO_TRACK ? 0x40000000 : 0;
     }
-    for( int i = 0; i < 9; i++ )
-        tkhd->matrix[i]   = media_type == ISOM_MEDIA_HANDLER_TYPE_VIDEO_TRACK ? param->matrix[i]      : 0;
-    tkhd->width           = media_type == ISOM_MEDIA_HANDLER_TYPE_VIDEO_TRACK ? param->display_width  : 0;
-    tkhd->height          = media_type == ISOM_MEDIA_HANDLER_TYPE_VIDEO_TRACK ? param->display_height : 0;
+    /* visual presentation size */
+    tkhd->width  = media_type == ISOM_MEDIA_HANDLER_TYPE_VIDEO_TRACK ? param->display_width  : 0;
+    tkhd->height = media_type == ISOM_MEDIA_HANDLER_TYPE_VIDEO_TRACK ? param->display_height : 0;
     /* Update next_track_ID if needed. */
     if( root->moov->mvhd->next_track_ID <= tkhd->track_ID )
         root->moov->mvhd->next_track_ID = tkhd->track_ID + 1;

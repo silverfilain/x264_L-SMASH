@@ -56,6 +56,7 @@ typedef struct isom_box_tag isom_box_t;
 
 #define LSMASH_UNKNOWN_BOX    0x01
 #define LSMASH_ABSENT_IN_ROOT 0x02
+#define LSMASH_QTFF_BASE      0x04
 
 struct isom_box_tag
 {
@@ -100,7 +101,12 @@ typedef struct
                                      * Track IDs are never re-used and cannot be zero. */
     uint32_t reserved1;
     uint64_t duration;              /* the duration of this track expressed in the movie timescale units */
-    /* The following fields are treated as reserved in MP4 version 1. */
+    /* The following fields are treated as
+     * ISOM: template fields.
+     * MP41: reserved fields.
+     * MP42: ignored fileds since compositions are done using BIFS system.
+     * 3GPP: ignored fields except for alternate_group.
+     * QTFF: usable fields. */
     uint32_t reserved2[2];
     int16_t  layer;                 /* the front-to-back ordering of video tracks; tracks with lower numbers are closer to the viewer. */
     int16_t  alternate_group;       /* an integer that specifies a group or collection of tracks
@@ -519,6 +525,9 @@ typedef struct
     /* AVC specific extensions */
     isom_avcC_t *avcC;          /* AVCDecoderConfigurationRecord */
     isom_btrt_t *btrt;          /* MPEG-4 Bit Rate Box @ optional */
+
+        uint32_t exdata_length;
+        void *exdata;
 } isom_visual_entry_t;
 
 /* Format Box
@@ -1007,7 +1016,12 @@ typedef struct
     uint64_t modification_time;     /* the most recent time the presentation was modified (in seconds since midnight, Jan. 1, 1904, in UTC time) */
     uint32_t timescale;             /* movie timescale: timescale for the entire presentation */
     uint64_t duration;              /* the duration, expressed in movie timescale, of the longest track */
-    /* The following fields are treated as reserved in MP4 version 1. */
+    /* The following fields are treated as
+     * ISOM: template fields.
+     * MP41: reserved fields.
+     * MP42: ignored fileds since compositions are done using BIFS system.
+     * 3GPP: ignored fields.
+     * QTFF: usable fields. */
     int32_t  rate;                  /* fixed point 16.16 number. 0x00010000 is normal forward playback. */
     int16_t  volume;                /* fixed point 8.8 number. 0x0100 is full volume. */
     int16_t  reserved;
@@ -1079,6 +1093,23 @@ typedef struct
     uint64_t start_time;
 } isom_chapter_entry_t;
 
+/* Metadata Item Keys Box */
+typedef struct
+{
+    ISOM_FULLBOX_COMMON;
+    lsmash_entry_list_t *list;
+} isom_keys_t;
+
+typedef struct
+{
+    uint32_t key_size;          /* the size of the entire structure containing a key definition
+                                 * key_size = sizeof(key_size) + sizeof(key_namespace) + sizeof(key_value) */
+    uint32_t key_namespace;     /* a naming scheme used for metadata keys
+                                 * Location metadata keys, for example, use the 'mdta' key namespace. */
+    uint8_t *key_value;         /* the actual name of the metadata key
+                                 * Keys with the 'mdta' namespace use a reverse DNS naming convention. */
+} isom_keys_entry_t;
+
 /* Meaning Box */
 typedef struct
 {
@@ -1132,10 +1163,11 @@ typedef struct
 /* Meta Box */
 typedef struct
 {
-    ISOM_FULLBOX_COMMON;
+    ISOM_FULLBOX_COMMON;    /* ISOM: FullBox / QTFF: BaseBox */
     isom_hdlr_t *hdlr;      /* Metadata Handler Reference Box */
-    isom_dinf_t *dinf;      /* Data Information Box */
-    isom_ilst_t *ilst;      /* Metadata Item List Box */
+    isom_dinf_t *dinf;      /* ISOM: Data Information Box / QTFF: null */
+    isom_keys_t *keys;      /* ISOM: null / QTFF: Metadata Item Keys Box */
+    isom_ilst_t *ilst;      /* Metadata Item List Box only defined in Apple MPEG-4 and QTFF */
 } isom_meta_t;
 
 /* User Data Box
@@ -1677,9 +1709,11 @@ enum qt_box_type
     QT_BOX_TYPE_GMHD    = LSMASH_4CC( 'g', 'm', 'h', 'd' ),
     QT_BOX_TYPE_GMIN    = LSMASH_4CC( 'g', 'm', 'i', 'n' ),
     QT_BOX_TYPE_IMAP    = LSMASH_4CC( 'i', 'm', 'a', 'p' ),
+    QT_BOX_TYPE_KEYS    = LSMASH_4CC( 'k', 'e', 'y', 's' ),
     QT_BOX_TYPE_KMAT    = LSMASH_4CC( 'k', 'm', 'a', 't' ),
     QT_BOX_TYPE_LOAD    = LSMASH_4CC( 'l', 'o', 'a', 'd' ),
     QT_BOX_TYPE_MATT    = LSMASH_4CC( 'm', 'a', 't', 't' ),
+    QT_BOX_TYPE_META    = LSMASH_4CC( 'm', 'e', 't', 'a' ),
     QT_BOX_TYPE_MP4A    = LSMASH_4CC( 'm', 'p', '4', 'a' ),
     QT_BOX_TYPE_PNOT    = LSMASH_4CC( 'p', 'n', 'o', 't' ),
     QT_BOX_TYPE_PROF    = LSMASH_4CC( 'p', 'r', 'o', 'f' ),
