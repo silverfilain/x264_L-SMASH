@@ -176,20 +176,19 @@ static audio_packet_t *get_next_au( hnd_t handle )
 
     int ret = mp4sys_importer_get_access_unit( h->importer, 1, &sample );
 
-    if( ret || !out->size )
-       goto error;
-
     out->size = sample.length;
     out->data = sample.data;
+
+    if( ret || !out->size )
+    {
+        x264_af_free_packet( out );
+        return NULL;
+    }
 
     h->last_dts += h->info.framelen;
     h->frame_count++;
 
     return out;
-
-error:
-    x264_af_free_packet( out );
-    return NULL;
 }
 
 static void skip_samples( hnd_t handle, uint64_t samplecount )
