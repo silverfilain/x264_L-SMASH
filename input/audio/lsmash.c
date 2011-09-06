@@ -48,7 +48,7 @@ static int lsmash_init( hnd_t *handle, const char *opt_str )
     if( !h->importer )
         goto error;
 
-    h->summary = mp4sys_duplicate_audio_summary( h->importer, 1 );
+    h->summary = (lsmash_audio_summary_t *)mp4sys_duplicate_summary( h->importer, 1 );
 
     if( h->summary->stream_type != MP4SYS_STREAM_TYPE_AudioStream )
     {
@@ -124,7 +124,7 @@ error:
 fail:
     if( h->summary )
     {
-        lsmash_cleanup_audio_summary( h->summary );
+        lsmash_cleanup_summary( (lsmash_summary_t *)h->summary );
         h->summary = NULL;
     }
     if( h->importer )
@@ -152,7 +152,7 @@ static void lsmash_close( hnd_t handle )
     lsmash_source_t *h = handle;
 
     if( h->summary )
-        lsmash_cleanup_audio_summary( h->summary );
+        lsmash_cleanup_summary( (lsmash_summary_t *)h->summary );
     if( h->importer )
         mp4sys_importer_close( h->importer );
     if( h )

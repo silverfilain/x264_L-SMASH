@@ -249,7 +249,7 @@ static void remove_audio_hnd( mp4_audio_hnd_t *p_audio )
     if( p_audio->summary )
     {
         /* WARNING: You should not rely on this if you created summary in your own code. */
-        lsmash_cleanup_audio_summary( p_audio->summary );
+        lsmash_cleanup_summary( (lsmash_summary_t *)p_audio->summary );
         p_audio->summary = NULL;
     }
 #if HAVE_AUDIO
@@ -330,7 +330,7 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
     audio_info_t *info = p_audio->info = x264_audio_encoder_info( henc );
     p_audio->b_copy = copy;
 
-    p_audio->summary = lsmash_create_audio_summary();
+    p_audio->summary = (lsmash_audio_summary_t *)lsmash_create_summary( MP4SYS_STREAM_TYPE_AudioStream );
     if( !p_audio->summary )
     {
         MP4_LOG_ERROR( "failed to allocate memory for summary information of audio.\n" );
@@ -458,7 +458,6 @@ static int set_param_audio( mp4_hnd_t* p_mp4, uint64_t i_media_timescale, lsmash
 #if HAVE_AUDIO
     if( p_mp4->major_brand == ISOM_BRAND_TYPE_QT )
         set_channel_layout( p_audio );
-    p_audio->summary->stream_type      = MP4SYS_STREAM_TYPE_AudioStream;
     p_audio->summary->max_au_length    = ( 1 << 13 ) - 1;
     p_audio->summary->frequency        = p_audio->info->samplerate;
     p_audio->summary->channels         = p_audio->info->channels;
@@ -516,7 +515,7 @@ static int set_param_audio( mp4_hnd_t* p_mp4, uint64_t i_media_timescale, lsmash
      * Because malloc() and free() have to be used as pair from EXACTLY SAME standard C library.
      * Otherwise you may cause bugs which you hardly call to mind.
      */
-    p_audio->summary = mp4sys_duplicate_audio_summary( p_audio->p_importer, 1 );
+    p_audio->summary = (lsmash_audio_summary_t *)mp4sys_duplicate_summary( p_audio->p_importer, 1 );
     MP4_FAIL_IF_ERR( !p_audio->summary, "failed to duplicate summary information.\n" );
     p_audio->codec_type = p_audio->summary->sample_type;
 #endif /* #if HAVE_AUDIO #else */
@@ -599,7 +598,7 @@ static int write_audio_frames( mp4_hnd_t *p_mp4, double video_dts, int finish )
         lsmash_sample_t *p_sample = lsmash_create_sample( p_audio->summary->max_au_length );
         MP4_FAIL_IF_ERR( !p_sample,
                          "failed to create a audio sample data.\n" );
-        MP4_FAIL_IF_ERR( mp4sys_importer_get_access_unit( p_audio->p_importer, 1, p_sample->data, &p_sample->length ),
+        MP4_FAIL_IF_ERR( mp4sys_importer_get_access_unit( p_audio->p_importer, 1, p_sample ),
                          "failed to retrieve frame data from importer.\n" );
         if( p_sample->length == 0 )
             break; /* end of stream */
