@@ -202,6 +202,8 @@ static int set_audio_track( mkv_hnd_t *p_mkv, x264_param_t *p_param )
         atrack->codec_id = MK_AUDIO_TAG_AC3;
     else if( !strcmp( info->codec_name, "eac3" ) )
         atrack->codec_id = MK_AUDIO_TAG_EAC3;
+    else if( !strcmp( info->codec_name, "dca" ) )
+        atrack->codec_id = MK_AUDIO_TAG_DTS;
     else if( !strcmp( info->codec_name, "vorbis" ) )
         atrack->codec_id = MK_AUDIO_TAG_VORBIS;
     else if( !strcmp( info->codec_name, "mp3" ) )
