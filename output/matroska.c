@@ -67,7 +67,7 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
     {
         char audio_params[MAX_ARGS];
         const char *used_enc;
-        const audio_encoder_t *encoder = x264_select_audio_encoder( audio_enc, (char*[]){ "ac3", "aac", "vorbis", "mp3", "raw", NULL }, &used_enc );
+        const audio_encoder_t *encoder = x264_select_audio_encoder( audio_enc, (char*[]){ "aac", "ac3", "eac3", "vorbis", "mp3", "raw", NULL }, &used_enc );
         FAIL_IF_ERR( !encoder, "mkv", "unable to select audio encoder\n" );
 
         snprintf( audio_params, MAX_ARGS, "%s,codec=%s", audio_parameters, used_enc );
@@ -196,10 +196,12 @@ static int set_audio_track( mkv_hnd_t *p_mkv, x264_param_t *p_param )
     atrack->type = MK_TRACK_AUDIO;
     atrack->lacing = MK_LACING_NONE;
 
-    if ( !strcmp( info->codec_name, "ac3" ) )
-        atrack->codec_id = MK_AUDIO_TAG_AC3;
-    else if( !strcmp( info->codec_name, "aac" ) )
+    if( !strcmp( info->codec_name, "aac" ) )
         atrack->codec_id = MK_AUDIO_TAG_AAC;
+    else if( !strcmp( info->codec_name, "ac3" ) )
+        atrack->codec_id = MK_AUDIO_TAG_AC3;
+    else if( !strcmp( info->codec_name, "eac3" ) )
+        atrack->codec_id = MK_AUDIO_TAG_EAC3;
     else if( !strcmp( info->codec_name, "vorbis" ) )
         atrack->codec_id = MK_AUDIO_TAG_VORBIS;
     else if( !strcmp( info->codec_name, "mp3" ) )

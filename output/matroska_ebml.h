@@ -95,6 +95,7 @@ int mk_close( mk_writer *w, int64_t *last_delta );
 #if HAVE_AUDIO
 #define MK_AUDIO_TAG_AAC       "A_AAC"
 #define MK_AUDIO_TAG_AC3       "A_AC3"
+#define MK_AUDIO_TAG_EAC3      "A_EAC3"
 #define MK_AUDIO_TAG_DTS       "A_DTS"
 #define MK_AUDIO_TAG_FLAC      "A_FLAC"
 #define MK_AUDIO_TAG_MP1       "A_MPEG/L1"

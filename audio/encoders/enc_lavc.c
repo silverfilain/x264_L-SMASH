@@ -49,6 +49,7 @@ static const struct {
     { CODEC_ID_VORBIS,  "vorbis",  MODE_VBR,              50 },
     { CODEC_ID_AAC,     "aac",     MODE_BITRATE,          96 },
     { CODEC_ID_AC3,     "ac3",     MODE_BITRATE,          96 },
+    { CODEC_ID_EAC3,    "eac3",    MODE_BITRATE,          96 },
     { CODEC_ID_ALAC,    "alac",    MODE_IGNORED,          64 },
     { CODEC_ID_AMR_NB,  "amrnb",   MODE_BITRATE,          12.2 },
     { CODEC_ID_AMR_WB,  "amrwb",   MODE_BITRATE,          12.65 },
