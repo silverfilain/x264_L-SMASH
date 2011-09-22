@@ -210,6 +210,8 @@ static int set_audio_track( mkv_hnd_t *p_mkv, x264_param_t *p_param )
         atrack->codec_id = MK_AUDIO_TAG_MP2;
     else if( !strcmp( info->codec_name, "mp1" ) )
         atrack->codec_id = MK_AUDIO_TAG_MP1;
+    else if( !strcmp( info->codec_name, "tta" ) )
+        atrack->codec_id = MK_AUDIO_TAG_TTA;
     else if( !strcmp( info->codec_name, "raw" ) )
         atrack->codec_id = MK_AUDIO_TAG_PCM_LE;
     else
