@@ -104,6 +104,7 @@ int mk_close( mk_writer *w, int64_t *last_delta );
 #define MK_AUDIO_TAG_PCM_FLOAT "A_PCM/FLOAT/IEEE"
 #define MK_AUDIO_TAG_PCM_LE    "A_PCM/INT/LIT"
 #define MK_AUDIO_TAG_PCM_BE    "A_PCM/INT/BIG" /* Do we need this? */
+#define MK_AUDIO_TAG_MLP       "A_MLP"
 #define MK_AUDIO_TAG_TRUEHD    "A_TRUEHD"
 #define MK_AUDIO_TAG_TTA       "A_TTA1"
 #define MK_AUDIO_TAG_VORBIS    "A_VORBIS"
