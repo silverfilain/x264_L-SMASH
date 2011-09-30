@@ -1144,6 +1144,7 @@ int lsmash_add_sample_entry( lsmash_root_t *root, uint32_t track_ID, uint32_t sa
         case ISOM_CODEC_TYPE_MP4A_AUDIO :
         case ISOM_CODEC_TYPE_AC_3_AUDIO :
         case ISOM_CODEC_TYPE_ALAC_AUDIO :
+        case ISOM_CODEC_TYPE_EC_3_AUDIO :
         case ISOM_CODEC_TYPE_SAMR_AUDIO :
         case ISOM_CODEC_TYPE_SAWB_AUDIO :
         case QT_CODEC_TYPE_23NI_AUDIO :
@@ -1162,7 +1163,6 @@ int lsmash_add_sample_entry( lsmash_root_t *root, uint32_t track_ID, uint32_t sa
         case ISOM_CODEC_TYPE_DTSC_AUDIO :
         case ISOM_CODEC_TYPE_DTSH_AUDIO :
         case ISOM_CODEC_TYPE_DTSL_AUDIO :
-        case ISOM_CODEC_TYPE_EC_3_AUDIO :
         case ISOM_CODEC_TYPE_ENCA_AUDIO :
         case ISOM_CODEC_TYPE_G719_AUDIO :
         case ISOM_CODEC_TYPE_G726_AUDIO :
@@ -1737,11 +1737,9 @@ static int isom_scan_trak_profileLevelIndication( isom_trak_entry_t* trak, mp4a_
 #endif
             case ISOM_CODEC_TYPE_AC_3_AUDIO :
             case ISOM_CODEC_TYPE_ALAC_AUDIO :
+            case ISOM_CODEC_TYPE_EC_3_AUDIO :
             case ISOM_CODEC_TYPE_SAMR_AUDIO :
             case ISOM_CODEC_TYPE_SAWB_AUDIO :
-#ifdef LSMASH_DEMUXER_ENABLED
-            case ISOM_CODEC_TYPE_EC_3_AUDIO :
-#endif
 #if 0
             case ISOM_CODEC_TYPE_DRA1_AUDIO :
             case ISOM_CODEC_TYPE_DTSC_AUDIO :
@@ -2745,13 +2743,13 @@ static void isom_remove_visual_extensions( isom_visual_entry_t *visual )
 {
     if( !visual )
         return;
-    isom_remove_clap( visual->clap );
-    isom_remove_pasp( visual->pasp );
-    isom_remove_colr( visual->colr );
-    isom_remove_stsl( visual->stsl );
-    isom_remove_esds( visual->esds );
     isom_remove_avcC( visual->avcC );
     isom_remove_btrt( visual->btrt );
+    isom_remove_esds( visual->esds );
+    isom_remove_colr( visual->colr );
+    isom_remove_stsl( visual->stsl );
+    isom_remove_clap( visual->clap );
+    isom_remove_pasp( visual->pasp );
 }
 
 static void isom_remove_font_record( isom_font_record_t *font_record )
@@ -3811,13 +3809,13 @@ static int isom_write_visual_extensions( lsmash_bs_t *bs, isom_visual_entry_t *v
 {
     if( !visual )
         return 0;
-    if( isom_write_clap( bs, visual->clap )
-     || isom_write_pasp( bs, visual->pasp )
+    if( isom_write_avcC( bs, visual->avcC )
+     || isom_write_btrt( bs, visual->btrt )
+     || isom_write_esds( bs, visual->esds )
      || isom_write_colr( bs, visual->colr )
      || isom_write_stsl( bs, visual->stsl )
-     || isom_write_esds( bs, visual->esds )
-     || isom_write_avcC( bs, visual->avcC )
-     || isom_write_btrt( bs, visual->btrt ) )
+     || isom_write_clap( bs, visual->clap )
+     || isom_write_pasp( bs, visual->pasp ) )
         return -1;
     return 0;
 }
@@ -4117,6 +4115,7 @@ static int isom_write_stsd( lsmash_bs_t *bs, isom_trak_entry_t *trak )
             case ISOM_CODEC_TYPE_MP4A_AUDIO :
             case ISOM_CODEC_TYPE_AC_3_AUDIO :
             case ISOM_CODEC_TYPE_ALAC_AUDIO :
+            case ISOM_CODEC_TYPE_EC_3_AUDIO :
             case ISOM_CODEC_TYPE_SAMR_AUDIO :
             case ISOM_CODEC_TYPE_SAWB_AUDIO :
             case QT_CODEC_TYPE_23NI_AUDIO :
@@ -4130,9 +4129,6 @@ static int isom_write_stsd( lsmash_bs_t *bs, isom_trak_entry_t *trak )
             case QT_CODEC_TYPE_IN24_AUDIO :
             case QT_CODEC_TYPE_IN32_AUDIO :
             case QT_CODEC_TYPE_NOT_SPECIFIED :
-#ifdef LSMASH_DEMUXER_ENABLED
-            case ISOM_CODEC_TYPE_EC_3_AUDIO :
-#endif
 #if 0
             case ISOM_CODEC_TYPE_DRA1_AUDIO :
             case ISOM_CODEC_TYPE_DTSC_AUDIO :
@@ -5567,6 +5563,23 @@ static int isom_update_bitrate_info( isom_mdia_t *mdia )
             exdata[3] =  info.avgBitrate        & 0xff;
             break;
         }
+        case ISOM_CODEC_TYPE_EC_3_AUDIO :
+        {
+            isom_audio_entry_t *eac3 = (isom_audio_entry_t *)sample_entry;
+            if( !eac3 )
+                return -1;
+            if( eac3->exdata_length < 10 || !eac3->exdata )
+                return -1;
+            uint16_t bitrate;
+            if( stsz->list )
+                bitrate = info.maxBitrate / 1000;   /* Use maximum bitrate if VBR. */
+            else
+                bitrate = stsz->sample_size * (eac3->samplerate >> 16) / 192000;    /* 192000 == 1536 * 1000 / 8 */
+            uint8_t *exdata = (uint8_t *)eac3->exdata + 8;
+            exdata[0] = (bitrate >> 5) & 0xff;
+            exdata[1] = (bitrate & 0x1f) << 3;
+            break;
+        }
         default :
             break;
     }
@@ -5989,13 +6002,13 @@ static uint64_t isom_update_visual_entry_size( isom_visual_entry_t *visual )
     if( !visual )
         return 0;
     visual->size = ISOM_BASEBOX_COMMON_SIZE + 78
-        + isom_update_clap_size( visual->clap )
-        + isom_update_pasp_size( visual->pasp )
-        + isom_update_colr_size( visual->colr )
-        + isom_update_stsl_size( visual->stsl )
-        + isom_update_esds_size( visual->esds )
         + isom_update_avcC_size( visual->avcC )
         + isom_update_btrt_size( visual->btrt )
+        + isom_update_esds_size( visual->esds )
+        + isom_update_colr_size( visual->colr )
+        + isom_update_stsl_size( visual->stsl )
+        + isom_update_clap_size( visual->clap )
+        + isom_update_pasp_size( visual->pasp )
         + (uint64_t)visual->exdata_length;
     CHECK_LARGESIZE( visual->size );
     return visual->size;
@@ -6157,6 +6170,7 @@ static uint64_t isom_update_stsd_size( isom_stsd_t *stsd )
             case ISOM_CODEC_TYPE_MP4A_AUDIO :
             case ISOM_CODEC_TYPE_AC_3_AUDIO :
             case ISOM_CODEC_TYPE_ALAC_AUDIO :
+            case ISOM_CODEC_TYPE_EC_3_AUDIO :
             case ISOM_CODEC_TYPE_SAMR_AUDIO :
             case ISOM_CODEC_TYPE_SAWB_AUDIO :
             case QT_CODEC_TYPE_23NI_AUDIO :
@@ -6170,9 +6184,6 @@ static uint64_t isom_update_stsd_size( isom_stsd_t *stsd )
             case QT_CODEC_TYPE_IN24_AUDIO :
             case QT_CODEC_TYPE_IN32_AUDIO :
             case QT_CODEC_TYPE_NOT_SPECIFIED :
-#ifdef LSMASH_DEMUXER_ENABLED
-            case ISOM_CODEC_TYPE_EC_3_AUDIO :
-#endif
 #if 0
             case ISOM_CODEC_TYPE_DRA1_AUDIO :
             case ISOM_CODEC_TYPE_DTSC_AUDIO :
