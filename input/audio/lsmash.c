@@ -58,31 +58,42 @@ static int lsmash_init( hnd_t *handle, const char *opt_str )
 
     memset( &h->info, 0, sizeof(audio_info_t) );
 
-    switch( h->summary->object_type_indication )
+    switch( h->summary->sample_type )
     {
-        case MP4SYS_OBJECT_TYPE_Audio_ISO_14496_3:
-            h->info.codec_name = "aac";
+        case ISOM_CODEC_TYPE_MP4A_AUDIO :
+            switch( h->summary->object_type_indication )
+            {
+                case MP4SYS_OBJECT_TYPE_Audio_ISO_14496_3:
+                    h->info.codec_name = "aac";
+                    break;
+                case MP4SYS_OBJECT_TYPE_Audio_ISO_11172_3:
+                case MP4SYS_OBJECT_TYPE_Audio_ISO_13818_3:
+                    if( h->summary->aot == MP4A_AUDIO_OBJECT_TYPE_Layer_3 )
+                        h->info.codec_name = "mp3";
+                    else if( h->summary->aot == MP4A_AUDIO_OBJECT_TYPE_Layer_2 )
+                        h->info.codec_name = "mp2";
+                    else
+                        h->info.codec_name = "mp1";
+                    break;
+                default :
+                    AF_LOG_ERR( h, "unknown audio stream type.\n" );
+                    goto error;
+                    break;
+            }
             break;
-        case MP4SYS_OBJECT_TYPE_Audio_ISO_11172_3:
-        case MP4SYS_OBJECT_TYPE_Audio_ISO_13818_3:
-            if( h->summary->aot == MP4A_AUDIO_OBJECT_TYPE_Layer_3 )
-                h->info.codec_name = "mp3";
-            else if( h->summary->aot == MP4A_AUDIO_OBJECT_TYPE_Layer_2 )
-                h->info.codec_name = "mp2";
-            else
-                h->info.codec_name = "mp1";
+        case ISOM_CODEC_TYPE_SAMR_AUDIO :
+            h->info.codec_name = "amrnb";
+            break;
+        case ISOM_CODEC_TYPE_SAWB_AUDIO :
+            h->info.codec_name = "amrwb";
+            break;
+        case ISOM_CODEC_TYPE_AC_3_AUDIO :
+            h->info.codec_name = "ac3";
+            break;
+        case ISOM_CODEC_TYPE_EC_3_AUDIO :
+            h->info.codec_name = "eac3";
             break;
         default :
-            if(h->summary->sample_type == ISOM_CODEC_TYPE_SAMR_AUDIO)
-            {
-                h->info.codec_name = "amrnb";
-                break;
-            }
-            else if(h->summary->sample_type == ISOM_CODEC_TYPE_SAWB_AUDIO)
-            {
-                h->info.codec_name = "amrwb";
-                break;
-            }
             AF_LOG_ERR( h, "unknown audio stream type.\n" );
             goto error;
             break;
