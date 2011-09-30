@@ -314,14 +314,6 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
 
     memcpy( avcC+11+sps_size, pps, pps_size );
 
-    if( sps[1] == 100 || sps[1] == 110 || sps[1] == 122 || sps[1] == 144 )
-    {
-        avcC[11+sps_size+pps_size] = 0xfd; // chroma_format_idc = 1
-        avcC[12+sps_size+pps_size] = (BIT_DEPTH-8) | 0xf8;
-        avcC[13+sps_size+pps_size] = (BIT_DEPTH-8) | 0xf8;
-        avcC[14+sps_size+pps_size] = 0; // zero spsext
-    }
-
     ret = mk_write_header( p_mkv->w, "x264" X264_VERSION, 50000,
                            p_mkv->tracks, p_mkv->i_track_count );
 
