@@ -299,27 +299,25 @@ static int isom_add_dref_entry( isom_dref_t *dref, uint32_t flags, char *name, c
 {
     if( !dref || !dref->list )
         return -1;
-    isom_dref_entry_t *data = malloc( sizeof(isom_dref_entry_t) );
+    isom_dref_entry_t *data = lsmash_malloc_zero( sizeof(isom_dref_entry_t) );
     if( !data )
         return -1;
-    memset( data, 0, sizeof(isom_dref_entry_t) );
     isom_init_box_common( data, dref, name ? ISOM_BOX_TYPE_URN : ISOM_BOX_TYPE_URL );
     data->flags = flags;
     if( location )
     {
         data->location_length = strlen( location ) + 1;
-        data->location = malloc( data->location_length );
+        data->location = lsmash_memdup( location, data->location_length );
         if( !data->location )
         {
             free( data );
             return -1;
         }
-        memcpy( data->location, location, data->location_length );
     }
     if( name )
     {
         data->name_length = strlen( name ) + 1;
-        data->name = malloc( data->name_length );
+        data->name = lsmash_memdup( name, data->name_length );
         if( !data->name )
         {
             if( data->location )
@@ -327,7 +325,6 @@ static int isom_add_dref_entry( isom_dref_t *dref, uint32_t flags, char *name, c
             free( data );
             return -1;
         }
-        memcpy( data->name, name, data->name_length );
     }
     if( lsmash_add_entry( dref->list, data ) )
     {
@@ -346,14 +343,13 @@ isom_avcC_ps_entry_t *isom_create_ps_entry( uint8_t *ps, uint32_t ps_size )
     isom_avcC_ps_entry_t *entry = malloc( sizeof(isom_avcC_ps_entry_t) );
     if( !entry )
         return NULL;
-    entry->parameterSetLength = ps_size;
-    entry->parameterSetNALUnit = malloc( ps_size );
+    entry->parameterSetNALUnit = lsmash_memdup( ps, ps_size );
     if( !entry->parameterSetNALUnit )
     {
         free( entry );
         return NULL;
     }
-    memcpy( entry->parameterSetNALUnit, ps, ps_size );
+    entry->parameterSetLength = ps_size;
     return entry;
 }
 
@@ -630,11 +626,10 @@ static int isom_add_visual_extensions( isom_visual_entry_t *visual, lsmash_video
                 if( length == summary->exdata_length
                  && LSMASH_4CC( exdata[4], exdata[5], exdata[6], exdata[7] ) == ISOM_BOX_TYPE_AVCC )
                 {
-                    visual->exdata_length = summary->exdata_length;
-                    visual->exdata = malloc( visual->exdata_length );
+                    visual->exdata = lsmash_memdup( summary->exdata, summary->exdata_length );
                     if( !visual->exdata )
                         return -1;
-                    memcpy( visual->exdata, summary->exdata, visual->exdata_length );
+                    visual->exdata_length = summary->exdata_length;
                     break;
                 }
             }
@@ -675,10 +670,9 @@ static int isom_add_visual_entry( isom_stsd_t *stsd, uint32_t sample_type, lsmas
     if( !stsd || !stsd->list || !summary )
         return -1;
     lsmash_entry_list_t *list = stsd->list;
-    isom_visual_entry_t *visual = malloc( sizeof(isom_visual_entry_t) );
+    isom_visual_entry_t *visual = lsmash_malloc_zero( sizeof(isom_visual_entry_t) );
     if( !visual )
         return -1;
-    memset( visual, 0, sizeof(isom_visual_entry_t) );
     isom_init_box_common( visual, stsd, sample_type );
     visual->data_reference_index = 1;
     visual->width = (uint16_t)summary->width;
@@ -714,10 +708,9 @@ static int isom_add_mp4s_entry( isom_stsd_t *stsd )
 {
     if( !stsd || !stsd->list )
         return -1;
-    isom_mp4s_entry_t *mp4s = malloc( sizeof(isom_mp4s_entry_t) );
+    isom_mp4s_entry_t *mp4s = lsmash_malloc_zero( sizeof(isom_mp4s_entry_t) );
     if( !mp4s )
         return -1;
-    memset( mp4s, 0, sizeof(isom_mp4s_entry_t) );
     isom_init_box_common( mp4s, stsd, ISOM_CODEC_TYPE_MP4S_SYSTEM );
     mp4s->data_reference_index = 1;
     if( lsmash_add_entry( stsd->list, mp4s ) )
@@ -820,10 +813,9 @@ static int isom_set_qtff_mp4a_description( isom_audio_entry_t *audio )
     }
     audio->wave->frma->data_format = audio->type;
     /* create ES Descriptor */
-    isom_esds_t *esds = malloc( sizeof(isom_esds_t) );
+    isom_esds_t *esds = lsmash_malloc_zero( sizeof(isom_esds_t) );
     if( !esds )
         return -1;
-    memset( esds, 0, sizeof(isom_esds_t) );
     isom_init_box_common( esds, audio->wave, ISOM_BOX_TYPE_ESDS );
     mp4sys_ES_Descriptor_params_t esd_param;
     memset( &esd_param, 0, sizeof(mp4sys_ES_Descriptor_params_t) );
@@ -984,10 +976,9 @@ static int isom_set_extra_description( isom_audio_entry_t *audio )
     audio->samplesize = 16;
     if( summary->exdata )
     {
-        audio->exdata = malloc( summary->exdata_length );
+        audio->exdata = lsmash_memdup( summary->exdata, summary->exdata_length );
         if( !audio->exdata )
             return -1;
-        memcpy( audio->exdata, summary->exdata, summary->exdata_length );
         audio->exdata_length = summary->exdata_length;
     }
     else
@@ -1014,10 +1005,9 @@ static int isom_add_audio_entry( isom_stsd_t *stsd, uint32_t sample_type, lsmash
 {
     if( !stsd || !stsd->list || !summary )
         return -1;
-    isom_audio_entry_t *audio = malloc( sizeof(isom_audio_entry_t) );
+    isom_audio_entry_t *audio = lsmash_malloc_zero( sizeof(isom_audio_entry_t) );
     if( !audio )
         return -1;
-    memset( audio, 0, sizeof(isom_audio_entry_t) );
     isom_init_box_common( audio, stsd, sample_type );
     memcpy( &audio->summary, summary, sizeof(lsmash_audio_summary_t) );
     int ret = 0;
@@ -1071,10 +1061,9 @@ static int isom_add_text_entry( isom_stsd_t *stsd )
 {
     if( !stsd || !stsd->list )
         return -1;
-    isom_text_entry_t *text = malloc( sizeof(isom_text_entry_t) );
+    isom_text_entry_t *text = lsmash_malloc_zero( sizeof(isom_text_entry_t) );
     if( !text )
         return -1;
-    memset( text, 0, sizeof(isom_text_entry_t) );
     isom_init_box_common( text, stsd, QT_CODEC_TYPE_TEXT_TEXT );
     text->data_reference_index = 1;
     if( lsmash_add_entry( stsd->list, text ) )
@@ -1089,10 +1078,9 @@ int isom_add_ftab( isom_tx3g_entry_t *tx3g )
 {
     if( !tx3g )
         return -1;
-    isom_ftab_t *ftab = malloc( sizeof(isom_ftab_t) );
+    isom_ftab_t *ftab = lsmash_malloc_zero( sizeof(isom_ftab_t) );
     if( !ftab )
         return -1;
-    memset( ftab, 0, sizeof(isom_ftab_t) );
     isom_init_box_common( ftab, tx3g, ISOM_BOX_TYPE_FTAB );
     ftab->list = lsmash_create_entry_list();
     if( !ftab->list )
@@ -1108,10 +1096,9 @@ static int isom_add_tx3g_entry( isom_stsd_t *stsd )
 {
     if( !stsd || !stsd->list )
         return -1;
-    isom_tx3g_entry_t *tx3g = malloc( sizeof(isom_tx3g_entry_t) );
+    isom_tx3g_entry_t *tx3g = lsmash_malloc_zero( sizeof(isom_tx3g_entry_t) );
     if( !tx3g )
         return -1;
-    memset( tx3g, 0, sizeof(isom_tx3g_entry_t) );
     isom_init_box_common( tx3g, stsd, ISOM_CODEC_TYPE_TX3G_TEXT );
     tx3g->data_reference_index = 1;
     if( isom_add_ftab( tx3g ) ||
@@ -1473,7 +1460,9 @@ static isom_rap_entry_t *isom_add_rap_group_entry( isom_sgpd_entry_t *sgpd )
     isom_rap_entry_t *data = malloc( sizeof(isom_rap_entry_t) );
      if( !data )
         return NULL;
-    memset( data, 0, sizeof(isom_rap_entry_t) );
+    data->description_length = 0;
+    data->num_leading_samples_known = 0;
+    data->num_leading_samples = 0;
     if( lsmash_add_entry( sgpd->list, data ) )
     {
         free( data );
@@ -1525,7 +1514,7 @@ static int isom_add_chpl_entry( isom_chpl_t *chpl, isom_chapter_entry_t *chap_da
         return -1;
     data->start_time = chap_data->start_time;
     data->chapter_name_length = strlen( chap_data->chapter_name );
-    data->chapter_name = ( char* )malloc( data->chapter_name_length + 1 );
+    data->chapter_name = (char *)malloc( data->chapter_name_length + 1 );
     if( !data->chapter_name )
     {
         free( data );
@@ -1552,10 +1541,9 @@ static isom_trex_entry_t *isom_add_trex( isom_mvex_t *mvex )
         if( !mvex->trex_list )
             return NULL;
     }
-    isom_trex_entry_t *trex = malloc( sizeof(isom_trex_entry_t) );
+    isom_trex_entry_t *trex = lsmash_malloc_zero( sizeof(isom_trex_entry_t) );
     if( !trex )
         return NULL;
-    memset( trex, 0, sizeof(isom_trex_entry_t) );
     isom_init_box_common( trex, mvex, ISOM_BOX_TYPE_TREX );
     if( lsmash_add_entry( mvex->trex_list, trex ) )
     {
@@ -1575,10 +1563,9 @@ static isom_trun_entry_t *isom_add_trun( isom_traf_entry_t *traf )
         if( !traf->trun_list )
             return NULL;
     }
-    isom_trun_entry_t *trun = malloc( sizeof(isom_trun_entry_t) );
+    isom_trun_entry_t *trun = lsmash_malloc_zero( sizeof(isom_trun_entry_t) );
     if( !trun )
         return NULL;
-    memset( trun, 0, sizeof(isom_trun_entry_t) );
     isom_init_box_common( trun, traf, ISOM_BOX_TYPE_TRUN );
     if( lsmash_add_entry( traf->trun_list, trun ) )
     {
@@ -1598,10 +1585,9 @@ static isom_traf_entry_t *isom_add_traf( lsmash_root_t *root, isom_moof_entry_t 
         if( !moof->traf_list )
             return NULL;
     }
-    isom_traf_entry_t *traf = malloc( sizeof(isom_traf_entry_t) );
+    isom_traf_entry_t *traf = lsmash_malloc_zero( sizeof(isom_traf_entry_t) );
     if( !traf )
         return NULL;
-    memset( traf, 0, sizeof(isom_traf_entry_t) );
     isom_init_box_common( traf, moof, ISOM_BOX_TYPE_TRAF );
     isom_cache_t *cache = malloc( sizeof(isom_cache_t) );
     if( !cache )
@@ -1630,10 +1616,9 @@ static isom_moof_entry_t *isom_add_moof( lsmash_root_t *root )
         if( !root->moof_list )
             return NULL;
     }
-    isom_moof_entry_t *moof = malloc( sizeof(isom_moof_entry_t) );
+    isom_moof_entry_t *moof = lsmash_malloc_zero( sizeof(isom_moof_entry_t) );
     if( !moof )
         return NULL;
-    memset( moof, 0, sizeof(isom_moof_entry_t) );
     isom_init_box_common( moof, root, ISOM_BOX_TYPE_MOOF );
     if( lsmash_add_entry( root->moof_list, moof ) )
     {
@@ -1653,10 +1638,9 @@ static isom_tfra_entry_t *isom_add_tfra( isom_mfra_t *mfra )
         if( !mfra->tfra_list )
             return NULL;
     }
-    isom_tfra_entry_t *tfra = malloc( sizeof(isom_tfra_entry_t) );
+    isom_tfra_entry_t *tfra = lsmash_malloc_zero( sizeof(isom_tfra_entry_t) );
     if( !tfra )
         return NULL;
-    memset( tfra, 0, sizeof(isom_tfra_entry_t) );
     isom_init_box_common( tfra, mfra, ISOM_BOX_TYPE_TFRA );
     if( lsmash_add_entry( mfra->tfra_list, tfra ) )
     {
@@ -1848,19 +1832,11 @@ static int isom_add_tkhd( isom_trak_entry_t *trak, uint32_t handler_type )
     if( !trak->tkhd )
     {
         isom_create_box( tkhd, trak, ISOM_BOX_TYPE_TKHD );
-        switch( handler_type )
-        {
-            case ISOM_MEDIA_HANDLER_TYPE_VIDEO_TRACK :
-                tkhd->matrix[0] = 0x00010000;
-                tkhd->matrix[4] = 0x00010000;
-                tkhd->matrix[8] = 0x40000000;
-                break;
-            case ISOM_MEDIA_HANDLER_TYPE_AUDIO_TRACK :
-                tkhd->volume = 0x0100;
-                break;
-            default :
-                break;
-        }
+        if( handler_type == ISOM_MEDIA_HANDLER_TYPE_AUDIO_TRACK )
+            tkhd->volume = 0x0100;
+        tkhd->matrix[0] = 0x00010000;
+        tkhd->matrix[4] = 0x00010000;
+        tkhd->matrix[8] = 0x40000000;
         tkhd->duration = 0xffffffff;
         tkhd->track_ID = trak->root->moov->mvhd->next_track_ID;
         ++ trak->root->moov->mvhd->next_track_ID;
@@ -2234,10 +2210,9 @@ static isom_sgpd_entry_t *isom_add_sgpd( isom_stbl_t *stbl, uint32_t grouping_ty
         if( !stbl->sgpd_list )
             return NULL;
     }
-    isom_sgpd_entry_t *sgpd = malloc( sizeof(isom_sgpd_entry_t) );
+    isom_sgpd_entry_t *sgpd = lsmash_malloc_zero( sizeof(isom_sgpd_entry_t) );
     if( !sgpd )
         return NULL;
-    memset( sgpd, 0, sizeof(isom_sgpd_entry_t) );
     isom_init_box_common( sgpd, stbl, ISOM_BOX_TYPE_SGPD );
     sgpd->list = lsmash_create_entry_list();
     if( !sgpd->list || lsmash_add_entry( stbl->sgpd_list, sgpd ) )
@@ -2272,10 +2247,9 @@ static isom_sbgp_entry_t *isom_add_sbgp( isom_stbl_t *stbl, uint32_t grouping_ty
         if( !stbl->sbgp_list )
             return NULL;
     }
-    isom_sbgp_entry_t *sbgp = malloc( sizeof(isom_sbgp_entry_t) );
+    isom_sbgp_entry_t *sbgp = lsmash_malloc_zero( sizeof(isom_sbgp_entry_t) );
     if( !sbgp )
         return NULL;
-    memset( sbgp, 0, sizeof(isom_sbgp_entry_t) );
     isom_init_box_common( sbgp, stbl, ISOM_BOX_TYPE_SBGP );
     sbgp->list = lsmash_create_entry_list();
     if( !sbgp->list || lsmash_add_entry( stbl->sbgp_list, sbgp ) )
@@ -2420,29 +2394,26 @@ static isom_trak_entry_t *isom_add_trak( lsmash_root_t *root )
         if( !moov->trak_list )
             return NULL;
     }
-    isom_trak_entry_t *trak = malloc( sizeof(isom_trak_entry_t) );
+    isom_trak_entry_t *trak = lsmash_malloc_zero( sizeof(isom_trak_entry_t) );
     if( !trak )
         return NULL;
-    memset( trak, 0, sizeof(isom_trak_entry_t) );
     isom_init_box_common( trak, moov, ISOM_BOX_TYPE_TRAK );
-    isom_cache_t *cache = malloc( sizeof(isom_cache_t) );
+    isom_cache_t *cache = lsmash_malloc_zero( sizeof(isom_cache_t) );
     if( !cache )
     {
         free( trak );
         return NULL;
     }
-    memset( cache, 0, sizeof(isom_cache_t) );
     isom_fragment_t *fragment = NULL;
     if( root->fragment )
     {
-        fragment = malloc( sizeof(isom_fragment_t) );
+        fragment = lsmash_malloc_zero( sizeof(isom_fragment_t) );
         if( !fragment )
         {
             free( cache );
             free( trak );
             return NULL;
         }
-        memset( fragment, 0, sizeof(isom_fragment_t) );
         cache->fragment = fragment;
     }
     if( lsmash_add_entry( moov->trak_list, trak ) )
@@ -3161,24 +3132,6 @@ static void isom_remove_chpl( isom_chpl_t *chpl )
     isom_remove_box( chpl, isom_udta_t );
 }
 
-static void isom_remove_udta( isom_udta_t *udta )
-{
-    if( !udta )
-        return;
-    isom_remove_chpl( udta->chpl );
-    if( udta->parent )
-    {
-        if( udta->parent->type == ISOM_BOX_TYPE_MOOV )
-            isom_remove_box( udta, isom_moov_t );
-        else if( udta->parent->type == ISOM_BOX_TYPE_TRAK )
-            isom_remove_box( udta, isom_trak_entry_t );
-        else
-            assert( 0 );
-        return;
-    }
-    free( udta );
-}
-
 static void isom_remove_keys_entry( isom_keys_entry_t *data )
 {
     if( !data )
@@ -3264,6 +3217,29 @@ static void isom_remove_meta( isom_meta_t *meta )
         return;
     }
     free( meta );
+}
+
+static void isom_remove_udta( isom_udta_t *udta )
+{
+    if( !udta )
+        return;
+    isom_remove_chpl( udta->chpl );
+    isom_remove_meta( udta->meta );
+    free( udta->WLOC );
+    free( udta->LOOP );
+    free( udta->SelO );
+    free( udta->AllF );
+    if( udta->parent )
+    {
+        if( udta->parent->type == ISOM_BOX_TYPE_MOOV )
+            isom_remove_box( udta, isom_moov_t );
+        else if( udta->parent->type == ISOM_BOX_TYPE_TRAK )
+            isom_remove_box( udta, isom_trak_entry_t );
+        else
+            assert( 0 );
+        return;
+    }
+    free( udta );
 }
 
 static void isom_remove_sample_pool( isom_sample_pool_t *pool );
@@ -7152,6 +7128,8 @@ int lsmash_get_media_parameters( lsmash_root_t *root, uint32_t track_ID, lsmash_
 
 lsmash_root_t *lsmash_open_movie( const char *filename, lsmash_file_mode mode )
 {
+    if( !filename )
+        return NULL;
     char open_mode[4] = { 0 };
     if( mode & LSMASH_FILE_MODE_WRITE )
         memcpy( open_mode, "w+b", 4 );
@@ -7161,15 +7139,13 @@ lsmash_root_t *lsmash_open_movie( const char *filename, lsmash_file_mode mode )
 #endif
     if( !open_mode[0] )
         return NULL;
-    lsmash_root_t *root = malloc( sizeof(lsmash_root_t) );
+    lsmash_root_t *root = lsmash_malloc_zero( sizeof(lsmash_root_t) );
     if( !root )
         return NULL;
-    memset( root, 0, sizeof(lsmash_root_t) );
     root->root = root;
-    root->bs = malloc( sizeof(lsmash_bs_t) );
+    root->bs = lsmash_malloc_zero( sizeof(lsmash_bs_t) );
     if( !root->bs )
         goto fail;
-    memset( root->bs, 0, sizeof(lsmash_bs_t) );
     if( !strcmp( filename, "-" ) )
     {
         if( mode & LSMASH_FILE_MODE_READ )
@@ -7198,10 +7174,9 @@ lsmash_root_t *lsmash_open_movie( const char *filename, lsmash_file_mode mode )
 #endif
     if( mode & LSMASH_FILE_MODE_FRAGMENTED )
     {
-        root->fragment = malloc( sizeof(isom_fragment_manager_t) );
+        root->fragment = lsmash_malloc_zero( sizeof(isom_fragment_manager_t) );
         if( !root->fragment )
             goto fail;
-        memset( root->fragment, 0, sizeof(isom_fragment_manager_t) );
         root->fragment->pool = lsmash_create_entry_list();
         if( !root->fragment->pool )
             goto fail;
@@ -8306,10 +8281,9 @@ int lsmash_update_movie_modification_time( lsmash_root_t *root )
 /*---- sample manipulators ----*/
 lsmash_sample_t *lsmash_create_sample( uint32_t size )
 {
-    lsmash_sample_t *sample = malloc( sizeof(lsmash_sample_t) );
+    lsmash_sample_t *sample = lsmash_malloc_zero( sizeof(lsmash_sample_t) );
     if( !sample )
         return NULL;
-    memset( sample, 0, sizeof(lsmash_sample_t) );
     if( !size )
         return sample;
     sample->data = malloc( size );
@@ -8359,10 +8333,9 @@ void lsmash_delete_sample( lsmash_sample_t *sample )
 
 isom_sample_pool_t *isom_create_sample_pool( uint64_t size )
 {
-    isom_sample_pool_t *pool = malloc( sizeof(isom_sample_pool_t) );
+    isom_sample_pool_t *pool = lsmash_malloc_zero( sizeof(isom_sample_pool_t) );
     if( !pool )
         return NULL;
-    memset( pool, 0, sizeof(isom_sample_pool_t) );
     if( !size )
         return pool;
     pool->data = malloc( size );
@@ -8551,6 +8524,42 @@ static int isom_add_dependency_type( isom_trak_entry_t *trak, lsmash_sample_prop
     return isom_add_sdtp_entry( stbl, prop, avc_extensions );
 }
 
+static int isom_rap_grouping_established( isom_rap_group_t *group, int num_leading_samples_known, isom_sgpd_entry_t *sgpd )
+{
+    isom_rap_entry_t *rap = group->random_access;
+    if( !rap )
+        return 0;
+    assert( rap == (isom_rap_entry_t *)sgpd->list->tail->data );
+    rap->num_leading_samples_known = num_leading_samples_known;
+    /* Avoid duplication of sample group descriptions. */
+    uint32_t group_description_index = 1;
+    for( lsmash_entry_t *entry = sgpd->list->head; entry != sgpd->list->tail; entry = entry->next )
+    {
+        isom_rap_entry_t *data = (isom_rap_entry_t *)entry->data;
+        if( !data )
+            return -1;
+        if( rap->num_leading_samples_known == data->num_leading_samples_known
+         && rap->num_leading_samples       == data->num_leading_samples )
+        {
+            /* The same description already exists.
+             * Remove the latest random access entry. */
+            lsmash_remove_entry_direct( sgpd->list, sgpd->list->tail, NULL );
+            /* Replace assigned group_description_index with the one corresponding the same description. */
+            if( group->assignment->group_description_index == 0 )
+            {
+                if( group->prev_assignment )
+                    group->prev_assignment->group_description_index = group_description_index;
+            }
+            else
+                group->assignment->group_description_index = group_description_index;
+            break;
+        }
+        ++group_description_index;
+    }
+    group->random_access = NULL;
+    return 0;
+}
+
 static int isom_group_random_access( isom_trak_entry_t *trak, lsmash_sample_property_t *prop )
 {
     if( trak->root->max_isom_version < 6 )
@@ -8575,22 +8584,22 @@ static int isom_group_random_access( isom_trak_entry_t *trak, lsmash_sample_prop
         if( is_rap )
         {
             group->random_access = isom_add_rap_group_entry( sgpd );
-            group->assignment = isom_add_group_assignment_entry( sbgp, 1, sgpd->list->entry_count );
+            group->assignment    = isom_add_group_assignment_entry( sbgp, 1, sgpd->list->entry_count );
         }
         else
         {
             /* The first sample is not always random access point. */
             group->random_access = NULL;
-            group->assignment = isom_add_group_assignment_entry( sbgp, 1, 0 );
+            group->assignment    = isom_add_group_assignment_entry( sbgp, 1, 0 );
         }
         if( !group->assignment )
         {
             free( group );
             return -1;
         }
-        /* No need checking if group->assignment exists from here. */
-        group->is_prev_rap = is_rap;
-        trak->cache->rap = group;
+        group->prev_assignment = NULL;
+        group->is_prev_rap     = is_rap;
+        trak->cache->rap       = group;
         return 0;
     }
     if( group->is_prev_rap )
@@ -8600,7 +8609,8 @@ static int isom_group_random_access( isom_trak_entry_t *trak, lsmash_sample_prop
         {
             /* This sample isn't a member of 'rap ' and the previous sample is.
              * So we create a new group and set 0 on its group_description_index. */
-            group->assignment = isom_add_group_assignment_entry( sbgp, 1, 0 );
+            group->prev_assignment = group->assignment;
+            group->assignment      = isom_add_group_assignment_entry( sbgp, 1, 0 );
             if( !group->assignment )
             {
                 free( group );
@@ -8611,10 +8621,11 @@ static int isom_group_random_access( isom_trak_entry_t *trak, lsmash_sample_prop
         {
             /* Create a new group since there is the possibility the next sample is a leading sample.
              * This sample is a member of 'rap ', so we set appropriate value on its group_description_index. */
-            if( group->random_access )
-                group->random_access->num_leading_samples_known = 1;
-            group->random_access = isom_add_rap_group_entry( sgpd );
-            group->assignment = isom_add_group_assignment_entry( sbgp, 1, sgpd->list->entry_count );
+            if( isom_rap_grouping_established( group, 1, sgpd ) )
+                return -1;
+            group->random_access   = isom_add_rap_group_entry( sgpd );
+            group->prev_assignment = group->assignment;
+            group->assignment      = isom_add_group_assignment_entry( sbgp, 1, sgpd->list->entry_count );
             if( !group->assignment )
             {
                 free( group );
@@ -8628,10 +8639,11 @@ static int isom_group_random_access( isom_trak_entry_t *trak, lsmash_sample_prop
     {
         /* This sample is a member of 'rap ' and the previous sample isn't.
          * So we create a new group and set appropriate value on its group_description_index. */
-        if( group->random_access )
-            group->random_access->num_leading_samples_known = 1;
-        group->random_access = isom_add_rap_group_entry( sgpd );
-        group->assignment = isom_add_group_assignment_entry( sbgp, 1, sgpd->list->entry_count );
+        if( isom_rap_grouping_established( group, 1, sgpd ) )
+            return -1;
+        group->random_access   = isom_add_rap_group_entry( sgpd );
+        group->prev_assignment = group->assignment;
+        group->assignment      = isom_add_group_assignment_entry( sbgp, 1, sgpd->list->entry_count );
         if( !group->assignment )
         {
             free( group );
@@ -8646,22 +8658,44 @@ static int isom_group_random_access( isom_trak_entry_t *trak, lsmash_sample_prop
         if( prop->leading == ISOM_SAMPLE_LEADING_UNKNOWN )
         {
             /* We can no longer know num_leading_samples in this group. */
-            group->random_access->num_leading_samples_known = 0;
-            group->random_access = NULL;
+            if( isom_rap_grouping_established( group, 0, sgpd ) )
+                return -1;
         }
         else
         {
             if( prop->leading == ISOM_SAMPLE_IS_UNDECODABLE_LEADING || prop->leading == ISOM_SAMPLE_IS_DECODABLE_LEADING )
                 ++ group->random_access->num_leading_samples;
-            else
-            {
-                /* no more consecutive leading samples in this group */
-                group->random_access->num_leading_samples_known = 1;
-                group->random_access = NULL;
-            }
+            /* no more consecutive leading samples in this group */
+            else if( isom_rap_grouping_established( group, 1, sgpd ) )
+                return -1;
         }
     }
     group->is_prev_rap = is_rap;
+    return 0;
+}
+
+static int isom_roll_grouping_established( isom_roll_group_t *group, int16_t roll_distance, isom_sgpd_entry_t *sgpd )
+{
+    /* Avoid duplication of sample group descriptions. */
+    uint32_t group_description_index = 1;
+    for( lsmash_entry_t *entry = sgpd->list->head; entry; entry = entry->next )
+    {
+        isom_roll_entry_t *data = (isom_roll_entry_t *)entry->data;
+        if( !data )
+            return -1;
+        if( roll_distance == data->roll_distance )
+        {
+            /* The same description already exists.
+             * Set the group_description_index corresponding the same description. */
+            group->assignment->group_description_index = group_description_index;
+            return 0;
+        }
+        ++group_description_index;
+    }
+    /* Add a new roll recovery description. */
+    if( !isom_add_roll_group_entry( sgpd, roll_distance ) )
+        return -1;
+    group->assignment->group_description_index = sgpd->list->entry_count;
     return 0;
 }
 
@@ -8691,10 +8725,9 @@ static int isom_group_roll_recovery( isom_trak_entry_t *trak, lsmash_sample_prop
         else
             assert( sample_count == 1 );
         /* Create a new group. This group is not 'roll' yet, so we set 0 on its group_description_index. */
-        group = malloc( sizeof(isom_roll_group_t) );
+        group = lsmash_malloc_zero( sizeof(isom_roll_group_t) );
         if( !group )
             return -1;
-        memset( group, 0, sizeof(isom_roll_group_t) );
         group->first_sample = sample_count;
         group->recovery_point = prop->recovery.complete;
         group->assignment = isom_add_group_assignment_entry( sbgp, 1, 0 );
@@ -8733,9 +8766,8 @@ static int isom_group_roll_recovery( isom_trak_entry_t *trak, lsmash_sample_prop
             if( distance )
             {
                 /* Now, this group is a 'roll'. */
-                if( !isom_add_roll_group_entry( sgpd, distance ) )
+                if( isom_roll_grouping_established( group, distance, sgpd ) )
                     return -1;
-                group->assignment->group_description_index = sgpd->list->entry_count;
                 /* All groups before the current group are described. */
                 lsmash_entry_t *current = entry;
                 for( entry = pool->head; entry != current; entry = entry->next )
@@ -9464,7 +9496,7 @@ static int isom_read_simple_chapter( FILE *chapter, isom_chapter_entry_t *data )
     if( !chapter_name++ )
         return -1;
     len = LSMASH_MIN( 255, strlen( chapter_name ) );  /* We support length of chapter_name up to 255 */
-    data->chapter_name = ( char* )malloc( len + 1 );
+    data->chapter_name = (char *)malloc( len + 1 );
     if( !data->chapter_name )
         return -1;
     memcpy( data->chapter_name, chapter_name, len );
@@ -9485,7 +9517,7 @@ static int isom_read_minimum_chapter( FILE *chapter, isom_chapter_entry_t *data 
     if( !chapter_name++ )
         return -1;
     len = LSMASH_MIN( 255, strlen( chapter_name ) );  /* We support length of chapter_name up to 255 */
-    data->chapter_name = ( char* )malloc( len + 1 );
+    data->chapter_name = (char *)malloc( len + 1 );
     if( !data->chapter_name )
         return -1;
     memcpy( data->chapter_name, chapter_name, len );
@@ -9593,7 +9625,7 @@ int lsmash_create_reference_chapter_track( lsmash_root_t *root, uint32_t track_I
     /* Check each line format. */
     fn_get_chapter_data fnc = isom_check_chap_line( file_name );
     if( !fnc )
-        return -1;
+        goto fail;
     /* Open chapter format file. */
     chapter = fopen( file_name, "rb" );
     if( !chapter )
@@ -9608,7 +9640,10 @@ int lsmash_create_reference_chapter_track( lsmash_root_t *root, uint32_t track_I
         uint16_t name_length = strlen( data.chapter_name );
         lsmash_sample_t *sample = lsmash_create_sample( 2 + name_length + 12 * (sample_type == QT_CODEC_TYPE_TEXT_TEXT) );
         if( !sample )
+        {
+            free( data.chapter_name );
             goto fail;
+        }
         sample->data[0] = (name_length >> 8) & 0xff;
         sample->data[1] =  name_length       & 0xff;
         memcpy( sample->data + 2, data.chapter_name, name_length );
@@ -9629,7 +9664,10 @@ int lsmash_create_reference_chapter_track( lsmash_root_t *root, uint32_t track_I
         sample->prop.random_access_type = ISOM_SAMPLE_RANDOM_ACCESS_TYPE_SYNC;
         sample->index = sample_entry;
         if( lsmash_append_sample( root, chapter_track_ID, sample ) )
+        {
+            free( data.chapter_name );
             goto fail;
+        }
         free( data.chapter_name );
         data.chapter_name = NULL;
     }
@@ -9645,10 +9683,10 @@ int lsmash_create_reference_chapter_track( lsmash_root_t *root, uint32_t track_I
 fail:
     if( chapter )
         fclose( chapter );
-    if( data.chapter_name )
-        free( data.chapter_name );
-    free( chap->track_ID );
-    chap->track_ID = NULL;
+    /* Remove chapter track reference. */
+    lsmash_remove_entry_direct( trak->tref->ref_list, trak->tref->ref_list->tail, isom_remove_track_reference_type );
+    if( trak->tref->ref_list->entry_count == 0 )
+        isom_remove_tref( trak->tref );
     /* Remove the reference chapter track attached at tail of the list. */
     lsmash_remove_entry_direct( root->moov->trak_list, root->moov->trak_list->tail, isom_remove_trak );
     return -1;
@@ -9758,10 +9796,9 @@ lsmash_itunes_metadata_list_t *lsmash_export_itunes_metadata( lsmash_root_t *roo
         return NULL;
     if( !root->moov->udta || !root->moov->udta->meta || !root->moov->udta->meta->ilst )
     {
-        isom_ilst_t *dst = malloc( sizeof(isom_ilst_t) );
+        isom_ilst_t *dst = lsmash_malloc_zero( sizeof(isom_ilst_t) );
         if( !dst )
             return NULL;
-        memset( dst, 0, sizeof(isom_ilst_t) );
         return (lsmash_itunes_metadata_list_t *)dst;
     }
     isom_ilst_t *src = root->moov->udta->meta->ilst;
