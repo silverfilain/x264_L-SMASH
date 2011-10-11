@@ -64,7 +64,10 @@ static int lsmash_init( hnd_t *handle, const char *opt_str )
             switch( h->summary->object_type_indication )
             {
                 case MP4SYS_OBJECT_TYPE_Audio_ISO_14496_3:
-                    h->info.codec_name = "aac";
+                    if( h->summary->aot == MP4A_AUDIO_OBJECT_TYPE_ALS )
+                        h->info.codec_name = "als";
+                    else
+                        h->info.codec_name = "aac";
                     break;
                 case MP4SYS_OBJECT_TYPE_Audio_ISO_11172_3:
                 case MP4SYS_OBJECT_TYPE_Audio_ISO_13818_3:
