@@ -42,7 +42,8 @@
 /* Return 1 if the box is fullbox, Otherwise return 0. */
 int isom_is_fullbox( void *box )
 {
-    uint32_t type = ((isom_box_t *)box)->type;
+    isom_box_t *current = (isom_box_t *)box;
+    uint32_t type = current->type;
     static const uint32_t fullbox_table[] = {
         ISOM_BOX_TYPE_MVHD,
         ISOM_BOX_TYPE_IODS,
@@ -87,12 +88,13 @@ int isom_is_fullbox( void *box )
         ISOM_BOX_TYPE_TFHD,
         ISOM_BOX_TYPE_TRUN,
         ISOM_BOX_TYPE_TFRA,
-        ISOM_BOX_TYPE_MFRO
+        ISOM_BOX_TYPE_MFRO,
+        0
     };
-    for( int i = 0; i < sizeof(fullbox_table)/sizeof(uint32_t); i++ )
+    for( int i = 0; fullbox_table[i]; i++ )
         if( type == fullbox_table[i] )
             return 1;
-    return 0;
+    return (type == ISOM_BOX_TYPE_CPRT) && current->parent && (current->parent->type == ISOM_BOX_TYPE_UDTA);
 }
 
 /* Return 1 if the sample type is LPCM audio, Otherwise return 0. */
@@ -2280,7 +2282,19 @@ static int isom_add_chpl( isom_moov_t *moov )
     return 0;
 }
 
-#ifdef LSMASH_DEMUXER_ENABLED
+static int isom_add_metaitem( isom_ilst_t *ilst, uint32_t type )
+{
+    if( !ilst || !ilst->item_list )
+        return -1;
+    isom_create_box( metaitem, ilst, type );
+    if( lsmash_add_entry( ilst->item_list, metaitem ) )
+    {
+        free( metaitem );
+        return -1;
+    }
+    return 0;
+}
+
 static int isom_add_mean( isom_metaitem_t *metaitem )
 {
     if( !metaitem || metaitem->mean )
@@ -2358,7 +2372,25 @@ static int isom_add_meta( isom_box_t *parent )
     }
     return 0;
 }
-#endif /* LSMASH_DEMUXER_ENABLED */
+
+static int isom_add_cprt( isom_udta_t *udta )
+{
+    if( !udta )
+        return -1;
+    if( !udta->cprt_list )
+    {
+        udta->cprt_list = lsmash_create_entry_list();
+        if( !udta->cprt_list )
+            return -1;
+    }
+    isom_create_box( cprt, udta, ISOM_BOX_TYPE_CPRT );
+    if( lsmash_add_entry( udta->cprt_list, cprt ) )
+    {
+        free( cprt );
+        return -1;
+    }
+    return 0;
+}
 
 static int isom_add_udta( lsmash_root_t *root, uint32_t track_ID )
 {
@@ -3219,6 +3251,15 @@ static void isom_remove_meta( isom_meta_t *meta )
     free( meta );
 }
 
+static void isom_remove_cprt( isom_cprt_t *cprt )
+{
+    if( !cprt )
+        return;
+    if( cprt->notice )
+        free( cprt->notice );
+    free( cprt );
+}
+
 static void isom_remove_udta( isom_udta_t *udta )
 {
     if( !udta )
@@ -3229,6 +3270,7 @@ static void isom_remove_udta( isom_udta_t *udta )
     free( udta->LOOP );
     free( udta->SelO );
     free( udta->AllF );
+    lsmash_remove_list( udta->cprt_list, isom_remove_cprt );
     if( udta->parent )
     {
         if( udta->parent->type == ISOM_BOX_TYPE_MOOV )
@@ -4591,6 +4633,16 @@ static int isom_write_meta( lsmash_bs_t *bs, isom_meta_t *meta )
     return 0;
 }
 
+static int isom_write_cprt( lsmash_bs_t *bs, isom_cprt_t *cprt )
+{
+    if( !cprt )
+        return -1;
+    isom_bs_put_box_common( bs, cprt );
+    lsmash_bs_put_be16( bs, cprt->language );
+    lsmash_bs_put_bytes( bs, cprt->notice, cprt->notice_length );
+    return lsmash_bs_write_data( bs );
+}
+
 static int isom_write_udta( lsmash_bs_t *bs, isom_moov_t *moov, isom_trak_entry_t *trak )
 {
     /* Setting non-NULL pointer to trak means trak->udta data will be written in stream.
@@ -4603,7 +4655,13 @@ static int isom_write_udta( lsmash_bs_t *bs, isom_moov_t *moov, isom_trak_entry_
         return -1;
     if( moov && isom_write_chpl( bs, udta->chpl ) )
         return -1;
-    return isom_write_meta( bs, udta->meta );
+    if( isom_write_meta( bs, udta->meta ) )
+        return -1;
+    if( udta->cprt_list )
+        for( lsmash_entry_t *entry = udta->cprt_list->head; entry; entry = entry->next )
+            if( isom_write_cprt( bs, (isom_cprt_t *)entry->data ) )
+                return -1;
+    return 0;
 }
 
 static int isom_write_trak( lsmash_bs_t *bs, isom_trak_entry_t *trak )
@@ -5037,7 +5095,6 @@ int isom_check_compatibility( lsmash_root_t *root )
                 break;
             case ISOM_BRAND_TYPE_M4A :
             case ISOM_BRAND_TYPE_M4B :
-                root->itunes_audio = 1;
             case ISOM_BRAND_TYPE_M4P :
             case ISOM_BRAND_TYPE_M4V :
                 root->itunes_movie = 1;
@@ -6452,14 +6509,26 @@ static uint64_t isom_update_meta_size( isom_meta_t *meta )
     return meta->size;
 }
 
+static uint64_t isom_update_cprt_size( isom_cprt_t *cprt )
+{
+    if( !cprt )
+        return 0;
+    cprt->size = ISOM_FULLBOX_COMMON_SIZE + 2 + cprt->notice_length;
+    CHECK_LARGESIZE( cprt->size );
+    return cprt->size;
+}
+
 static uint64_t isom_update_udta_size( isom_udta_t *udta_moov, isom_udta_t *udta_trak )
 {
     isom_udta_t *udta = udta_trak ? udta_trak : udta_moov ? udta_moov : NULL;
     if( !udta )
         return 0;
     udta->size = ISOM_BASEBOX_COMMON_SIZE
-        + ( udta_moov ? isom_update_chpl_size( udta->chpl ) : 0 )
+        + (udta_moov ? isom_update_chpl_size( udta->chpl ) : 0)
         + isom_update_meta_size( udta->meta );
+    if( udta->cprt_list )
+        for( lsmash_entry_t *entry = udta->cprt_list->head; entry; entry = entry->next )
+            udta->size += isom_update_cprt_size( (isom_cprt_t *)entry->data );
     CHECK_LARGESIZE( udta->size );
     return udta->size;
 }
@@ -6721,7 +6790,7 @@ uint32_t lsmash_create_track( lsmash_root_t *root, lsmash_media_type media_type 
                 return 0;
             break;
         case ISOM_MEDIA_HANDLER_TYPE_TEXT_TRACK :
-            if( root->qt_compatible || root->itunes_audio )
+            if( root->qt_compatible || root->itunes_movie )
             {
                 if( isom_add_gmhd( trak->mdia->minf )
                  || isom_add_gmin( trak->mdia->minf->gmhd )
@@ -6787,8 +6856,8 @@ int lsmash_set_track_parameters( lsmash_root_t *root, uint32_t track_ID, lsmash_
      * And when a file is read as an MPEG-4 file, these values shall be ignored.
      * If a file complies with other specifications, then those fields may have non-default values
      * as required by those other specifications. */
-    tkhd->alternate_group = root->qt_compatible || root->itunes_audio || root->max_3gpp_version >= 4 ? param->alternate_group : 0;
-    if( root->qt_compatible || root->itunes_audio )
+    tkhd->alternate_group = root->qt_compatible || root->itunes_movie || root->max_3gpp_version >= 4 ? param->alternate_group : 0;
+    if( root->qt_compatible || root->itunes_movie )
     {
         tkhd->layer  = media_type == ISOM_MEDIA_HANDLER_TYPE_VIDEO_TRACK ? param->video_layer  : 0;
         tkhd->volume = media_type == ISOM_MEDIA_HANDLER_TYPE_AUDIO_TRACK ? param->audio_volume : 0;
@@ -7273,7 +7342,7 @@ int lsmash_set_movie_parameters( lsmash_root_t *root, lsmash_movie_parameters_t 
     root->max_chunk_size      = param->max_chunk_size;
     root->max_read_size       = param->max_read_size;
     mvhd->timescale           = param->timescale;
-    if( root->qt_compatible || root->itunes_audio )
+    if( root->qt_compatible || root->itunes_movie )
     {
         mvhd->rate            = param->playback_rate;
         mvhd->volume          = param->playback_volume;
@@ -9581,7 +9650,7 @@ fail:
 
 int lsmash_create_reference_chapter_track( lsmash_root_t *root, uint32_t track_ID, char *file_name )
 {
-    if( !root || (!root->qt_compatible && !root->itunes_audio) || !root->moov || !root->moov->mvhd )
+    if( !root || (!root->qt_compatible && !root->itunes_movie) || !root->moov || !root->moov->mvhd )
         return -1;
     FILE *chapter = NULL;       /* shut up 'uninitialized' warning */
     /* Create a Track Reference Box. */
@@ -9613,12 +9682,12 @@ int lsmash_create_reference_chapter_track( lsmash_root_t *root, uint32_t track_I
     lsmash_media_parameters_t media_param;
     lsmash_initialize_media_parameters( &media_param );
     media_param.timescale = media_timescale;
-    media_param.ISO_language = root->max_3gpp_version >= 6 || root->itunes_audio ? ISOM_LANGUAGE_CODE_UNDEFINED : 0;
+    media_param.ISO_language = root->max_3gpp_version >= 6 || root->itunes_movie ? ISOM_LANGUAGE_CODE_UNDEFINED : 0;
     media_param.MAC_language = 0;
     if( lsmash_set_media_parameters( root, chapter_track_ID, &media_param ) )
         goto fail;
     /* Create a sample description. */
-    uint32_t sample_type = root->max_3gpp_version >= 6 || root->itunes_audio ? ISOM_CODEC_TYPE_TX3G_TEXT : QT_CODEC_TYPE_TEXT_TEXT;
+    uint32_t sample_type = root->max_3gpp_version >= 6 || root->itunes_movie ? ISOM_CODEC_TYPE_TX3G_TEXT : QT_CODEC_TYPE_TEXT_TEXT;
     uint32_t sample_entry = lsmash_add_sample_entry( root, chapter_track_ID, sample_type, NULL );
     if( !sample_entry )
         goto fail;
@@ -9708,6 +9777,222 @@ void lsmash_delete_tyrant_chapter( lsmash_root_t *root )
         return;
     isom_remove_chpl( root->moov->udta->chpl );
     root->moov->udta->chpl = NULL;
+}
+
+int lsmash_set_copyright( lsmash_root_t *root, uint32_t track_ID, uint16_t ISO_language, char *notice )
+{
+    if( !root || !root->moov || !root->isom_compatible || ISO_language < 0x800 || !notice )
+        return -1;
+    isom_udta_t *udta;
+    if( track_ID )
+    {
+        isom_trak_entry_t *trak = isom_get_trak( root, track_ID );
+        if( !trak || (!trak->udta && isom_add_udta( root, track_ID )) )
+            return -1;
+        udta = trak->udta;
+    }
+    else
+    {
+        if( !root->moov->udta && isom_add_udta( root, 0 ) )
+            return -1;
+        udta = root->moov->udta;
+    }
+    assert( udta );
+    if( udta->cprt_list )
+        for( lsmash_entry_t *entry = udta->cprt_list->head; entry; entry = entry->next )
+        {
+            isom_cprt_t *cprt = (isom_cprt_t *)entry->data;
+            if( !cprt || cprt->language == ISO_language )
+                return -1;
+        }
+    if( isom_add_cprt( udta ) )
+        return -1;
+    isom_cprt_t *cprt = (isom_cprt_t *)udta->cprt_list->tail->data;
+    cprt->language = ISO_language;
+    cprt->notice_length = strlen( notice ) + 1;
+    cprt->notice = lsmash_memdup( notice, cprt->notice_length );
+    return 0;
+}
+
+static isom_data_t *isom_add_metadata( lsmash_root_t *root, uint32_t type, char *meaning_string, char *name_string )
+{
+    assert( root && root->moov );
+    if( ((type == ITUNES_METADATA_TYPE_CUSTOM) && (!meaning_string || !meaning_string[0]) )
+     || (!root->moov->udta             && isom_add_udta( root, 0 ))
+     || (!root->moov->udta->meta       && isom_add_meta( (isom_box_t *)root->moov->udta ))
+     || (!root->moov->udta->meta->hdlr && isom_add_hdlr( NULL, root->moov->udta->meta, NULL, ISOM_META_HANDLER_TYPE_ITUNES_METADATA ))
+     || (!root->moov->udta->meta->ilst && isom_add_ilst( root->moov )) )
+        return NULL;
+    isom_ilst_t *ilst = root->moov->udta->meta->ilst;
+    if( isom_add_metaitem( ilst, type ) )
+        return NULL;
+    isom_metaitem_t *metaitem = (isom_metaitem_t *)ilst->item_list->tail->data;
+    if( type == ITUNES_METADATA_TYPE_CUSTOM )
+    {
+        if( isom_add_mean( metaitem ) )
+            goto fail;
+        isom_mean_t *mean = metaitem->mean;
+        mean->meaning_string_length = strlen( meaning_string );    /* No null terminator */
+        mean->meaning_string = lsmash_memdup( meaning_string, mean->meaning_string_length );
+        if( !mean->meaning_string )
+            goto fail;
+        if( name_string && name_string[0] )
+        {
+            if( isom_add_name( metaitem ) )
+                goto fail;
+            isom_name_t *name = metaitem->name;
+            name->name_length = strlen( name_string );    /* No null terminator */
+            name->name = lsmash_memdup( name_string, name->name_length );
+            if( !name->name )
+                goto fail;
+        }
+    }
+    if( isom_add_data( metaitem ) )
+        goto fail;
+    return metaitem->data;
+fail:
+    lsmash_remove_entry_direct( ilst->item_list, ilst->item_list->tail, isom_remove_metaitem );
+    return NULL;
+}
+
+int lsmash_set_itunes_metadata_string( lsmash_root_t *root, lsmash_itunes_metadata_type type, char *value, char *meaning, char *name )
+{
+    static const lsmash_itunes_metadata_type metadata_type_table[] =
+        {
+            ITUNES_METADATA_TYPE_ALBUM_NAME,
+            ITUNES_METADATA_TYPE_ARTIST,
+            ITUNES_METADATA_TYPE_USER_COMMENT,
+            ITUNES_METADATA_TYPE_RELEASE_DATE,
+            ITUNES_METADATA_TYPE_ENCODED_BY,
+            ITUNES_METADATA_TYPE_USER_GENRE,
+            ITUNES_METADATA_TYPE_0XA9_GROUPING,
+            ITUNES_METADATA_TYPE_LYRICS,
+            ITUNES_METADATA_TYPE_TITLE,
+            ITUNES_METADATA_TYPE_TRACK_SUBTITLE,
+            ITUNES_METADATA_TYPE_ENCODING_TOOL,
+            ITUNES_METADATA_TYPE_COMPOSER,
+            ITUNES_METADATA_TYPE_ALBUM_ARTIST,
+            ITUNES_METADATA_TYPE_PODCAST_CATEGORY,
+            ITUNES_METADATA_TYPE_COPYRIGHT,
+            ITUNES_METADATA_TYPE_DESCRIPTION,
+            ITUNES_METADATA_TYPE_GROUPING,
+            ITUNES_METADATA_TYPE_PODCAST_KEYWORD,
+            ITUNES_METADATA_TYPE_LONG_DESCRIPTION,
+            ITUNES_METADATA_TYPE_PURCHASE_DATE,
+            ITUNES_METADATA_TYPE_TV_EPISODE_ID,
+            ITUNES_METADATA_TYPE_TV_NETWORK,
+            ITUNES_METADATA_TYPE_TV_SHOW_NAME,
+            ITUNES_METADATA_TYPE_ITUNES_PURCHASE_ACCOUNT_ID,
+            ITUNES_METADATA_TYPE_CUSTOM,
+            0
+        };
+    int i;
+    for( i = 0; metadata_type_table[i]; i++ )
+        if( type == metadata_type_table[i] )
+            break;
+    if( !metadata_type_table[i] )
+        return -1;
+    uint32_t value_length = strlen( value );
+    if( type == ITUNES_METADATA_TYPE_DESCRIPTION && value_length > 255 )
+        type = ITUNES_METADATA_TYPE_LONG_DESCRIPTION;
+    isom_data_t *data = isom_add_metadata( root, type, meaning, name );
+    if( !data )
+        return -1;
+    data->type_code = 1;
+    data->value_length = value_length;      /* No null terminator */
+    data->value = lsmash_memdup( value, data->value_length );
+    if( !data->value )
+    {
+        isom_ilst_t *ilst = root->moov->udta->meta->ilst;
+        lsmash_remove_entry_direct( ilst->item_list, ilst->item_list->tail, isom_remove_metaitem );
+        return -1;
+    }
+    return 0;
+}
+
+int lsmash_set_itunes_metadata_integer( lsmash_root_t *root, lsmash_itunes_metadata_type type, uint64_t value, char *meaning, char *name )
+{
+    static const struct
+    {
+        lsmash_itunes_metadata_type type;
+        int                         length;
+    } metadata_code_type_table[] =
+        {
+            { ITUNES_METADATA_TYPE_EPISODE_GLOBAL_ID,          1 },
+            { ITUNES_METADATA_TYPE_PREDEFINED_GENRE,           4 },
+            { ITUNES_METADATA_TYPE_CONTENT_RATING,             1 },
+            { ITUNES_METADATA_TYPE_MEDIA_TYPE,                 1 },
+            { ITUNES_METADATA_TYPE_BEATS_PER_MINUTE,           2 },
+            { ITUNES_METADATA_TYPE_TV_EPISODE,                 4 },
+            { ITUNES_METADATA_TYPE_TV_SEASON,                  4 },
+            { ITUNES_METADATA_TYPE_ITUNES_ACCOUNT_TYPE,        1 },
+            { ITUNES_METADATA_TYPE_ITUNES_ARTIST_ID,           4 },
+            { ITUNES_METADATA_TYPE_ITUNES_COMPOSER_ID,         4 },
+            { ITUNES_METADATA_TYPE_ITUNES_CATALOG_ID,          4 },
+            { ITUNES_METADATA_TYPE_ITUNES_TV_GENRE_ID,         4 },
+            { ITUNES_METADATA_TYPE_ITUNES_PLAYLIST_ID,         8 },
+            { ITUNES_METADATA_TYPE_ITUNES_COUNTRY_CODE,        4 },
+            { ITUNES_METADATA_TYPE_CUSTOM,                     8 },
+            { 0 }
+        };
+    int i;
+    for( i = 0; metadata_code_type_table[i].type; i++ )
+        if( type == metadata_code_type_table[i].type )
+            break;
+    if( !metadata_code_type_table[i].type )
+        return -1;
+    isom_data_t *data = isom_add_metadata( root, type, meaning, name );
+    if( !data )
+        return -1;
+    data->type_code = 21;
+    data->value_length = metadata_code_type_table[i].length;
+    uint8_t temp[8];
+    for( i = 0; i < data->value_length; i++ )
+    {
+        int shift = (data->value_length - i - 1) * 8;
+        temp[i] = (value >> shift) & 0xff;
+    }
+    data->value = lsmash_memdup( temp, data->value_length );
+    if( !data->value )
+    {
+        isom_ilst_t *ilst = root->moov->udta->meta->ilst;
+        lsmash_remove_entry_direct( ilst->item_list, ilst->item_list->tail, isom_remove_metaitem );
+        return -1;
+    }
+    return 0;
+}
+
+int lsmash_set_itunes_metadata_boolean( lsmash_root_t *root, lsmash_itunes_metadata_type type, lsmash_boolean_t value, char *meaning, char *name )
+{
+    static const lsmash_itunes_metadata_type metadata_type_table[] =
+        {
+            ITUNES_METADATA_TYPE_DISC_COMPILATION,
+            ITUNES_METADATA_TYPE_HIGH_DEFINITION_VIDEO,
+            ITUNES_METADATA_TYPE_PODCAST,
+            ITUNES_METADATA_TYPE_GAPLESS_PLAYBACK,
+            ITUNES_METADATA_TYPE_CUSTOM,
+            0
+        };
+    int i;
+    for( i = 0; metadata_type_table[i]; i++ )
+        if( type == metadata_type_table[i] )
+            break;
+    if( !metadata_type_table[i] )
+        return -1;
+    isom_data_t *data = isom_add_metadata( root, type, meaning, name );
+    if( !data )
+        return -1;
+    data->type_code = 21;
+    data->value_length = 1;
+    uint8_t temp = (uint8_t)value;
+    data->value = lsmash_memdup( &temp, 1 );
+    if( !data->value )
+    {
+        isom_ilst_t *ilst = root->moov->udta->meta->ilst;
+        lsmash_remove_entry_direct( ilst->item_list, ilst->item_list->tail, isom_remove_metaitem );
+        return -1;
+    }
+    return 0;
 }
 
 #ifdef LSMASH_DEMUXER_ENABLED
