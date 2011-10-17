@@ -554,9 +554,9 @@ static int set_param_audio( mp4_hnd_t* p_mp4, uint64_t i_media_timescale, lsmash
     lsmash_initialize_media_parameters( &media_param );
     media_param.timescale = p_audio->summary->frequency;
     media_param.ISO_language = lsmash_pack_iso_language( p_mp4->psz_language );
-    media_param.media_handler_name = "X264 Sound Media Handler";
+    media_param.media_handler_name = "L-SMASH Sound Media Handler";
     if( p_mp4->b_brand_qt )
-        media_param.data_handler_name = "X264 URL Data Handler";
+        media_param.data_handler_name = "L-SMASH URL Data Handler";
     MP4_FAIL_IF_ERR( lsmash_set_media_parameters( p_mp4->p_root, p_audio->i_track, &media_param ),
                      "failed to set media parameters for audio.\n" );
 
@@ -973,9 +973,9 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     lsmash_initialize_media_parameters( &media_param );
     media_param.timescale = i_media_timescale;
     media_param.ISO_language = lsmash_pack_iso_language( p_mp4->psz_language );
-    media_param.media_handler_name = "X264 Video Media Handler";
+    media_param.media_handler_name = "L-SMASH Video Media Handler";
     if( p_mp4->b_brand_qt )
-        media_param.data_handler_name = "X264 URL Data Handler";
+        media_param.data_handler_name = "L-SMASH URL Data Handler";
     if( p_mp4->major_brand != ISOM_BRAND_TYPE_QT )
     {
         media_param.roll_grouping = p_param->b_intra_refresh;
