@@ -186,6 +186,18 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     h->info.samplesize      = h->info.chansize * h->info.channels;
     h->info.framesize       = h->info.framelen * h->info.samplesize;
 
+#if 0
+    /* Set the number of priming samples. */
+    if( !strcmp( codec->name, "libvo_aacenc" ) )
+        h->info.priming = 1600;
+    else if( !strcmp( codec->name, "libfaac" ) || !strcmp( codec->name, "aac" ) )
+        h->info.priming = 1024;
+    else if( !strcmp( codec->name, "libmp3lame" ) )
+        h->info.priming = 576 + is_vbr * 1152;
+    if( !strcmp( codec->name, "ac3" ) )
+        h->info.priming = 256;
+#endif
+
     if( ISCODEC( alac ) )
         h->buf_size = 2 * (8 + h->info.framesize);
     else if( IS_LPCM_CODEC_ID( h->ctx->codec->id ) )

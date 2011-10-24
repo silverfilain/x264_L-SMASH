@@ -111,6 +111,7 @@ static int lsmash_init( hnd_t *handle, const char *opt_str )
     h->info.depth          = h->summary->bit_depth;
     h->info.timebase       = (timebase_t){ 1, h->summary->frequency };
     h->info.last_delta     = h->info.framelen;
+    h->info.priming        = 0;     /* No one can detect this. */
 
     if( h->summary->exdata_length > 0 )
     {

@@ -86,6 +86,7 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     h->info.depth      = 16;
     h->info.timebase   = (timebase_t) { 1, h->info.samplerate };
     h->info.last_delta = h->info.framelen;
+    h->info.priming    = 576 + is_vbr * 1152;
 
     h->bufsize = 125 * h->info.framelen / 100 + 7200; // from lame.h, largest frame that the encoding functions may return
     h->buffer = malloc( h->bufsize );

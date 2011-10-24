@@ -87,6 +87,7 @@ typedef struct
     hnd_t encoder;
     int has_sbr;
     int b_copy;
+    int b_mdct;
 #else
     mp4sys_importer_t* p_importer;
     uint32_t last_delta;
@@ -356,16 +357,26 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
                 else
                     p_audio->has_sbr = 0; // SBR presence isn't specified, so assume implicit signaling
                 p_mp4->b_brand_m4a = 1;
+                p_audio->b_mdct = 1;
             }
-            if( !strcmp( info->codec_name, "als" ) )
+            else if( !strcmp( info->codec_name, "als" ) )
                 p_audio->codec_type = ISOM_CODEC_TYPE_MP4A_AUDIO;
             else if( ( !strcmp( info->codec_name, "mp3" ) || !strcmp( info->codec_name, "mp2" ) || !strcmp( info->codec_name, "mp1" ) )
                      && info->samplerate >= 16000 ) /* freq <16khz is MPEG-2.5. */
+            {
                 p_audio->codec_type = ISOM_CODEC_TYPE_MP4A_AUDIO;
+                p_audio->b_mdct = !strcmp( info->codec_name, "mp3" );
+            }
             else if( !strcmp( info->codec_name, "ac3" ) )
+            {
                 p_audio->codec_type = ISOM_CODEC_TYPE_AC_3_AUDIO;
+                p_audio->b_mdct = 1;
+            }
             else if( !strcmp( info->codec_name, "eac3" ) )
+            {
                 p_audio->codec_type = ISOM_CODEC_TYPE_EC_3_AUDIO;
+                p_audio->b_mdct = 1;
+            }
             else if( !strcmp( info->codec_name, "alac" ) )
             {
                 p_audio->codec_type = ISOM_CODEC_TYPE_ALAC_AUDIO;
@@ -381,6 +392,7 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
                     p_audio->has_sbr = aacinfo->has_sbr;
                 else
                     p_audio->has_sbr = 0; // SBR presence isn't specified, so assume implicit signaling
+                p_audio->b_mdct = 1;
             }
             else if( p_audio->b_copy )
                 break;      /* We haven't supported LPCM copying yet. */
@@ -556,6 +568,7 @@ static int set_param_audio( mp4_hnd_t* p_mp4, uint64_t i_media_timescale, lsmash
     media_param.timescale = p_audio->summary->frequency;
     media_param.ISO_language = lsmash_pack_iso_language( p_mp4->psz_language );
     media_param.media_handler_name = "L-SMASH Sound Media Handler";
+    media_param.roll_grouping = !!p_audio->info->priming;
     if( p_mp4->b_brand_qt )
         media_param.data_handler_name = "L-SMASH URL Data Handler";
     MP4_FAIL_IF_ERR( lsmash_set_media_parameters( p_mp4->p_root, p_audio->i_track, &media_param ),
@@ -614,6 +627,7 @@ static int write_audio_frames( mp4_hnd_t *p_mp4, double video_dts, int finish )
                          "failed to create a audio sample data.\n" );
         memcpy( p_sample->data, frame->data, frame->size );
         x264_audio_free_frame( p_audio->encoder, frame );
+        p_sample->prop.pre_roll.distance = p_audio->b_mdct;
 #else
         /* FIXME: mp4sys_importer_get_access_unit() returns 1 if there're any changes in stream's properties.
            If you want to support them, you have to retrieve summary again, and make some operation accordingly. */
@@ -645,7 +659,8 @@ static int write_audio_frames( mp4_hnd_t *p_mp4, double video_dts, int finish )
 static int close_file_audio( mp4_hnd_t* p_mp4, double actual_duration )
 {
     mp4_audio_hnd_t *p_audio = p_mp4->audio_hnd;
-    MP4_LOG_IF_ERR( ( write_audio_frames( p_mp4, actual_duration / p_mp4->i_movie_timescale, 0 ) || // FIXME: I wonder why is this needed?
+    double media_duration = actual_duration / p_mp4->i_movie_timescale + (double)p_audio->info->priming / p_audio->summary->frequency;
+    MP4_LOG_IF_ERR( ( write_audio_frames( p_mp4, media_duration, 0 ) || // FIXME: I wonder why is this needed?
                       write_audio_frames( p_mp4, 0, 1 ) ),
                     "failed to flush audio frame(s).\n" );
     uint32_t last_delta;
@@ -662,12 +677,12 @@ static int close_file_audio( mp4_hnd_t* p_mp4, double actual_duration )
 #endif
     MP4_LOG_IF_ERR( lsmash_flush_pooled_samples( p_mp4->p_root, p_audio->i_track, last_delta ),
                     "failed to flush the rest of audio samples.\n" );
-    actual_duration = ((p_audio->i_numframe - 1) * p_audio->summary->samples_in_frame) + last_delta;
+    actual_duration = ((p_audio->i_numframe - 1) * p_audio->summary->samples_in_frame) + last_delta - p_audio->info->priming;
     if( actual_duration )
         actual_duration *= (double)p_mp4->i_movie_timescale / p_audio->summary->frequency;
     if( !p_mp4->b_fragments )
     {
-        MP4_LOG_IF_ERR( lsmash_create_explicit_timeline_map( p_mp4->p_root, p_audio->i_track, actual_duration, 0, ISOM_EDIT_MODE_NORMAL ),
+        MP4_LOG_IF_ERR( lsmash_create_explicit_timeline_map( p_mp4->p_root, p_audio->i_track, actual_duration, p_audio->info->priming, ISOM_EDIT_MODE_NORMAL ),
                         "failed to set timeline map for audio.\n" );
     }
     else if( !p_mp4->b_stdout )
@@ -872,7 +887,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     FAIL_IF_ERR( i_media_timescale > UINT32_MAX, "mp4", "MP4 media timescale %"PRIu64" exceeds maximum\n", i_media_timescale );
 
     /* Select brands. */
-    lsmash_brand_type brands[10] = { 0 };
+    lsmash_brand_type brands[11] = { 0 };
     uint32_t minor_version = 0;
     uint32_t brand_count = 0;
     if( p_mp4->b_brand_qt )
@@ -899,13 +914,15 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
             brands[brand_count++] = ISOM_BRAND_TYPE_M4A;
         }
         brands[brand_count++] = ISOM_BRAND_TYPE_ISOM;
-        if( p_mp4->b_use_recovery )
+        if( p_mp4->audio_hnd || p_mp4->b_use_recovery )
         {
-            brands[brand_count++] = ISOM_BRAND_TYPE_AVC1;   /* sdtp/sgpd/sbgp/random access recovery point grouping */
+            brands[brand_count++] = ISOM_BRAND_TYPE_AVC1;   /* sdtp, sgpd, sbgp and visual roll recovery grouping */
+            if( p_mp4->audio_hnd )
+                brands[brand_count++] = ISOM_BRAND_TYPE_ISO2;   /* audio roll recovery grouping */
             if( p_param->b_open_gop )
             {
-                brands[brand_count++] = ISOM_BRAND_TYPE_ISO6;   /* cslg/random access point grouping */
-                brands[brand_count++] = ISOM_BRAND_TYPE_QT;     /* tapt/cslg/stps/sdtp */
+                brands[brand_count++] = ISOM_BRAND_TYPE_ISO6;   /* cslg and visual random access grouping */
+                brands[brand_count++] = ISOM_BRAND_TYPE_QT;     /* tapt, cslg, stps and sdtp */
                 p_mp4->b_brand_qt = 1;
             }
         }

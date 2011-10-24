@@ -604,6 +604,7 @@ static hnd_t qtaac_init( hnd_t filter_chain, const char *opt_str )
     h->info.framesize      = h->info.framelen * h->info.samplesize;
     h->info.depth          = 32;
     h->info.last_delta     = h->info.framelen;
+    h->info.priming        = 2112;
 
     audio_aac_info_t *aacinfo = malloc( sizeof( audio_aac_info_t ) );
     aacinfo->has_sbr          = !!h->config.he_flag;
