@@ -195,6 +195,8 @@ static audio_packet_t *get_next_au( hnd_t handle )
 
     if( ret || !out->size )
     {
+        if( !out->size )
+            h->info.last_delta = mp4sys_importer_get_last_delta( h->importer, 1 );
         x264_af_free_packet( out );
         return NULL;
     }

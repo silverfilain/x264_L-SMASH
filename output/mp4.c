@@ -89,6 +89,7 @@ typedef struct
     int b_copy;
 #else
     mp4sys_importer_t* p_importer;
+    uint32_t last_delta;
 #endif
 } mp4_audio_hnd_t;
 #endif /* #if HAVE_ANY_AUDIO */
@@ -622,7 +623,13 @@ static int write_audio_frames( mp4_hnd_t *p_mp4, double video_dts, int finish )
         MP4_FAIL_IF_ERR( mp4sys_importer_get_access_unit( p_audio->p_importer, 1, p_sample ),
                          "failed to retrieve frame data from importer.\n" );
         if( p_sample->length == 0 )
+        {
+            p_audio->last_delta = mp4sys_importer_get_last_delta( p_audio->p_importer, 1 );
+            lsmash_delete_sample( p_sample );
             break; /* end of stream */
+        }
+        else
+            p_audio->last_delta = p_audio->summary->samples_in_frame;
 #endif
         p_sample->dts = p_sample->cts = audio_timestamp;
         p_sample->prop.random_access_type = ISOM_SAMPLE_RANDOM_ACCESS_TYPE_SYNC;
@@ -651,7 +658,7 @@ static int close_file_audio( mp4_hnd_t* p_mp4, double actual_duration )
 #if HAVE_AUDIO
         last_delta = p_audio->info->last_delta;
 #else
-        last_delta = p_audio->summary->samples_in_frame;
+        last_delta = p_audio->last_delta;
 #endif
     MP4_LOG_IF_ERR( lsmash_flush_pooled_samples( p_mp4->p_root, p_audio->i_track, last_delta ),
                     "failed to flush the rest of audio samples.\n" );
@@ -1094,12 +1101,12 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
                                    ? ISOM_SAMPLE_IS_NOT_LEADING : ISOM_SAMPLE_IS_UNDECODABLE_LEADING;
             if( p_sample->prop.independent == ISOM_SAMPLE_IS_INDEPENDENT )
                 p_mp4->i_last_intra_cts = p_sample->cts;
-            p_sample->prop.recovery.identifier = p_picture->i_frame_num % p_mp4->i_max_frame_num;
+            p_sample->prop.post_roll.identifier = p_picture->i_frame_num % p_mp4->i_max_frame_num;
             if( p_picture->b_keyframe && p_picture->i_type != X264_TYPE_IDR )
             {
                 /* A picture with Recovery Point SEI */
                 p_sample->prop.random_access_type = ISOM_SAMPLE_RANDOM_ACCESS_TYPE_RECOVERY;
-                p_sample->prop.recovery.complete = (p_sample->prop.recovery.identifier + p_mp4->i_recovery_frame_cnt) % p_mp4->i_max_frame_num;
+                p_sample->prop.post_roll.complete = (p_sample->prop.post_roll.identifier + p_mp4->i_recovery_frame_cnt) % p_mp4->i_max_frame_num;
             }
         }
         else if( p_picture->i_type == X264_TYPE_I || p_picture->i_type == X264_TYPE_P || p_picture->i_type == X264_TYPE_BREF )
