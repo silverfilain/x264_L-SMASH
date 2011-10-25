@@ -42,6 +42,7 @@ typedef struct
     int mux_3g2;
     char *chapter;
     char *language;
+    uint32_t priming;
 } cli_output_opt_t;
 
 typedef struct

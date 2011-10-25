@@ -297,7 +297,7 @@ static void remove_mp4_hnd( hnd_t handle )
 }
 
 #if HAVE_AUDIO
-static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio_parameters )
+static int audio_init( hnd_t handle, cli_output_opt_t *opt, hnd_t filters, char *audio_enc, char *audio_parameters )
 {
     if( !strcmp( audio_enc, "none" ) || !filters )
         return 0;
@@ -331,6 +331,8 @@ static int audio_init( hnd_t handle, hnd_t filters, char *audio_enc, char *audio
     mp4_audio_hnd_t *p_audio = p_mp4->audio_hnd = calloc( 1, sizeof( mp4_audio_hnd_t ) );
     audio_info_t *info = p_audio->info = x264_audio_encoder_info( henc );
     p_audio->b_copy = copy;
+    if( p_audio->b_copy )
+        info->priming = opt->priming;
 
     p_audio->summary = (lsmash_audio_summary_t *)lsmash_create_summary( MP4SYS_STREAM_TYPE_AudioStream );
     if( !p_audio->summary )
@@ -851,7 +853,7 @@ static int open_file( char *psz_filename, hnd_t *p_handle, cli_output_opt_t *opt
 
 #if HAVE_ANY_AUDIO
 #if HAVE_AUDIO
-    MP4_FAIL_IF_ERR_EX( audio_init( p_mp4, audio_filters, audio_enc, audio_params ) < 0, "unable to init audio output.\n" );
+    MP4_FAIL_IF_ERR_EX( audio_init( p_mp4, opt, audio_filters, audio_enc, audio_params ) < 0, "unable to init audio output.\n" );
 #else
     mp4_audio_hnd_t *p_audio = p_mp4->audio_hnd = (mp4_audio_hnd_t *)malloc( sizeof(mp4_audio_hnd_t) );
     MP4_FAIL_IF_ERR_EX( !p_audio, "failed to allocate memory for audio muxing information.\n" );

@@ -870,6 +870,7 @@ static void help( x264_param_t *defaults, int longhelp )
     H2( "      --no-remux              Inhibit auto-remuxing for progressive download\n" );
     H2( "      --force-display-size    Force display region size for video\n" );
     H2( "      --fragments             Enable movie fragments structure\n" );
+    H2( "      --priming <integer>     Specify the number of priming samples for the copied audio\n" );
     H0( "\n" );
     H0( "Filtering:\n" );
     H0( "\n" );
@@ -929,7 +930,8 @@ typedef enum
     OPT_NO_CONTAINER_SAR,
     OPT_NO_REMUX,
     OPT_FORCE_DISPLAY_SIZE,
-    OPT_FRAGMENTS
+    OPT_FRAGMENTS,
+    OPT_PRIMING
 } OptionsOPT;
 
 static char short_options[] = "8A:B:b:f:hI:i:m:o:p:q:r:t:Vvw";
@@ -1104,6 +1106,7 @@ static struct option long_options[] =
     { "no-remux",    no_argument, NULL, OPT_NO_REMUX },
     { "force-display-size", required_argument, NULL, OPT_FORCE_DISPLAY_SIZE },
     { "fragments",         no_argument, NULL, OPT_FRAGMENTS },
+    { "priming",     required_argument, NULL, OPT_PRIMING },
     {0, 0, 0, 0}
 };
 
@@ -1605,6 +1608,9 @@ static int parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
                 break;
             case OPT_FRAGMENTS:
                 output_opt.fragments = 1;
+                break;
+            case OPT_PRIMING:
+                output_opt.priming = atoi( optarg );
                 break;
             default:
 generic_option:
