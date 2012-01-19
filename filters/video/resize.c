@@ -32,9 +32,10 @@ cli_vid_filter_t resize_filter;
 static int full_check( video_info_t *info, x264_param_t *param )
 {
     int required = 0;
-    required |= info->csp    != param->i_csp;
-    required |= info->width  != param->i_width;
-    required |= info->height != param->i_height;
+    required |= info->csp       != param->i_csp;
+    required |= info->width     != param->i_width;
+    required |= info->height    != param->i_height;
+    required |= info->fullrange != param->vui.b_fullrange;
     return required;
 }
 
@@ -44,11 +45,16 @@ static int full_check( video_info_t *info, x264_param_t *param )
 #include <libavutil/opt.h>
 #include <libavutil/pixdesc.h>
 
+#ifndef PIX_FMT_BGRA64
+#define PIX_FMT_BGRA64 PIX_FMT_NONE
+#endif
+
 typedef struct
 {
     int width;
     int height;
     int pix_fmt;
+    int range;
 } frame_prop_t;
 
 typedef struct
@@ -59,6 +65,7 @@ typedef struct
     cli_pic_t buffer;
     int buffer_allocated;
     int dst_csp;
+    int input_range;
     struct SwsContext *ctx;
     uint32_t ctx_flags;
     /* state of swapping chroma planes pre and post resize */
@@ -142,62 +149,63 @@ static int convert_csp_to_pix_fmt( int csp )
         case X264_CSP_YV24: /* specially handled via swapping chroma */
         case X264_CSP_I444: return csp&X264_CSP_HIGH_DEPTH ? PIX_FMT_YUV444P16 : PIX_FMT_YUV444P;
         case X264_CSP_RGB:  return csp&X264_CSP_HIGH_DEPTH ? PIX_FMT_RGB48     : PIX_FMT_RGB24;
-        /* the next 3 csps have no equivalent 16bit depth in swscale */
+        case X264_CSP_BGR:  return csp&X264_CSP_HIGH_DEPTH ? PIX_FMT_BGR48     : PIX_FMT_BGR24;
+        case X264_CSP_BGRA: return csp&X264_CSP_HIGH_DEPTH ? PIX_FMT_BGRA64    : PIX_FMT_BGRA;
+        /* the next csp has no equivalent 16bit depth in swscale */
         case X264_CSP_NV12: return csp&X264_CSP_HIGH_DEPTH ? PIX_FMT_NONE      : PIX_FMT_NV12;
-        case X264_CSP_BGR:  return csp&X264_CSP_HIGH_DEPTH ? PIX_FMT_NONE      : PIX_FMT_BGR24;
-        case X264_CSP_BGRA: return csp&X264_CSP_HIGH_DEPTH ? PIX_FMT_NONE      : PIX_FMT_BGRA;
         default:            return PIX_FMT_NONE;
     }
+}
+
+static int pix_number_of_planes( const AVPixFmtDescriptor *pix_desc )
+{
+    int num_planes = 0;
+    for( int i = 0; i < pix_desc->nb_components; i++ )
+    {
+        int plane_plus1 = pix_desc->comp[i].plane + 1;
+        num_planes = X264_MAX( plane_plus1, num_planes );
+    }
+    return num_planes;
 }
 
 static int pick_closest_supported_csp( int csp )
 {
     int pix_fmt = convert_csp_to_pix_fmt( csp );
-    switch( pix_fmt )
+    // first determine the base csp
+    int ret = X264_CSP_NONE;
+    const AVPixFmtDescriptor *pix_desc = av_pix_fmt_descriptors+pix_fmt;
+    if( (unsigned)pix_fmt >= PIX_FMT_NB || !pix_desc->name )
+        return ret;
+
+    const char *pix_fmt_name = pix_desc->name;
+    int is_rgb = pix_desc->flags & (PIX_FMT_RGB | PIX_FMT_PAL);
+    int is_bgr = !!strstr( pix_fmt_name, "bgr" );
+    if( is_bgr || is_rgb )
     {
-        case PIX_FMT_YUV420P16LE:
-        case PIX_FMT_YUV420P16BE:
-            return X264_CSP_I420 | X264_CSP_HIGH_DEPTH;
-        case PIX_FMT_YUV422P:
-        case PIX_FMT_YUYV422:
-        case PIX_FMT_UYVY422:
-        case PIX_FMT_YUVJ422P:
-            return X264_CSP_I422;
-        case PIX_FMT_YUV422P16LE:
-        case PIX_FMT_YUV422P16BE:
-            return X264_CSP_I422 | X264_CSP_HIGH_DEPTH;
-        case PIX_FMT_YUV444P:
-        case PIX_FMT_YUVJ444P:
-            return X264_CSP_I444;
-        case PIX_FMT_YUV444P16LE:
-        case PIX_FMT_YUV444P16BE:
-            return X264_CSP_I444 | X264_CSP_HIGH_DEPTH;
-        case PIX_FMT_RGB24:
-        case PIX_FMT_RGB565BE:
-        case PIX_FMT_RGB565LE:
-        case PIX_FMT_RGB555BE:
-        case PIX_FMT_RGB555LE:
-            return X264_CSP_RGB;
-        case PIX_FMT_RGB48BE:
-        case PIX_FMT_RGB48LE:
-            return X264_CSP_RGB | X264_CSP_HIGH_DEPTH;
-        case PIX_FMT_BGR24:
-        case PIX_FMT_BGR565BE:
-        case PIX_FMT_BGR565LE:
-        case PIX_FMT_BGR555BE:
-        case PIX_FMT_BGR555LE:
-            return X264_CSP_BGR;
-        case PIX_FMT_ARGB:
-        case PIX_FMT_RGBA:
-        case PIX_FMT_ABGR:
-        case PIX_FMT_BGRA:
-            return X264_CSP_BGRA;
-        case PIX_FMT_NV12:
-        case PIX_FMT_NV21:
-             return X264_CSP_NV12;
-        default:
-            return X264_CSP_I420;
+        if( pix_desc->nb_components == 4 ) // has alpha
+            ret = X264_CSP_BGRA;
+        else if( is_bgr )
+            ret = X264_CSP_BGR;
+        else
+            ret = X264_CSP_RGB;
     }
+    else
+    {
+        // yuv-based
+        if( pix_desc->nb_components == 1 || pix_desc->nb_components == 2 ) // no chroma
+            ret = X264_CSP_I420;
+        else if( pix_desc->log2_chroma_w && pix_desc->log2_chroma_h ) // reduced chroma width & height
+            ret = (pix_desc->nb_components == pix_number_of_planes( pix_desc )) ? X264_CSP_I420 : X264_CSP_NV12;
+        else if( pix_desc->log2_chroma_w ) // reduced chroma width only
+            ret = (pix_desc->nb_components == pix_number_of_planes( pix_desc )) ? X264_CSP_I422 : X264_CSP_NV16;
+        else
+            ret = X264_CSP_I444;
+    }
+    // now determine high depth
+    for( int i = 0; i < pix_desc->nb_components; i++ )
+        if( pix_desc->comp[i].depth_minus1 >= 8 )
+            ret |= X264_CSP_HIGH_DEPTH;
+    return ret;
 }
 
 static int handle_opts( const char **optlist, char **opts, video_info_t *info, resizer_hnd_t *h )
@@ -343,57 +351,29 @@ static int handle_opts( const char **optlist, char **opts, video_info_t *info, r
     return 0;
 }
 
-static int handle_jpeg( int *format )
-{
-    switch( *format )
-    {
-        case PIX_FMT_YUVJ420P:
-            *format = PIX_FMT_YUV420P;
-            return 1;
-        case PIX_FMT_YUVJ422P:
-            *format = PIX_FMT_YUV422P;
-            return 1;
-        case PIX_FMT_YUVJ444P:
-            *format = PIX_FMT_YUV444P;
-            return 1;
-        case PIX_FMT_YUVJ440P:
-            *format = PIX_FMT_YUV440P;
-            return 1;
-        default:
-            return 0;
-    }
-}
-
 static int x264_init_sws_context( resizer_hnd_t *h )
 {
+    if( h->ctx )
+        sws_freeContext( h->ctx );
+    h->ctx = sws_alloc_context();
     if( !h->ctx )
-    {
-        h->ctx = sws_alloc_context();
-        if( !h->ctx )
-            return -1;
+        return -1;
 
-        /* set flags that will not change */
-        int dst_format = h->dst.pix_fmt;
-        int dst_range  = handle_jpeg( &dst_format );
-        av_set_int( h->ctx, "sws_flags",  h->ctx_flags );
-        av_set_int( h->ctx, "dstw",       h->dst.width );
-        av_set_int( h->ctx, "dsth",       h->dst.height );
-        av_set_int( h->ctx, "dst_format", dst_format );
-        av_set_int( h->ctx, "dst_range",  dst_range ); /* FIXME: use the correct full range value */
-    }
+    av_opt_set_int( h->ctx, "sws_flags",  h->ctx_flags,   0 );
+    av_opt_set_int( h->ctx, "dstw",       h->dst.width,   0 );
+    av_opt_set_int( h->ctx, "dsth",       h->dst.height,  0 );
+    av_opt_set_int( h->ctx, "dst_format", h->dst.pix_fmt, 0 );
+    av_opt_set_int( h->ctx, "dst_range",  h->dst.range,   0 );
 
-    int src_format = h->scale.pix_fmt;
-    int src_range  = handle_jpeg( &src_format );
-    av_set_int( h->ctx, "srcw",       h->scale.width );
-    av_set_int( h->ctx, "srch",       h->scale.height );
-    av_set_int( h->ctx, "src_format", src_format );
-    av_set_int( h->ctx, "src_range",  src_range ); /* FIXME: use the correct full range value */
+    av_opt_set_int( h->ctx, "srcw",       h->scale.width,   0 );
+    av_opt_set_int( h->ctx, "srch",       h->scale.height,  0 );
+    av_opt_set_int( h->ctx, "src_format", h->scale.pix_fmt, 0 );
+    av_opt_set_int( h->ctx, "src_range",  h->scale.range,   0 );
 
-    /* FIXME: use the correct full range values
-     * FIXME: use the correct matrix coefficients (only YUV -> RGB conversions are supported) */
+    /* FIXME: use the correct matrix coefficients (only YUV -> RGB conversions are supported) */
     sws_setColorspaceDetails( h->ctx,
-                              sws_getCoefficients( SWS_CS_DEFAULT ), src_range,
-                              sws_getCoefficients( SWS_CS_DEFAULT ), av_get_int( h->ctx, "dst_range", NULL ),
+                              sws_getCoefficients( SWS_CS_DEFAULT ), h->scale.range,
+                              sws_getCoefficients( SWS_CS_DEFAULT ), h->dst.range,
                               0, 1<<16, 1<<16 );
 
     return sws_init_context( h->ctx, NULL, NULL ) < 0;
@@ -401,7 +381,7 @@ static int x264_init_sws_context( resizer_hnd_t *h )
 
 static int check_resizer( resizer_hnd_t *h, cli_pic_t *in )
 {
-    frame_prop_t input_prop = { in->img.width, in->img.height, convert_csp_to_pix_fmt( in->img.csp ) };
+    frame_prop_t input_prop = { in->img.width, in->img.height, convert_csp_to_pix_fmt( in->img.csp ), h->input_range };
     if( !memcmp( &input_prop, &h->scale, sizeof(frame_prop_t) ) )
         return 0;
     /* also warn if the resizer was initialized after the first frame */
@@ -440,16 +420,14 @@ static int init( hnd_t *handle, cli_vid_filter_t *filter, video_info_t *info, x2
         h->dst_csp    = info->csp;
         h->dst.width  = info->width;
         h->dst.height = info->height;
+        h->dst.range  = info->fullrange; // maintain input range
         if( !strcmp( opt_string, "normcsp" ) )
         {
             /* only in normalization scenarios is the input capable of changing properties */
             h->variable_input = 1;
             h->dst_csp = pick_closest_supported_csp( info->csp );
-            /* now fix the catch-all i420 choice if it does not allow for the current input resolution dimensions. */
-            if( h->dst_csp == X264_CSP_I420 && info->width&1 )
-                h->dst_csp = X264_CSP_I444;
-            if( h->dst_csp == X264_CSP_I420 && info->height&1 )
-                h->dst_csp = X264_CSP_I422;
+            FAIL_IF_ERROR( h->dst_csp == X264_CSP_NONE,
+                           "filter get invalid input pixel format %d (colorspace %d)\n", convert_csp_to_pix_fmt( info->csp ), info->csp )
         }
         else if( handle_opts( optlist, opts, info, h ) )
             return -1;
@@ -459,6 +437,7 @@ static int init( hnd_t *handle, cli_vid_filter_t *filter, video_info_t *info, x2
         h->dst_csp    = param->i_csp;
         h->dst.width  = param->i_width;
         h->dst.height = param->i_height;
+        h->dst.range  = param->vui.b_fullrange; // change to libx264's range
     }
     h->ctx_flags = convert_method_to_flag( x264_otos( x264_get_option( optlist[5], opts ), "" ) );
     x264_free_string_array( opts );
@@ -467,6 +446,7 @@ static int init( hnd_t *handle, cli_vid_filter_t *filter, video_info_t *info, x2
         h->ctx_flags |= SWS_FULL_CHR_H_INT | SWS_FULL_CHR_H_INP | SWS_ACCURATE_RND;
     h->dst.pix_fmt = convert_csp_to_pix_fmt( h->dst_csp );
     h->scale = h->dst;
+    h->input_range = info->fullrange;
 
     /* swap chroma planes if YV12/YV16/YV24 is involved, as libswscale works with I420/I422/I444 */
     int src_csp = info->csp & (X264_CSP_MASK | X264_CSP_OTHER);
@@ -500,6 +480,9 @@ static int init( hnd_t *handle, cli_vid_filter_t *filter, video_info_t *info, x2
     if( h->dst.pix_fmt != src_pix_fmt )
         x264_cli_log( NAME, X264_LOG_WARNING, "converting from %s to %s\n",
                       av_get_pix_fmt_name( src_pix_fmt ), av_get_pix_fmt_name( h->dst.pix_fmt ) );
+    else if( h->dst.range != h->input_range )
+        x264_cli_log( NAME, X264_LOG_WARNING, "converting range from %s to %s\n",
+                      h->input_range ? "PC" : "TV", h->dst.range ? "PC" : "TV" );
     h->dst_csp |= info->csp & X264_CSP_VFLIP; // preserve vflip
 
     /* if the input is not variable, initialize the context */
@@ -511,9 +494,10 @@ static int init( hnd_t *handle, cli_vid_filter_t *filter, video_info_t *info, x2
     }
 
     /* finished initing, overwrite values */
-    info->csp    = h->dst_csp;
-    info->width  = h->dst.width;
-    info->height = h->dst.height;
+    info->csp       = h->dst_csp;
+    info->width     = h->dst.width;
+    info->height    = h->dst.height;
+    info->fullrange = h->dst.range;
 
     h->prev_filter = *filter;
     h->prev_hnd = *handle;

@@ -153,7 +153,7 @@ codecnotfound:
     AF_LOG_ERR( h, "no decoder found for track %d\n", h->track );
 fail:
     if( h && h->lavf )
-        av_close_input_file( h->lavf );
+        avformat_close_input( &h->lavf );
     if( h )
         free( h );
     *handle = NULL;
@@ -552,7 +552,7 @@ static void lavf_close( hnd_t handle )
     if( h->pkt )
         free_avpacket( h->pkt );
     avcodec_close( h->ctx );
-    av_close_input_file( h->lavf );
+    avformat_close_input( &h->lavf );
     if( h->bsfs )
         av_bitstream_filter_close( h->bsfs );
     free( h );
