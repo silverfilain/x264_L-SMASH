@@ -1,11 +1,12 @@
 ;*****************************************************************************
 ;* x86inc.asm: x264asm abstraction layer
 ;*****************************************************************************
-;* Copyright (C) 2005-2011 x264 project
+;* Copyright (C) 2005-2012 x264 project
 ;*
 ;* Authors: Loren Merritt <lorenm@u.washington.edu>
 ;*          Anton Mitrofanov <BugMaster@narod.ru>
 ;*          Jason Garrett-Glaser <darkshikari@gmail.com>
+;*          Henrik Gramner <hengar-6@student.ltu.se>
 ;*
 ;* Permission to use, copy, modify, and/or distribute this software for any
 ;* purpose with or without fee is hereby granted, provided that the above
@@ -91,6 +92,9 @@
     default rel
 %endif
 
+; Always use long nops (reduces 0x90 spam in disassembly on x86_32)
+CPU intelnop
+
 ; Macros to eliminate most code duplication between x86_32 and x86_64:
 ; Currently this works only for leaf functions which load all their arguments
 ; into registers at the start, and make no other use of the stack. Luckily that
@@ -124,18 +128,20 @@
 ; rNm is the original location of arg N (a register or on the stack), dword
 ; rNmp is native size
 
-%macro DECLARE_REG 6
+%macro DECLARE_REG 5-6
     %define r%1q %2
     %define r%1d %3
     %define r%1w %4
     %define r%1b %5
-    %define r%1m %6
-    %ifid %6 ; i.e. it's a register
+    %if %0 == 5
+        %define r%1m  %3
         %define r%1mp %2
     %elifdef ARCH_X86_64 ; memory
-        %define r%1mp qword %6
+        %define r%1m [rsp + stack_offset + %6]
+        %define r%1mp qword r %+ %1m
     %else
-        %define r%1mp dword %6
+        %define r%1m [esp + stack_offset + %6]
+        %define r%1mp dword r %+ %1m
     %endif
     %define r%1  %2
 %endmacro
@@ -183,7 +189,7 @@ DECLARE_REG_SIZE bp, bpl
     %endrep
 %endmacro
 
-DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9
+DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
 
 %ifdef ARCH_X86_64
     %define gprsize 8
@@ -199,6 +205,33 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9
 %macro POP 1
     pop %1
     %assign stack_offset stack_offset-gprsize
+%endmacro
+
+%macro PUSH_IF_USED 1-*
+    %rep %0
+        %if %1 < regs_used
+            PUSH r%1
+        %endif
+        %rotate 1
+    %endrep
+%endmacro
+
+%macro POP_IF_USED 1-*
+    %rep %0
+        %if %1 < regs_used
+            pop r%1
+        %endif
+        %rotate 1
+    %endrep
+%endmacro
+
+%macro LOAD_IF_USED 1-*
+    %rep %0
+        %if %1 < num_args
+            mov r%1, r %+ %1 %+ mp
+        %endif
+        %rotate 1
+    %endrep
 %endmacro
 
 %macro SUB 2
@@ -247,6 +280,8 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9
         %endrep
     %endif
 
+    %assign %%stack_offset stack_offset
+    %undef stack_offset ; so that the current value of stack_offset doesn't get baked in by xdefine
     %assign %%i 0
     %rep %0
         %xdefine %1q r %+ %%i %+ q
@@ -258,40 +293,36 @@ DECLARE_REG_TMP_SIZE 0,1,2,3,4,5,6,7,8,9
         %assign %%i %%i+1
         %rotate 1
     %endrep
-    %assign n_arg_names %%i
+    %assign stack_offset %%stack_offset
+    %assign n_arg_names %0
 %endmacro
 
 %ifdef WIN64 ; Windows x64 ;=================================================
 
-DECLARE_REG 0, rcx, ecx, cx,  cl,  ecx
-DECLARE_REG 1, rdx, edx, dx,  dl,  edx
-DECLARE_REG 2, r8,  r8d, r8w, r8b, r8d
-DECLARE_REG 3, r9,  r9d, r9w, r9b, r9d
-DECLARE_REG 4, rdi, edi, di,  dil, [rsp + stack_offset + 40]
-DECLARE_REG 5, rsi, esi, si,  sil, [rsp + stack_offset + 48]
-DECLARE_REG 6, rax, eax, ax,  al,  [rsp + stack_offset + 56]
-%define r7m [rsp + stack_offset + 64]
-%define r8m [rsp + stack_offset + 72]
-
-%macro LOAD_IF_USED 2 ; reg_id, number_of_args
-    %if %1 < %2
-        mov r%1, [rsp + stack_offset + 8 + %1*8]
-    %endif
-%endmacro
+DECLARE_REG 0,  rcx, ecx,  cx,   cl
+DECLARE_REG 1,  rdx, edx,  dx,   dl
+DECLARE_REG 2,  R8,  R8D,  R8W,  R8B
+DECLARE_REG 3,  R9,  R9D,  R9W,  R9B
+DECLARE_REG 4,  R10, R10D, R10W, R10B, 40
+DECLARE_REG 5,  R11, R11D, R11W, R11B, 48
+DECLARE_REG 6,  rax, eax,  ax,   al,   56
+DECLARE_REG 7,  rdi, edi,  di,   dil,  64
+DECLARE_REG 8,  rsi, esi,  si,   sil,  72
+DECLARE_REG 9,  rbx, ebx,  bx,   bl,   80
+DECLARE_REG 10, rbp, ebp,  bp,   bpl,  88
+DECLARE_REG 11, R12, R12D, R12W, R12B, 96
+DECLARE_REG 12, R13, R13D, R13W, R13B, 104
+DECLARE_REG 13, R14, R14D, R14W, R14B, 112
+DECLARE_REG 14, R15, R15D, R15W, R15B, 120
 
 %macro PROLOGUE 2-4+ 0 ; #args, #regs, #xmm_regs, arg_names...
-    ASSERT %2 >= %1
+    %assign num_args %1
     %assign regs_used %2
-    ASSERT regs_used <= 7
-    %if regs_used > 4
-        push r4
-        push r5
-        %assign stack_offset stack_offset+16
-    %endif
+    ASSERT regs_used >= num_args
+    ASSERT regs_used <= 15
+    PUSH_IF_USED 7, 8, 9, 10, 11, 12, 13, 14
     WIN64_SPILL_XMM %3
-    LOAD_IF_USED 4, %1
-    LOAD_IF_USED 5, %1
-    LOAD_IF_USED 6, %1
+    LOAD_IF_USED 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14
     DEFINE_ARGS %4
 %endmacro
 
@@ -302,12 +333,11 @@ DECLARE_REG 6, rax, eax, ax,  al,  [rsp + stack_offset + 56]
     %endif
     ASSERT xmm_regs_used <= 16
     %if xmm_regs_used > 6
-        sub rsp, (xmm_regs_used-6)*16+16
-        %assign stack_offset stack_offset+(xmm_regs_used-6)*16+16
+        SUB rsp, (xmm_regs_used-6)*16+16
         %assign %%i xmm_regs_used
         %rep (xmm_regs_used-6)
             %assign %%i %%i-1
-            movdqa [rsp + (%%i-6)*16+8], xmm %+ %%i
+            movdqa [rsp + (%%i-6)*16+(~stack_offset&8)], xmm %+ %%i
         %endrep
     %endif
 %endmacro
@@ -317,7 +347,7 @@ DECLARE_REG 6, rax, eax, ax,  al,  [rsp + stack_offset + 56]
         %assign %%i xmm_regs_used
         %rep (xmm_regs_used-6)
             %assign %%i %%i-1
-            movdqa xmm %+ %%i, [%1 + (%%i-6)*16+8]
+            movdqa xmm %+ %%i, [%1 + (%%i-6)*16+(~stack_offset&8)]
         %endrep
         add %1, (xmm_regs_used-6)*16+16
     %endif
@@ -331,15 +361,12 @@ DECLARE_REG 6, rax, eax, ax,  al,  [rsp + stack_offset + 56]
 
 %macro RET 0
     WIN64_RESTORE_XMM_INTERNAL rsp
-    %if regs_used > 4
-        pop r5
-        pop r4
-    %endif
+    POP_IF_USED 14, 13, 12, 11, 10, 9, 8, 7
     ret
 %endmacro
 
 %macro REP_RET 0
-    %if regs_used > 4 || xmm_regs_used > 6
+    %if regs_used > 7 || xmm_regs_used > 6
         RET
     %else
         rep ret
@@ -348,92 +375,80 @@ DECLARE_REG 6, rax, eax, ax,  al,  [rsp + stack_offset + 56]
 
 %elifdef ARCH_X86_64 ; *nix x64 ;=============================================
 
-DECLARE_REG 0, rdi, edi, di,  dil, edi
-DECLARE_REG 1, rsi, esi, si,  sil, esi
-DECLARE_REG 2, rdx, edx, dx,  dl,  edx
-DECLARE_REG 3, rcx, ecx, cx,  cl,  ecx
-DECLARE_REG 4, r8,  r8d, r8w, r8b, r8d
-DECLARE_REG 5, r9,  r9d, r9w, r9b, r9d
-DECLARE_REG 6, rax, eax, ax,  al,  [rsp + stack_offset + 8]
-%define r7m [rsp + stack_offset + 16]
-%define r8m [rsp + stack_offset + 24]
-
-%macro LOAD_IF_USED 2 ; reg_id, number_of_args
-    %if %1 < %2
-        mov r%1, [rsp - 40 + %1*8]
-    %endif
-%endmacro
+DECLARE_REG 0,  rdi, edi,  di,   dil
+DECLARE_REG 1,  rsi, esi,  si,   sil
+DECLARE_REG 2,  rdx, edx,  dx,   dl
+DECLARE_REG 3,  rcx, ecx,  cx,   cl
+DECLARE_REG 4,  R8,  R8D,  R8W,  R8B
+DECLARE_REG 5,  R9,  R9D,  R9W,  R9B
+DECLARE_REG 6,  rax, eax,  ax,   al,   8
+DECLARE_REG 7,  R10, R10D, R10W, R10B, 16
+DECLARE_REG 8,  R11, R11D, R11W, R11B, 24
+DECLARE_REG 9,  rbx, ebx,  bx,   bl,   32
+DECLARE_REG 10, rbp, ebp,  bp,   bpl,  40
+DECLARE_REG 11, R12, R12D, R12W, R12B, 48
+DECLARE_REG 12, R13, R13D, R13W, R13B, 56
+DECLARE_REG 13, R14, R14D, R14W, R14B, 64
+DECLARE_REG 14, R15, R15D, R15W, R15B, 72
 
 %macro PROLOGUE 2-4+ ; #args, #regs, #xmm_regs, arg_names...
-    ASSERT %2 >= %1
-    ASSERT %2 <= 7
-    LOAD_IF_USED 6, %1
+    %assign num_args %1
+    %assign regs_used %2
+    ASSERT regs_used >= num_args
+    ASSERT regs_used <= 15
+    PUSH_IF_USED 9, 10, 11, 12, 13, 14
+    LOAD_IF_USED 6, 7, 8, 9, 10, 11, 12, 13, 14
     DEFINE_ARGS %4
 %endmacro
 
 %macro RET 0
+    POP_IF_USED 14, 13, 12, 11, 10, 9
     ret
 %endmacro
 
 %macro REP_RET 0
-    rep ret
+    %if regs_used > 9
+        RET
+    %else
+        rep ret
+    %endif
 %endmacro
 
 %else ; X86_32 ;==============================================================
 
-DECLARE_REG 0, eax, eax, ax, al,   [esp + stack_offset + 4]
-DECLARE_REG 1, ecx, ecx, cx, cl,   [esp + stack_offset + 8]
-DECLARE_REG 2, edx, edx, dx, dl,   [esp + stack_offset + 12]
-DECLARE_REG 3, ebx, ebx, bx, bl,   [esp + stack_offset + 16]
-DECLARE_REG 4, esi, esi, si, null, [esp + stack_offset + 20]
-DECLARE_REG 5, edi, edi, di, null, [esp + stack_offset + 24]
-DECLARE_REG 6, ebp, ebp, bp, null, [esp + stack_offset + 28]
-%define r7m [esp + stack_offset + 32]
-%define r8m [esp + stack_offset + 36]
+DECLARE_REG 0, eax, eax, ax, al,   4
+DECLARE_REG 1, ecx, ecx, cx, cl,   8
+DECLARE_REG 2, edx, edx, dx, dl,   12
+DECLARE_REG 3, ebx, ebx, bx, bl,   16
+DECLARE_REG 4, esi, esi, si, null, 20
+DECLARE_REG 5, edi, edi, di, null, 24
+DECLARE_REG 6, ebp, ebp, bp, null, 28
 %define rsp esp
 
-%macro PUSH_IF_USED 1 ; reg_id
-    %if %1 < regs_used
-        push r%1
-        %assign stack_offset stack_offset+4
-    %endif
+%macro DECLARE_ARG 1-*
+    %rep %0
+        %define r%1m [esp + stack_offset + 4*%1 + 4]
+        %define r%1mp dword r%1m
+        %rotate 1
+    %endrep
 %endmacro
 
-%macro POP_IF_USED 1 ; reg_id
-    %if %1 < regs_used
-        pop r%1
-    %endif
-%endmacro
-
-%macro LOAD_IF_USED 2 ; reg_id, number_of_args
-    %if %1 < %2
-        mov r%1, [esp + stack_offset + 4 + %1*4]
-    %endif
-%endmacro
+DECLARE_ARG 7, 8, 9, 10, 11, 12, 13, 14
 
 %macro PROLOGUE 2-4+ ; #args, #regs, #xmm_regs, arg_names...
-    ASSERT %2 >= %1
+    %assign num_args %1
     %assign regs_used %2
-    ASSERT regs_used <= 7
-    PUSH_IF_USED 3
-    PUSH_IF_USED 4
-    PUSH_IF_USED 5
-    PUSH_IF_USED 6
-    LOAD_IF_USED 0, %1
-    LOAD_IF_USED 1, %1
-    LOAD_IF_USED 2, %1
-    LOAD_IF_USED 3, %1
-    LOAD_IF_USED 4, %1
-    LOAD_IF_USED 5, %1
-    LOAD_IF_USED 6, %1
+    %if regs_used > 7
+        %assign regs_used 7
+    %endif
+    ASSERT regs_used >= num_args
+    PUSH_IF_USED 3, 4, 5, 6
+    LOAD_IF_USED 0, 1, 2, 3, 4, 5, 6
     DEFINE_ARGS %4
 %endmacro
 
 %macro RET 0
-    POP_IF_USED 6
-    POP_IF_USED 5
-    POP_IF_USED 4
-    POP_IF_USED 3
+    POP_IF_USED 6, 5, 4, 3
     ret
 %endmacro
 
@@ -453,8 +468,6 @@ DECLARE_REG 6, ebp, ebp, bp, null, [esp + stack_offset + 28]
 %macro WIN64_RESTORE_XMM 1
 %endmacro
 %endif
-
-
 
 ;=============================================================================
 ; arch-independent part
@@ -784,16 +797,38 @@ INIT_XMM
 %endrep
 %undef i
 
+%macro CHECK_AVX_INSTR_EMU 3-*
+    %xdefine %%opcode %1
+    %xdefine %%dst %2
+    %rep %0-2
+        %ifidn %%dst, %3
+            %error non-avx emulation of ``%%opcode'' is not supported
+        %endif
+        %rotate 1
+    %endrep
+%endmacro
+
 ;%1 == instruction
 ;%2 == 1 if float, 0 if int
-;%3 == 0 if 3-operand (xmm, xmm, xmm), 1 if 4-operand (xmm, xmm, xmm, imm)
+;%3 == 1 if 4-operand (xmm, xmm, xmm, imm), 0 if 3-operand (xmm, xmm, xmm)
 ;%4 == number of operands given
 ;%5+: operands
 %macro RUN_AVX_INSTR 6-7+
-    %if sizeof%5==32
-        v%1 %5, %6, %7
+    %ifid %5
+        %define %%sizeofreg sizeof%5
+    %elifid %6
+        %define %%sizeofreg sizeof%6
     %else
-        %if sizeof%5==8
+        %define %%sizeofreg mmsize
+    %endif
+    %if %%sizeofreg==32
+        %if %4>=3
+            v%1 %5, %6, %7
+        %else
+            v%1 %5, %6
+        %endif
+    %else
+        %if %%sizeofreg==8
             %define %%regmov movq
         %elif %2
             %define %%regmov movaps
@@ -803,16 +838,17 @@ INIT_XMM
 
         %if %4>=3+%3
             %ifnidn %5, %6
-                %if avx_enabled && sizeof%5==16
+                %if avx_enabled && %%sizeofreg==16
                     v%1 %5, %6, %7
                 %else
+                    CHECK_AVX_INSTR_EMU {%1 %5, %6, %7}, %5, %7
                     %%regmov %5, %6
                     %1 %5, %7
                 %endif
             %else
                 %1 %5, %7
             %endif
-        %elif %3
+        %elif %4>=3
             %1 %5, %6, %7
         %else
             %1 %5, %6
@@ -820,15 +856,37 @@ INIT_XMM
     %endif
 %endmacro
 
+; 3arg AVX ops with a memory arg can only have it in src2,
+; whereas SSE emulation of 3arg prefers to have it in src1 (i.e. the mov).
+; So, if the op is symmetric and the wrong one is memory, swap them.
+%macro RUN_AVX_INSTR1 8
+    %assign %%swap 0
+    %if avx_enabled
+        %ifnid %6
+            %assign %%swap 1
+        %endif
+    %elifnidn %5, %6
+        %ifnid %7
+            %assign %%swap 1
+        %endif
+    %endif
+    %if %%swap && %3 == 0 && %8 == 1
+        RUN_AVX_INSTR %1, %2, %3, %4, %5, %7, %6
+    %else
+        RUN_AVX_INSTR %1, %2, %3, %4, %5, %6, %7
+    %endif
+%endmacro
+
 ;%1 == instruction
 ;%2 == 1 if float, 0 if int
-;%3 == 0 if 3-operand (xmm, xmm, xmm), 1 if 4-operand (xmm, xmm, xmm, imm)
-%macro AVX_INSTR 3
-    %macro %1 2-8 fnord, fnord, fnord, %1, %2, %3
+;%3 == 1 if 4-operand (xmm, xmm, xmm, imm), 0 if 3-operand (xmm, xmm, xmm)
+;%4 == 1 if symmetric (i.e. doesn't matter which src arg is which), 0 if not
+%macro AVX_INSTR 4
+    %macro %1 2-9 fnord, fnord, fnord, %1, %2, %3, %4
         %ifidn %3, fnord
             RUN_AVX_INSTR %6, %7, %8, 2, %1, %2
         %elifidn %4, fnord
-            RUN_AVX_INSTR %6, %7, %8, 3, %1, %2, %3
+            RUN_AVX_INSTR1 %6, %7, %8, 3, %1, %2, %3, %9
         %elifidn %5, fnord
             RUN_AVX_INSTR %6, %7, %8, 4, %1, %2, %3, %4
         %else
@@ -837,158 +895,158 @@ INIT_XMM
     %endmacro
 %endmacro
 
-AVX_INSTR addpd, 1, 0
-AVX_INSTR addps, 1, 0
-AVX_INSTR addsd, 1, 0
-AVX_INSTR addss, 1, 0
-AVX_INSTR addsubpd, 1, 0
-AVX_INSTR addsubps, 1, 0
-AVX_INSTR andpd, 1, 0
-AVX_INSTR andps, 1, 0
-AVX_INSTR andnpd, 1, 0
-AVX_INSTR andnps, 1, 0
-AVX_INSTR blendpd, 1, 0
-AVX_INSTR blendps, 1, 0
-AVX_INSTR blendvpd, 1, 0
-AVX_INSTR blendvps, 1, 0
-AVX_INSTR cmppd, 1, 0
-AVX_INSTR cmpps, 1, 0
-AVX_INSTR cmpsd, 1, 0
-AVX_INSTR cmpss, 1, 0
-AVX_INSTR divpd, 1, 0
-AVX_INSTR divps, 1, 0
-AVX_INSTR divsd, 1, 0
-AVX_INSTR divss, 1, 0
-AVX_INSTR dppd, 1, 0
-AVX_INSTR dpps, 1, 0
-AVX_INSTR haddpd, 1, 0
-AVX_INSTR haddps, 1, 0
-AVX_INSTR hsubpd, 1, 0
-AVX_INSTR hsubps, 1, 0
-AVX_INSTR maxpd, 1, 0
-AVX_INSTR maxps, 1, 0
-AVX_INSTR maxsd, 1, 0
-AVX_INSTR maxss, 1, 0
-AVX_INSTR minpd, 1, 0
-AVX_INSTR minps, 1, 0
-AVX_INSTR minsd, 1, 0
-AVX_INSTR minss, 1, 0
-AVX_INSTR movsd, 1, 0
-AVX_INSTR movss, 1, 0
-AVX_INSTR mpsadbw, 0, 1
-AVX_INSTR mulpd, 1, 0
-AVX_INSTR mulps, 1, 0
-AVX_INSTR mulsd, 1, 0
-AVX_INSTR mulss, 1, 0
-AVX_INSTR orpd, 1, 0
-AVX_INSTR orps, 1, 0
-AVX_INSTR packsswb, 0, 0
-AVX_INSTR packssdw, 0, 0
-AVX_INSTR packuswb, 0, 0
-AVX_INSTR packusdw, 0, 0
-AVX_INSTR paddb, 0, 0
-AVX_INSTR paddw, 0, 0
-AVX_INSTR paddd, 0, 0
-AVX_INSTR paddq, 0, 0
-AVX_INSTR paddsb, 0, 0
-AVX_INSTR paddsw, 0, 0
-AVX_INSTR paddusb, 0, 0
-AVX_INSTR paddusw, 0, 0
-AVX_INSTR palignr, 0, 1
-AVX_INSTR pand, 0, 0
-AVX_INSTR pandn, 0, 0
-AVX_INSTR pavgb, 0, 0
-AVX_INSTR pavgw, 0, 0
-AVX_INSTR pblendvb, 0, 0
-AVX_INSTR pblendw, 0, 1
-AVX_INSTR pcmpestri, 0, 0
-AVX_INSTR pcmpestrm, 0, 0
-AVX_INSTR pcmpistri, 0, 0
-AVX_INSTR pcmpistrm, 0, 0
-AVX_INSTR pcmpeqb, 0, 0
-AVX_INSTR pcmpeqw, 0, 0
-AVX_INSTR pcmpeqd, 0, 0
-AVX_INSTR pcmpeqq, 0, 0
-AVX_INSTR pcmpgtb, 0, 0
-AVX_INSTR pcmpgtw, 0, 0
-AVX_INSTR pcmpgtd, 0, 0
-AVX_INSTR pcmpgtq, 0, 0
-AVX_INSTR phaddw, 0, 0
-AVX_INSTR phaddd, 0, 0
-AVX_INSTR phaddsw, 0, 0
-AVX_INSTR phsubw, 0, 0
-AVX_INSTR phsubd, 0, 0
-AVX_INSTR phsubsw, 0, 0
-AVX_INSTR pmaddwd, 0, 0
-AVX_INSTR pmaddubsw, 0, 0
-AVX_INSTR pmaxsb, 0, 0
-AVX_INSTR pmaxsw, 0, 0
-AVX_INSTR pmaxsd, 0, 0
-AVX_INSTR pmaxub, 0, 0
-AVX_INSTR pmaxuw, 0, 0
-AVX_INSTR pmaxud, 0, 0
-AVX_INSTR pminsb, 0, 0
-AVX_INSTR pminsw, 0, 0
-AVX_INSTR pminsd, 0, 0
-AVX_INSTR pminub, 0, 0
-AVX_INSTR pminuw, 0, 0
-AVX_INSTR pminud, 0, 0
-AVX_INSTR pmulhuw, 0, 0
-AVX_INSTR pmulhrsw, 0, 0
-AVX_INSTR pmulhw, 0, 0
-AVX_INSTR pmullw, 0, 0
-AVX_INSTR pmulld, 0, 0
-AVX_INSTR pmuludq, 0, 0
-AVX_INSTR pmuldq, 0, 0
-AVX_INSTR por, 0, 0
-AVX_INSTR psadbw, 0, 0
-AVX_INSTR pshufb, 0, 0
-AVX_INSTR psignb, 0, 0
-AVX_INSTR psignw, 0, 0
-AVX_INSTR psignd, 0, 0
-AVX_INSTR psllw, 0, 0
-AVX_INSTR pslld, 0, 0
-AVX_INSTR psllq, 0, 0
-AVX_INSTR pslldq, 0, 0
-AVX_INSTR psraw, 0, 0
-AVX_INSTR psrad, 0, 0
-AVX_INSTR psrlw, 0, 0
-AVX_INSTR psrld, 0, 0
-AVX_INSTR psrlq, 0, 0
-AVX_INSTR psrldq, 0, 0
-AVX_INSTR psubb, 0, 0
-AVX_INSTR psubw, 0, 0
-AVX_INSTR psubd, 0, 0
-AVX_INSTR psubq, 0, 0
-AVX_INSTR psubsb, 0, 0
-AVX_INSTR psubsw, 0, 0
-AVX_INSTR psubusb, 0, 0
-AVX_INSTR psubusw, 0, 0
-AVX_INSTR punpckhbw, 0, 0
-AVX_INSTR punpckhwd, 0, 0
-AVX_INSTR punpckhdq, 0, 0
-AVX_INSTR punpckhqdq, 0, 0
-AVX_INSTR punpcklbw, 0, 0
-AVX_INSTR punpcklwd, 0, 0
-AVX_INSTR punpckldq, 0, 0
-AVX_INSTR punpcklqdq, 0, 0
-AVX_INSTR pxor, 0, 0
-AVX_INSTR shufps, 0, 1
-AVX_INSTR subpd, 1, 0
-AVX_INSTR subps, 1, 0
-AVX_INSTR subsd, 1, 0
-AVX_INSTR subss, 1, 0
-AVX_INSTR unpckhpd, 1, 0
-AVX_INSTR unpckhps, 1, 0
-AVX_INSTR unpcklpd, 1, 0
-AVX_INSTR unpcklps, 1, 0
-AVX_INSTR xorpd, 1, 0
-AVX_INSTR xorps, 1, 0
+AVX_INSTR addpd, 1, 0, 1
+AVX_INSTR addps, 1, 0, 1
+AVX_INSTR addsd, 1, 0, 1
+AVX_INSTR addss, 1, 0, 1
+AVX_INSTR addsubpd, 1, 0, 0
+AVX_INSTR addsubps, 1, 0, 0
+AVX_INSTR andpd, 1, 0, 1
+AVX_INSTR andps, 1, 0, 1
+AVX_INSTR andnpd, 1, 0, 0
+AVX_INSTR andnps, 1, 0, 0
+AVX_INSTR blendpd, 1, 0, 0
+AVX_INSTR blendps, 1, 0, 0
+AVX_INSTR blendvpd, 1, 0, 0
+AVX_INSTR blendvps, 1, 0, 0
+AVX_INSTR cmppd, 1, 0, 0
+AVX_INSTR cmpps, 1, 0, 0
+AVX_INSTR cmpsd, 1, 0, 0
+AVX_INSTR cmpss, 1, 0, 0
+AVX_INSTR divpd, 1, 0, 0
+AVX_INSTR divps, 1, 0, 0
+AVX_INSTR divsd, 1, 0, 0
+AVX_INSTR divss, 1, 0, 0
+AVX_INSTR dppd, 1, 1, 0
+AVX_INSTR dpps, 1, 1, 0
+AVX_INSTR haddpd, 1, 0, 0
+AVX_INSTR haddps, 1, 0, 0
+AVX_INSTR hsubpd, 1, 0, 0
+AVX_INSTR hsubps, 1, 0, 0
+AVX_INSTR maxpd, 1, 0, 1
+AVX_INSTR maxps, 1, 0, 1
+AVX_INSTR maxsd, 1, 0, 1
+AVX_INSTR maxss, 1, 0, 1
+AVX_INSTR minpd, 1, 0, 1
+AVX_INSTR minps, 1, 0, 1
+AVX_INSTR minsd, 1, 0, 1
+AVX_INSTR minss, 1, 0, 1
+AVX_INSTR movsd, 1, 0, 0
+AVX_INSTR movss, 1, 0, 0
+AVX_INSTR mpsadbw, 0, 1, 0
+AVX_INSTR mulpd, 1, 0, 1
+AVX_INSTR mulps, 1, 0, 1
+AVX_INSTR mulsd, 1, 0, 1
+AVX_INSTR mulss, 1, 0, 1
+AVX_INSTR orpd, 1, 0, 1
+AVX_INSTR orps, 1, 0, 1
+AVX_INSTR packsswb, 0, 0, 0
+AVX_INSTR packssdw, 0, 0, 0
+AVX_INSTR packuswb, 0, 0, 0
+AVX_INSTR packusdw, 0, 0, 0
+AVX_INSTR paddb, 0, 0, 1
+AVX_INSTR paddw, 0, 0, 1
+AVX_INSTR paddd, 0, 0, 1
+AVX_INSTR paddq, 0, 0, 1
+AVX_INSTR paddsb, 0, 0, 1
+AVX_INSTR paddsw, 0, 0, 1
+AVX_INSTR paddusb, 0, 0, 1
+AVX_INSTR paddusw, 0, 0, 1
+AVX_INSTR palignr, 0, 1, 0
+AVX_INSTR pand, 0, 0, 1
+AVX_INSTR pandn, 0, 0, 0
+AVX_INSTR pavgb, 0, 0, 1
+AVX_INSTR pavgw, 0, 0, 1
+AVX_INSTR pblendvb, 0, 0, 0
+AVX_INSTR pblendw, 0, 1, 0
+AVX_INSTR pcmpestri, 0, 0, 0
+AVX_INSTR pcmpestrm, 0, 0, 0
+AVX_INSTR pcmpistri, 0, 0, 0
+AVX_INSTR pcmpistrm, 0, 0, 0
+AVX_INSTR pcmpeqb, 0, 0, 1
+AVX_INSTR pcmpeqw, 0, 0, 1
+AVX_INSTR pcmpeqd, 0, 0, 1
+AVX_INSTR pcmpeqq, 0, 0, 1
+AVX_INSTR pcmpgtb, 0, 0, 0
+AVX_INSTR pcmpgtw, 0, 0, 0
+AVX_INSTR pcmpgtd, 0, 0, 0
+AVX_INSTR pcmpgtq, 0, 0, 0
+AVX_INSTR phaddw, 0, 0, 0
+AVX_INSTR phaddd, 0, 0, 0
+AVX_INSTR phaddsw, 0, 0, 0
+AVX_INSTR phsubw, 0, 0, 0
+AVX_INSTR phsubd, 0, 0, 0
+AVX_INSTR phsubsw, 0, 0, 0
+AVX_INSTR pmaddwd, 0, 0, 1
+AVX_INSTR pmaddubsw, 0, 0, 0
+AVX_INSTR pmaxsb, 0, 0, 1
+AVX_INSTR pmaxsw, 0, 0, 1
+AVX_INSTR pmaxsd, 0, 0, 1
+AVX_INSTR pmaxub, 0, 0, 1
+AVX_INSTR pmaxuw, 0, 0, 1
+AVX_INSTR pmaxud, 0, 0, 1
+AVX_INSTR pminsb, 0, 0, 1
+AVX_INSTR pminsw, 0, 0, 1
+AVX_INSTR pminsd, 0, 0, 1
+AVX_INSTR pminub, 0, 0, 1
+AVX_INSTR pminuw, 0, 0, 1
+AVX_INSTR pminud, 0, 0, 1
+AVX_INSTR pmulhuw, 0, 0, 1
+AVX_INSTR pmulhrsw, 0, 0, 1
+AVX_INSTR pmulhw, 0, 0, 1
+AVX_INSTR pmullw, 0, 0, 1
+AVX_INSTR pmulld, 0, 0, 1
+AVX_INSTR pmuludq, 0, 0, 1
+AVX_INSTR pmuldq, 0, 0, 1
+AVX_INSTR por, 0, 0, 1
+AVX_INSTR psadbw, 0, 0, 1
+AVX_INSTR pshufb, 0, 0, 0
+AVX_INSTR psignb, 0, 0, 0
+AVX_INSTR psignw, 0, 0, 0
+AVX_INSTR psignd, 0, 0, 0
+AVX_INSTR psllw, 0, 0, 0
+AVX_INSTR pslld, 0, 0, 0
+AVX_INSTR psllq, 0, 0, 0
+AVX_INSTR pslldq, 0, 0, 0
+AVX_INSTR psraw, 0, 0, 0
+AVX_INSTR psrad, 0, 0, 0
+AVX_INSTR psrlw, 0, 0, 0
+AVX_INSTR psrld, 0, 0, 0
+AVX_INSTR psrlq, 0, 0, 0
+AVX_INSTR psrldq, 0, 0, 0
+AVX_INSTR psubb, 0, 0, 0
+AVX_INSTR psubw, 0, 0, 0
+AVX_INSTR psubd, 0, 0, 0
+AVX_INSTR psubq, 0, 0, 0
+AVX_INSTR psubsb, 0, 0, 0
+AVX_INSTR psubsw, 0, 0, 0
+AVX_INSTR psubusb, 0, 0, 0
+AVX_INSTR psubusw, 0, 0, 0
+AVX_INSTR punpckhbw, 0, 0, 0
+AVX_INSTR punpckhwd, 0, 0, 0
+AVX_INSTR punpckhdq, 0, 0, 0
+AVX_INSTR punpckhqdq, 0, 0, 0
+AVX_INSTR punpcklbw, 0, 0, 0
+AVX_INSTR punpcklwd, 0, 0, 0
+AVX_INSTR punpckldq, 0, 0, 0
+AVX_INSTR punpcklqdq, 0, 0, 0
+AVX_INSTR pxor, 0, 0, 1
+AVX_INSTR shufps, 1, 1, 0
+AVX_INSTR subpd, 1, 0, 0
+AVX_INSTR subps, 1, 0, 0
+AVX_INSTR subsd, 1, 0, 0
+AVX_INSTR subss, 1, 0, 0
+AVX_INSTR unpckhpd, 1, 0, 0
+AVX_INSTR unpckhps, 1, 0, 0
+AVX_INSTR unpcklpd, 1, 0, 0
+AVX_INSTR unpcklps, 1, 0, 0
+AVX_INSTR xorpd, 1, 0, 1
+AVX_INSTR xorps, 1, 0, 1
 
 ; 3DNow instructions, for sharing code between AVX, SSE and 3DN
-AVX_INSTR pfadd, 1, 0
-AVX_INSTR pfsub, 1, 0
-AVX_INSTR pfmul, 1, 0
+AVX_INSTR pfadd, 1, 0, 1
+AVX_INSTR pfsub, 1, 0, 0
+AVX_INSTR pfmul, 1, 0, 1
 
 ; base-4 constants for shuffles
 %assign i 0
