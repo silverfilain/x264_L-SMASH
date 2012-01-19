@@ -1,7 +1,7 @@
 /*****************************************************************************
  * box.h:
  *****************************************************************************
- * Copyright (C) 2010 L-SMASH project
+ * Copyright (C) 2010-2011 L-SMASH project
  *
  * Authors: Yusuke Nakamura <muken.the.vfrmaniac@gmail.com>
  *
@@ -54,9 +54,12 @@ typedef struct isom_box_tag isom_box_t;
 #define ISOM_FULLBOX_COMMON_SIZE      12
 #define ISOM_LIST_FULLBOX_COMMON_SIZE 16
 
-#define LSMASH_UNKNOWN_BOX    0x01
-#define LSMASH_ABSENT_IN_ROOT 0x02
-#define LSMASH_QTFF_BASE      0x04
+#define LSMASH_UNKNOWN_BOX       0x01
+#define LSMASH_ABSENT_IN_ROOT    0x02
+#define LSMASH_QTFF_BASE         0x04
+#define LSMASH_VIDEO_DESCRIPTION 0x08
+#define LSMASH_AUDIO_DESCRIPTION 0x10
+
 
 struct isom_box_tag
 {
@@ -414,7 +417,8 @@ typedef struct
  *  pcY = vertOff + (height - 1)/2;
  * The leftmost/rightmost pixel and the topmost/bottommost line of the clean aperture fall at:
  *  pcX +/- (cleanApertureWidth - 1)/2;
- *  pcY +/- (cleanApertureHeight - 1)/2; */
+ *  pcY +/- (cleanApertureHeight - 1)/2;
+ * QTFF: this box is a mandatory extension for all uncompressed Y'CbCr data formats. */
 typedef struct
 {
     ISOM_BASEBOX_COMMON;
@@ -442,7 +446,10 @@ typedef struct
 /* Color Parameter Box
  * This box is used to map the numerical values of pixels in the file to a common representation of color
  * in which images can be correctly compared, combined, and displayed.
- * This box is defined in QuickTime file format. */
+ * The box ('colr') supersedes the Gamma Level Box ('gama').
+ * Writers of QTFF should never write both into an Image Description, and readers of QTFF should ignore 'gama' if 'colr' is present.
+ * This box is defined in QuickTime file format.
+ * Note: this box is a mandatory extension for all uncompressed Y'CbCr data formats. */
 typedef struct
 {
     ISOM_BASEBOX_COMMON;
@@ -452,6 +459,45 @@ typedef struct
     uint16_t transfer_function_index;       /* nonlinear transfer function from RGB to ErEgEb */
     uint16_t matrix_index;                  /* matrix from ErEgEb to EyEcbEcr */
 } isom_colr_t;
+
+/* Gamma Level Box
+ * This box is used to indicate that the decompressor corrects gamma level at display time.
+ * This box is defined in QuickTime file format. */
+typedef struct
+{
+    ISOM_BASEBOX_COMMON;
+    uint32_t level;     /* A fixed-point 16.16 number indicating the gamma level at which the image was captured. */
+} isom_gama_t;
+
+/* Field/Frame Information Box
+ * This box is used by applications to modify decompressed image data or by decompressor components to determine field display order.
+ * This box is defined in QuickTime file format.
+ * Note: this box is a mandatory extension for all uncompressed Y'CbCr data formats. */
+typedef struct
+{
+    ISOM_BASEBOX_COMMON;
+    uint8_t fields;     /* the number of fields per frame
+                         * 1: progressive scan
+                         * 2: 2:1 interlaced */
+    uint8_t detail;     /* field ordering */
+} isom_fiel_t;
+
+/* Colorspace Box
+ * This box is defined in QuickTime file format. */
+typedef struct
+{
+    ISOM_BASEBOX_COMMON;
+    uint32_t pixel_format;      /* the native pixel format of an image */
+} isom_cspc_t;
+
+/* Significant Bits Box
+ * This box is defined in QuickTime file format.
+ * Note: this box is a mandatory extension for 'v216' (Uncompressed Y'CbCr, 10, 12, 14, or 16-bit-per-component 4:2:2). */
+typedef struct
+{
+    ISOM_BASEBOX_COMMON;
+    uint8_t significantBits;    /* the number of significant bits per component */
+} isom_sgbt_t;
 
 /* Sample Scale Box
  * If this box is present and can be interpreted by the decoder,
@@ -522,6 +568,10 @@ typedef struct
     isom_esds_t *esds;          /* ES Descriptor Box */
     /* QuickTime specific extension */
     isom_colr_t *colr;          /* Color Parameter Box @ optional */
+    isom_gama_t *gama;          /* Gamma Level Box @ optional */
+    isom_fiel_t *fiel;          /* Field/Frame Information Box @ optional */
+    isom_cspc_t *cspc;          /* Colorspace Box @ optional */
+    isom_sgbt_t *sgbt;          /* Significant Bits Box @ optional */
     /* ISO Base Media extension */
     isom_stsl_t *stsl;          /* Sample Scale Box @ optional */
     /* common extensions
@@ -580,7 +630,7 @@ typedef struct
         void *exdata;
 } isom_wave_t;
 
-/* Channel Compositor Box */
+/* Audio Channel Layout Box */
 typedef struct
 {
     uint32_t channelLabel;          /* the channelLabel that describes the channel */
@@ -641,7 +691,7 @@ typedef struct
      *              For compressed audio, an AudioPacket is the natural compressed access unit of that format. */
     uint32_t sizeOfStructOnly;                  /* offset to extensions */
     uint64_t audioSampleRate;                   /* 64-bit floating point */
-    uint32_t numAudioChannels;                  /* any channel assignment info will be in Channel Compositor Box. */
+    uint32_t numAudioChannels;                  /* any channel assignment info will be in Audio Channel Layout Box. */
     int32_t  always7F000000;                    /* always 0x7F000000 */
     uint32_t constBitsPerChannel;               /* only set if constant (and only for uncompressed audio) */
     uint32_t formatSpecificFlags;
@@ -650,7 +700,7 @@ typedef struct
     /* extensions */
     isom_esds_t *esds;      /* ISOM: ES Descriptor Box / QTFF: null */
     isom_wave_t *wave;      /* ISOM: null / QTFF: Sound Information Decompression Parameters Box */
-    isom_chan_t *chan;      /* ISOM: null / QTFF: Channel Compositor Box @ optional */
+    isom_chan_t *chan;      /* ISOM: null / QTFF: Audio Channel Layout Box @ optional */
 
         uint32_t exdata_length;
         void *exdata;
@@ -1728,19 +1778,10 @@ enum isom_box_type
     ISOM_BOX_TYPE_XML   = LSMASH_4CC( 'x', 'm', 'l', ' ' ),
     ISOM_BOX_TYPE_YRRC  = LSMASH_4CC( 'y', 'r', 'r', 'c' ),
 
-    ISOM_BOX_TYPE_AVCC  = LSMASH_4CC( 'a', 'v', 'c', 'C' ),
     ISOM_BOX_TYPE_BTRT  = LSMASH_4CC( 'b', 't', 'r', 't' ),
     ISOM_BOX_TYPE_CLAP  = LSMASH_4CC( 'c', 'l', 'a', 'p' ),
-    ISOM_BOX_TYPE_ESDS  = LSMASH_4CC( 'e', 's', 'd', 's' ),
     ISOM_BOX_TYPE_PASP  = LSMASH_4CC( 'p', 'a', 's', 'p' ),
     ISOM_BOX_TYPE_STSL  = LSMASH_4CC( 's', 't', 's', 'l' ),
-
-    ISOM_BOX_TYPE_CHPL  = LSMASH_4CC( 'c', 'h', 'p', 'l' ),
-
-    ISOM_BOX_TYPE_ALAC  = LSMASH_4CC( 'a', 'l', 'a', 'c' ),
-    ISOM_BOX_TYPE_DAC3  = LSMASH_4CC( 'd', 'a', 'c', '3' ),
-    ISOM_BOX_TYPE_DAMR  = LSMASH_4CC( 'd', 'a', 'm', 'r' ),
-    ISOM_BOX_TYPE_DEC3  = LSMASH_4CC( 'd', 'e', 'c', '3' ),
 
     ISOM_BOX_TYPE_FTAB  = LSMASH_4CC( 'f', 't', 'a', 'b' ),
 
@@ -1748,6 +1789,18 @@ enum isom_box_type
     ISOM_BOX_TYPE_ILST  = LSMASH_4CC( 'i', 'l', 's', 't' ),
     ISOM_BOX_TYPE_MEAN  = LSMASH_4CC( 'm', 'e', 'a', 'n' ),
     ISOM_BOX_TYPE_NAME  = LSMASH_4CC( 'n', 'a', 'm', 'e' ),
+
+    ISOM_BOX_TYPE_CHPL  = LSMASH_4CC( 'c', 'h', 'p', 'l' ),
+
+    /* Decoder Specific Info */
+    ISOM_BOX_TYPE_ALAC  = LSMASH_4CC( 'a', 'l', 'a', 'c' ),
+    ISOM_BOX_TYPE_AVCC  = LSMASH_4CC( 'a', 'v', 'c', 'C' ),
+    ISOM_BOX_TYPE_DAC3  = LSMASH_4CC( 'd', 'a', 'c', '3' ),
+    ISOM_BOX_TYPE_DAMR  = LSMASH_4CC( 'd', 'a', 'm', 'r' ),
+    ISOM_BOX_TYPE_DDTS  = LSMASH_4CC( 'd', 'd', 't', 's' ),
+    ISOM_BOX_TYPE_DEC3  = LSMASH_4CC( 'd', 'e', 'c', '3' ),
+    ISOM_BOX_TYPE_DVC1  = LSMASH_4CC( 'd', 'v', 'c', '1' ),
+    ISOM_BOX_TYPE_ESDS  = LSMASH_4CC( 'e', 's', 'd', 's' ),
 };
 
 enum qt_box_type
@@ -1759,10 +1812,13 @@ enum qt_box_type
     QT_BOX_TYPE_CLIP    = LSMASH_4CC( 'c', 'l', 'i', 'p' ),
     QT_BOX_TYPE_COLR    = LSMASH_4CC( 'c', 'o', 'l', 'r' ),
     QT_BOX_TYPE_CRGN    = LSMASH_4CC( 'c', 'r', 'g', 'n' ),
+    QT_BOX_TYPE_CSPC    = LSMASH_4CC( 'c', 's', 'p', 'c' ),
     QT_BOX_TYPE_CTAB    = LSMASH_4CC( 'c', 't', 'a', 'b' ),
     QT_BOX_TYPE_ENDA    = LSMASH_4CC( 'e', 'n', 'd', 'a' ),
     QT_BOX_TYPE_ENOF    = LSMASH_4CC( 'e', 'n', 'o', 'f' ),
+    QT_BOX_TYPE_FIEL    = LSMASH_4CC( 'f', 'i', 'e', 'l' ),
     QT_BOX_TYPE_FRMA    = LSMASH_4CC( 'f', 'r', 'm', 'a' ),
+    QT_BOX_TYPE_GAMA    = LSMASH_4CC( 'g', 'a', 'm', 'a' ),
     QT_BOX_TYPE_GMHD    = LSMASH_4CC( 'g', 'm', 'h', 'd' ),
     QT_BOX_TYPE_GMIN    = LSMASH_4CC( 'g', 'm', 'i', 'n' ),
     QT_BOX_TYPE_IMAP    = LSMASH_4CC( 'i', 'm', 'a', 'p' ),
@@ -1776,6 +1832,7 @@ enum qt_box_type
     QT_BOX_TYPE_PNOT    = LSMASH_4CC( 'p', 'n', 'o', 't' ),
     QT_BOX_TYPE_PROF    = LSMASH_4CC( 'p', 'r', 'o', 'f' ),
     QT_BOX_TYPE_SELO    = LSMASH_4CC( 'S', 'e', 'l', 'O' ),
+    QT_BOX_TYPE_SGBT    = LSMASH_4CC( 's', 'g', 'b', 't' ),
     QT_BOX_TYPE_STPS    = LSMASH_4CC( 's', 't', 'p', 's' ),
     QT_BOX_TYPE_TAPT    = LSMASH_4CC( 't', 'a', 'p', 't' ),
     QT_BOX_TYPE_TEXT    = LSMASH_4CC( 't', 'e', 'x', 't' ),
@@ -2040,6 +2097,7 @@ typedef enum
 
 int isom_is_fullbox( void *box );
 int isom_is_lpcm_audio( uint32_t type );
+int isom_is_uncompressed_ycbcr( uint32_t type );
 
 void isom_init_box_common( void *box, void *parent, uint32_t type );
 
@@ -2059,6 +2117,10 @@ int isom_add_elst( isom_edts_t *edts );
 int isom_add_clap( isom_visual_entry_t *visual );
 int isom_add_pasp( isom_visual_entry_t *visual );
 int isom_add_colr( isom_visual_entry_t *visual );
+int isom_add_gama( isom_visual_entry_t *visual );
+int isom_add_fiel( isom_visual_entry_t *visual );
+int isom_add_cspc( isom_visual_entry_t *visual );
+int isom_add_sgbt( isom_visual_entry_t *visual );
 int isom_add_stsl( isom_visual_entry_t *visual );
 int isom_add_avcC( isom_visual_entry_t *visual );
 int isom_add_btrt( isom_visual_entry_t *visual );
@@ -2074,6 +2136,10 @@ void isom_remove_tapt( isom_tapt_t *tapt );
 void isom_remove_clap( isom_clap_t *clap );
 void isom_remove_pasp( isom_pasp_t *pasp );
 void isom_remove_colr( isom_colr_t *colr );
+void isom_remove_gama( isom_gama_t *gama );
+void isom_remove_cspc( isom_cspc_t *cspc );
+void isom_remove_fiel( isom_fiel_t *fiel );
+void isom_remove_sgbt( isom_sgbt_t *sgbt );
 void isom_remove_stsl( isom_stsl_t *stsl );
 void isom_remove_avcC( isom_avcC_t *avcC );
 void isom_remove_btrt( isom_btrt_t *btrt );

@@ -1,7 +1,7 @@
 /*****************************************************************************
  * lsmash.h:
  *****************************************************************************
- * Copyright (C) 2010 L-SMASH project
+ * Copyright (C) 2010-2011 L-SMASH project
  *
  * Authors: Yusuke Nakamura <muken.the.vfrmaniac@gmail.com>
  *
@@ -228,9 +228,17 @@ typedef enum
     QT_CODEC_TYPE_AP4H_VIDEO    = LSMASH_4CC( 'a', 'p', '4', 'h' ),   /* Apple ProRes 4444 */
     QT_CODEC_TYPE_CIVD_VIDEO    = LSMASH_4CC( 'c', 'i', 'v', 'd' ),   /* Cinepak Video */
     QT_CODEC_TYPE_DRAC_VIDEO    = LSMASH_4CC( 'd', 'r', 'a', 'c' ),   /* Dirac Video Coder */
-    QT_CODEC_TYPE_DVH5_VIDEO    = LSMASH_4CC( 'd', 'v', 'h', '5' ),   /* DVCPRO-HD 1080/50i */
-    QT_CODEC_TYPE_DVH6_VIDEO    = LSMASH_4CC( 'd', 'v', 'h', '6' ),   /* DVCPRO-HD 1080/60i */
-    QT_CODEC_TYPE_DVHP_VIDEO    = LSMASH_4CC( 'd', 'v', 'h', 'p' ),   /* DVCPRO-HD 720/60p */
+    QT_CODEC_TYPE_DVC_VIDEO     = LSMASH_4CC( 'd', 'v', 'c', ' ' ),   /* DV NTSC format */
+    QT_CODEC_TYPE_DVCP_VIDEO    = LSMASH_4CC( 'd', 'v', 'c', 'p' ),   /* DV PAL format */
+    QT_CODEC_TYPE_DVPP_VIDEO    = LSMASH_4CC( 'd', 'v', 'p', 'p' ),   /* Panasonic DVCPro PAL format */
+    QT_CODEC_TYPE_DV5N_VIDEO    = LSMASH_4CC( 'd', 'v', '5', 'n' ),   /* Panasonic DVCPro-50 NTSC format */
+    QT_CODEC_TYPE_DV5P_VIDEO    = LSMASH_4CC( 'd', 'v', '5', 'p' ),   /* Panasonic DVCPro-50 PAL format */
+    QT_CODEC_TYPE_DVH2_VIDEO    = LSMASH_4CC( 'd', 'v', 'h', '2' ),   /* Panasonic DVCPro-HD 1080p25 format */
+    QT_CODEC_TYPE_DVH3_VIDEO    = LSMASH_4CC( 'd', 'v', 'h', '3' ),   /* Panasonic DVCPro-HD 1080p30 format */
+    QT_CODEC_TYPE_DVH5_VIDEO    = LSMASH_4CC( 'd', 'v', 'h', '5' ),   /* Panasonic DVCPro-HD 1080i50 format */
+    QT_CODEC_TYPE_DVH6_VIDEO    = LSMASH_4CC( 'd', 'v', 'h', '6' ),   /* Panasonic DVCPro-HD 1080i60 format */
+    QT_CODEC_TYPE_DVHP_VIDEO    = LSMASH_4CC( 'd', 'v', 'h', 'p' ),   /* Panasonic DVCPro-HD 720p60 format */
+    QT_CODEC_TYPE_DVHQ_VIDEO    = LSMASH_4CC( 'd', 'v', 'h', 'q' ),   /* Panasonic DVCPro-HD 720p50 format */
     QT_CODEC_TYPE_FLIC_VIDEO    = LSMASH_4CC( 'f', 'l', 'i', 'c' ),   /* Autodesk FLIC animation format */
     QT_CODEC_TYPE_GIF_VIDEO     = LSMASH_4CC( 'g', 'i', 'f', ' ' ),   /* GIF image format */
     QT_CODEC_TYPE_H261_VIDEO    = LSMASH_4CC( 'h', '2', '6', '1' ),   /* ITU H.261 video */
@@ -239,10 +247,17 @@ typedef enum
     QT_CODEC_TYPE_MJPA_VIDEO    = LSMASH_4CC( 'm', 'j', 'p', 'a' ),   /* Motion-JPEG (format A) */
     QT_CODEC_TYPE_MJPB_VIDEO    = LSMASH_4CC( 'm', 'j', 'p', 'b' ),   /* Motion-JPEG (format B) */
     QT_CODEC_TYPE_PNG_VIDEO     = LSMASH_4CC( 'p', 'n', 'g', ' ' ),   /* W3C Portable Network Graphics (PNG) */
+    QT_CODEC_TYPE_RAW_VIDEO     = LSMASH_4CC( 'r', 'a', 'w', ' ' ),   /* Uncompressed RGB */
     QT_CODEC_TYPE_RLE_VIDEO     = LSMASH_4CC( 'r', 'l', 'e', ' ' ),   /* Apple animation codec */
     QT_CODEC_TYPE_RPZA_VIDEO    = LSMASH_4CC( 'r', 'p', 'z', 'a' ),   /* Apple simple video 'road pizza' compression */
     QT_CODEC_TYPE_TGA_VIDEO     = LSMASH_4CC( 't', 'g', 'a', ' ' ),   /* Truvision Targa video format */
     QT_CODEC_TYPE_TIFF_VIDEO    = LSMASH_4CC( 't', 'i', 'f', 'f' ),   /* Tagged Image File Format (Adobe) */
+    QT_CODEC_TYPE_V210_VIDEO    = LSMASH_4CC( 'v', '2', '1', '0' ),   /* Uncompressed Y'CbCr, 10-bit-per-component 4:2:2 */
+    QT_CODEC_TYPE_V216_VIDEO    = LSMASH_4CC( 'v', '2', '1', '6' ),   /* Uncompressed Y'CbCr, 10, 12, 14, or 16-bit-per-component 4:2:2 */
+    QT_CODEC_TYPE_V308_VIDEO    = LSMASH_4CC( 'v', '3', '0', '8' ),   /* Uncompressed Y'CbCr, 8-bit-per-component 4:4:4 */
+    QT_CODEC_TYPE_V408_VIDEO    = LSMASH_4CC( 'v', '4', '0', '8' ),   /* Uncompressed Y'CbCr, 8-bit-per-component 4:4:4:4 */
+    QT_CODEC_TYPE_V410_VIDEO    = LSMASH_4CC( 'v', '4', '1', '0' ),   /* Uncompressed Y'CbCr, 10-bit-per-component 4:4:4 */
+    QT_CODEC_TYPE_YUV2_VIDEO    = LSMASH_4CC( 'y', 'u', 'v', '2' ),   /* Uncompressed Y'CbCr, 8-bit-per-component 4:2:2 */
 
     /* Text Type */
     ISOM_CODEC_TYPE_ENCT_TEXT   = LSMASH_4CC( 'e', 'n', 'c', 't' ),   /* Encrypted Text */
@@ -276,6 +291,8 @@ typedef enum
     /* Other Type */
     ISOM_CODEC_TYPE_ENCS_SYSTEM = LSMASH_4CC( 'e', 'n', 'c', 's' ),   /* Encrypted Systems stream */
     ISOM_CODEC_TYPE_MP4S_SYSTEM = LSMASH_4CC( 'm', 'p', '4', 's' ),   /* MPEG-4 Systems */
+
+    LSMASH_CODEC_TYPE_RAW       = LSMASH_4CC( 'r', 'a', 'w', ' ' ),   /* Either video or audio */
 } lsmash_codec_type;
 
 typedef enum
@@ -655,11 +672,11 @@ typedef enum
     QT_CHANNEL_LAYOUT_AAC_QUADRAPHONIC         = QT_CHANNEL_LAYOUT_QUADRAPHONIC,    /* L R Ls Rs */
     QT_CHANNEL_LAYOUT_AAC_4_0                  = QT_CHANNEL_LAYOUT_MPEG_4_0_B,      /* C L R Cs */
     QT_CHANNEL_LAYOUT_AAC_5_0                  = QT_CHANNEL_LAYOUT_MPEG_5_0_D,      /* C L R Ls Rs */
-    QT_CHANNEL_LAYOUT_AAC_5_1                  = QT_CHANNEL_LAYOUT_MPEG_5_1_D,      /* C L R Ls Rs Lfe */
+    QT_CHANNEL_LAYOUT_AAC_5_1                  = QT_CHANNEL_LAYOUT_MPEG_5_1_D,      /* C L R Ls Rs LFE */
     QT_CHANNEL_LAYOUT_AAC_6_0                  = (141<<16) | 6,                     /* C L R Ls Rs Cs */
-    QT_CHANNEL_LAYOUT_AAC_6_1                  = (142<<16) | 7,                     /* C L R Ls Rs Cs Lfe */
+    QT_CHANNEL_LAYOUT_AAC_6_1                  = (142<<16) | 7,                     /* C L R Ls Rs Cs LFE */
     QT_CHANNEL_LAYOUT_AAC_7_0                  = (143<<16) | 7,                     /* C L R Ls Rs Rls Rrs */
-    QT_CHANNEL_LAYOUT_AAC_7_1                  = QT_CHANNEL_LAYOUT_MPEG_7_1_B,      /* C Lc Rc L R Ls Rs Lfe */
+    QT_CHANNEL_LAYOUT_AAC_7_1                  = QT_CHANNEL_LAYOUT_MPEG_7_1_B,      /* C Lc Rc L R Ls Rs LFE */
     QT_CHANNEL_LAYOUT_AAC_OCTAGONAL            = (144<<16) | 8,                     /* C L R Ls Rs Rls Rrs Cs */
 
     QT_CHANNEL_LAYOUT_TMH_10_2_STD             = (145<<16) | 16,                    /* L R C Vhc Lsd Rsd Ls Rs Vhl Vhr Lw Rw Csd Cs LFE1 LFE2 */
@@ -687,6 +704,31 @@ typedef enum
     QT_CHANNEL_LAYOUT_EAC3_7_1_F               = (165<<16) | 8,                     /* L C R Ls Rs LFE Cs Ts */
     QT_CHANNEL_LAYOUT_EAC3_7_1_G               = (166<<16) | 8,                     /* L C R Ls Rs LFE Cs Vhc */
     QT_CHANNEL_LAYOUT_EAC3_7_1_H               = (167<<16) | 8,                     /* L C R Ls Rs LFE Ts Vhc */
+
+    QT_CHANNEL_LAYOUT_DTS_3_1                  = (168<<16) | 4,                     /* C L R LFE */
+    QT_CHANNEL_LAYOUT_DTS_4_1                  = (169<<16) | 5,                     /* C L R Cs LFE */
+    QT_CHANNEL_LAYOUT_DTS_6_0_A                = (170<<16) | 6,                     /* Lc Rc L R Ls Rs */
+    QT_CHANNEL_LAYOUT_DTS_6_0_B                = (171<<16) | 6,                     /* C L R Rls Rrs Ts */
+    QT_CHANNEL_LAYOUT_DTS_6_0_C                = (172<<16) | 6,                     /* C Cs L R Rls Rrs */
+    QT_CHANNEL_LAYOUT_DTS_6_1_A                = (173<<16) | 7,                     /* Lc Rc L R Ls Rs LFE */
+    QT_CHANNEL_LAYOUT_DTS_6_1_B                = (174<<16) | 7,                     /* C L R Rls Rrs Ts LFE */
+    QT_CHANNEL_LAYOUT_DTS_6_1_C                = (175<<16) | 7,                     /* C Cs L R Rls Rrs LFE */
+    QT_CHANNEL_LAYOUT_DTS_7_0                  = (176<<16) | 7,                     /* Lc C Rc L R Ls Rs */
+    QT_CHANNEL_LAYOUT_DTS_7_1                  = (177<<16) | 8,                     /* Lc C Rc L R Ls Rs LFE */
+    QT_CHANNEL_LAYOUT_DTS_8_0_A                = (178<<16) | 8,                     /* Lc Rc L R Ls Rs Rls Rrs */
+    QT_CHANNEL_LAYOUT_DTS_8_0_B                = (179<<16) | 8,                     /* Lc C Rc L R Ls Cs Rs */
+    QT_CHANNEL_LAYOUT_DTS_8_1_A                = (180<<16) | 9,                     /* Lc Rc L R Ls Rs Rls Rrs LFE */
+    QT_CHANNEL_LAYOUT_DTS_8_1_B                = (181<<16) | 9,                     /* Lc C Rc L R Ls Cs Rs LFE */
+    QT_CHANNEL_LAYOUT_DTS_6_1_D                = (182<<16) | 7,                     /* C L R Ls Rs LFE Cs */
+
+    QT_CHANNEL_LAYOUT_ALAC_MONO                = QT_CHANNEL_LAYOUT_MONO,            /* C */
+    QT_CHANNEL_LAYOUT_ALAC_STEREO              = QT_CHANNEL_LAYOUT_STEREO,          /* L R */
+    QT_CHANNEL_LAYOUT_ALAC_3_0                 = QT_CHANNEL_LAYOUT_MPEG_3_0_B,      /* C L R */
+    QT_CHANNEL_LAYOUT_ALAC_4_0                 = QT_CHANNEL_LAYOUT_MPEG_4_0_B,      /* C L R Cs */
+    QT_CHANNEL_LAYOUT_ALAC_5_0                 = QT_CHANNEL_LAYOUT_MPEG_5_0_D,      /* C L R Ls Rs */
+    QT_CHANNEL_LAYOUT_ALAC_5_1                 = QT_CHANNEL_LAYOUT_MPEG_5_1_D,      /* C L R Ls Rs LFE */
+    QT_CHANNEL_LAYOUT_ALAC_6_1                 = QT_CHANNEL_LAYOUT_AAC_6_1,         /* C L R Ls Rs Cs LFE */
+    QT_CHANNEL_LAYOUT_ALAC_7_1                 = QT_CHANNEL_LAYOUT_MPEG_7_1_B,      /* C Lc Rc L R Ls Rs LFE */
 
     QT_CHANNEL_LAYOUT_DISCRETE_IN_ORDER        = 147<<16,                           /* needs to be ORed with the actual number of channels */  
     QT_CHANNEL_LAYOUT_UNKNOWN                  = 0xffff0000,                        /* needs to be ORed with the actual number of channels */
@@ -965,6 +1007,59 @@ typedef enum
     ITUNES_METADATA_TYPE_CUSTOM                     = LSMASH_4CC( '-', '-', '-', '-' ),     /* Custom */
 } lsmash_itunes_metadata_type;
 
+typedef enum
+{
+    QT_FIELD_ORDERINGS_PROGRESSIVE              = 0,
+    QT_FIELD_ORDERINGS_TEMPORAL_TOP_FIRST       = 1,
+    QT_FIELD_ORDERINGS_TEMPORAL_BOTTOM_FIRST    = 6,
+    QT_FIELD_ORDERINGS_SPATIAL_FIRST_LINE_EARLY = 9,
+    QT_FIELD_ORDERINGS_SPATIAL_FIRST_LINE_LATE  = 14
+} lsmash_field_orderings;
+
+typedef enum
+{
+    QT_PIXEL_FORMAT_TYPE_1_MONOCHROME                       = 0x00000001,                           /* 1 bit indexed */
+    QT_PIXEL_FORMAT_TYPE_2_INDEXED                          = 0x00000002,                           /* 2 bit indexed */
+    QT_PIXEL_FORMAT_TYPE_4_INDEXED                          = 0x00000004,                           /* 4 bit indexed */
+    QT_PIXEL_FORMAT_TYPE_8_INDEXED                          = 0x00000008,                           /* 8 bit indexed */
+    QT_PIXEL_FORMAT_TYPE_1_INDEXED_GRAY_WHITE_IS_ZERO       = 0x00000021,                           /* 1 bit indexed gray, white is zero */
+    QT_PIXEL_FORMAT_TYPE_2_INDEXED_GRAY_WHITE_IS_ZERO       = 0x00000022,                           /* 2 bit indexed gray, white is zero */
+    QT_PIXEL_FORMAT_TYPE_4_INDEXED_GRAY_WHITE_IS_ZERO       = 0x00000024,                           /* 4 bit indexed gray, white is zero */
+    QT_PIXEL_FORMAT_TYPE_8_INDEXED_GRAY_WHITE_IS_ZERO       = 0x00000028,                           /* 8 bit indexed gray, white is zero */
+    QT_PIXEL_FORMAT_TYPE_16BE555                            = 0x00000010,                           /* 16 bit BE RGB 555 */
+    QT_PIXEL_FORMAT_TYPE_16LE555                            = LSMASH_4CC( 'L', '5', '5', '5' ),     /* 16 bit LE RGB 555 */
+    QT_PIXEL_FORMAT_TYPE_16LE5551                           = LSMASH_4CC( '5', '5', '5', '1' ),     /* 16 bit LE RGB 5551 */
+    QT_PIXEL_FORMAT_TYPE_16BE565                            = LSMASH_4CC( 'B', '5', '6', '5' ),     /* 16 bit BE RGB 565 */
+    QT_PIXEL_FORMAT_TYPE_16LE565                            = LSMASH_4CC( 'L', '5', '6', '5' ),     /* 16 bit LE RGB 565 */
+    QT_PIXEL_FORMAT_TYPE_24RGB                              = 0x00000018,                           /* 24 bit RGB */
+    QT_PIXEL_FORMAT_TYPE_24BGR                              = LSMASH_4CC( '2', '4', 'B', 'G' ),     /* 24 bit BGR */
+    QT_PIXEL_FORMAT_TYPE_32ARGB                             = 0x00000020,                           /* 32 bit ARGB */
+    QT_PIXEL_FORMAT_TYPE_32BGRA                             = LSMASH_4CC( 'B', 'G', 'R', 'A' ),     /* 32 bit BGRA */
+    QT_PIXEL_FORMAT_TYPE_32ABGR                             = LSMASH_4CC( 'A', 'B', 'G', 'R' ),     /* 32 bit ABGR */
+    QT_PIXEL_FORMAT_TYPE_32RGBA                             = LSMASH_4CC( 'R', 'G', 'B', 'A' ),     /* 32 bit RGBA */
+    QT_PIXEL_FORMAT_TYPE_64ARGB                             = LSMASH_4CC( 'b', '6', '4', 'a' ),     /* 64 bit ARGB, 16-bit big-endian samples */
+    QT_PIXEL_FORMAT_TYPE_48RGB                              = LSMASH_4CC( 'b', '4', '8', 'r' ),     /* 48 bit RGB, 16-bit big-endian samples */
+    QT_PIXEL_FORMAT_TYPE_32_ALPHA_GRAY                      = LSMASH_4CC( 'b', '3', '2', 'a' ),     /* 32 bit AlphaGray, 16-bit big-endian samples, black is zero */
+    QT_PIXEL_FORMAT_TYPE_16_GRAY                            = LSMASH_4CC( 'b', '1', '6', 'g' ),     /* 16 bit Grayscale, 16-bit big-endian samples, black is zero */
+    QT_PIXEL_FORMAT_TYPE_30RGB                              = LSMASH_4CC( 'R', '1', '0', 'k' ),     /* 30 bit RGB, 10-bit big-endian samples, 2 unused padding bits (at least significant end) */
+    QT_PIXEL_FORMAT_TYPE_422YpCbCr8                         = LSMASH_4CC( '2', 'v', 'u', 'y' ),     /* Component Y'CbCr 8-bit 4:2:2, ordered Cb Y'0 Cr Y'1 */
+    QT_PIXEL_FORMAT_TYPE_4444YpCbCrA8                       = LSMASH_4CC( 'v', '4', '0', '8' ),     /* Component Y'CbCrA 8-bit 4:4:4:4, ordered Cb Y' Cr A */
+    QT_PIXEL_FORMAT_TYPE_4444YpCbCrA8R                      = LSMASH_4CC( 'r', '4', '0', '8' ),     /* Component Y'CbCrA 8-bit 4:4:4:4, rendering format. full range alpha, zero biased YUV, ordered A Y' Cb Cr */
+    QT_PIXEL_FORMAT_TYPE_4444AYpCbCr8                       = LSMASH_4CC( 'y', '4', '0', '8' ),     /* Component Y'CbCrA 8-bit 4:4:4:4, ordered A Y' Cb Cr, full range alpha, video range Y'CbCr */
+    QT_PIXEL_FORMAT_TYPE_4444AYpCbCr16                      = LSMASH_4CC( 'y', '4', '1', '6' ),     /* Component Y'CbCrA 16-bit 4:4:4:4, ordered A Y' Cb Cr, full range alpha, video range Y'CbCr, 16-bit little-endian samples */
+    QT_PIXEL_FORMAT_TYPE_444YpCbCr8                         = LSMASH_4CC( 'v', '3', '0', '8' ),     /* Component Y'CbCr 8-bit 4:4:4 */
+    QT_PIXEL_FORMAT_TYPE_422YpCbCr16                        = LSMASH_4CC( 'v', '2', '1', '6' ),     /* Component Y'CbCr 10,12,14,16-bit 4:2:2 */
+    QT_PIXEL_FORMAT_TYPE_422YpCbCr10                        = LSMASH_4CC( 'v', '2', '1', '0' ),     /* Component Y'CbCr 10-bit 4:2:2 */
+    QT_PIXEL_FORMAT_TYPE_444YpCbCr10                        = LSMASH_4CC( 'v', '4', '1', '0' ),     /* Component Y'CbCr 10-bit 4:4:4 */
+    QT_PIXEL_FORMAT_TYPE_420YpCbCr8_PLANAR                  = LSMASH_4CC( 'y', '4', '2', '0' ),     /* Planar Component Y'CbCr 8-bit 4:2:0 */
+    QT_PIXEL_FORMAT_TYPE_420YpCbCr8_PLANAR_FULL_RANGE       = LSMASH_4CC( 'f', '4', '2', '0' ),     /* Planar Component Y'CbCr 8-bit 4:2:0, full range */
+    QT_PIXEL_FORMAT_TYPE_422YpCbCr_4A_8_BIPLANAR            = LSMASH_4CC( 'a', '2', 'v', 'y' ),     /* First plane: Video-range Component Y'CbCr 8-bit 4:2:2, ordered Cb Y'0 Cr Y'1; second plane: alpha 8-bit 0-255 */
+    QT_PIXEL_FORMAT_TYPE_420YpCbCr8_BIPLANAR_VIDEO_RANGE    = LSMASH_4CC( '4', '2', '0', 'v' ),     /* Bi-Planar Component Y'CbCr 8-bit 4:2:0, video-range (luma=[16,235] chroma=[16,240]) */
+    QT_PIXEL_FORMAT_TYPE_420YpCbCr8_BIPLANAR_FULL_RANGE     = LSMASH_4CC( '4', '2', '0', 'f' ),     /* Bi-Planar Component Y'CbCr 8-bit 4:2:0, full-range (luma=[0,255] chroma=[1,255]) */ 
+    QT_PIXEL_FORMAT_TYPE_422YpCbCr8_YUVS                    = LSMASH_4CC( 'y', 'u', 'v', 's' ),     /* Component Y'CbCr 8-bit 4:2:2, ordered Y'0 Cb Y'1 Cr */
+    QT_PIXEL_FORMAT_TYPE_422YpCbCr8_FULL_RANGE              = LSMASH_4CC( 'y', 'u', 'v', 'f' ),     /* Component Y'CbCr 8-bit 4:2:2, full range, ordered Y'0 Cb Y'1 Cr */
+} lsmash_pixel_format;
+
 /* public data types */
 typedef struct
 {
@@ -1085,9 +1180,13 @@ typedef struct
     uint32_t par_h;                             /* horizontal factor of pixel aspect ratio */
     uint32_t par_v;                             /* vertical factor of pixel aspect ratio */
     lsmash_scaling_method scaling_method;       /* If not set, video samples are scaled into the visual presentation region to fill it. */
+    /* The folowing parameters are only available for QuickTime file formats. */
     lsmash_color_parameter primaries;
     lsmash_color_parameter transfer;
     lsmash_color_parameter matrix;
+    lsmash_field_orderings field_orderings;     /* field ordering for interlaced material */
+    lsmash_pixel_format pixel_format;           /* the native pixel format */
+    uint8_t significant_bits;                   /* the number of significant bits per component */
 } lsmash_video_summary_t;
 
 typedef struct
@@ -1194,11 +1293,12 @@ int lsmash_add_free( lsmash_root_t *root, uint8_t *data, uint64_t data_length );
 
 int lsmash_write_free( lsmash_root_t *root );
 
-uint32_t lsmash_get_media_timescale( lsmash_root_t *root, uint32_t track_ID );
 uint64_t lsmash_get_media_duration( lsmash_root_t *root, uint32_t track_ID );
 uint64_t lsmash_get_track_duration( lsmash_root_t *root, uint32_t track_ID );
 uint32_t lsmash_get_last_sample_delta( lsmash_root_t *root, uint32_t track_ID );
 uint32_t lsmash_get_start_time_offset( lsmash_root_t *root, uint32_t track_ID );
+uint32_t lsmash_get_composition_to_decode_shift( lsmash_root_t *root, uint32_t track_ID );
+uint32_t lsmash_get_media_timescale( lsmash_root_t *root, uint32_t track_ID );
 uint32_t lsmash_get_movie_timescale( lsmash_root_t *root );
 
 int lsmash_set_avc_config( lsmash_root_t *root, uint32_t track_ID, uint32_t entry_number,
@@ -1207,7 +1307,7 @@ int lsmash_set_avc_config( lsmash_root_t *root, uint32_t track_ID, uint32_t entr
                            uint8_t chroma_format, uint8_t bit_depth_luma_minus8, uint8_t bit_depth_chroma_minus8 );
 int lsmash_set_last_sample_delta( lsmash_root_t *root, uint32_t track_ID, uint32_t sample_delta );
 int lsmash_set_free( lsmash_root_t *root, uint8_t *data, uint64_t data_length );
-int lsmash_set_tyrant_chapter( lsmash_root_t *root, char *file_name );
+int lsmash_set_tyrant_chapter( lsmash_root_t *root, char *file_name, int add_bom );
 
 int lsmash_create_reference_chapter_track( lsmash_root_t *root, uint32_t track_ID, char *file_name );
 int lsmash_create_object_descriptor( lsmash_root_t *root );
@@ -1260,14 +1360,25 @@ int lsmash_set_itunes_metadata_integer( lsmash_root_t *root, lsmash_itunes_metad
 int lsmash_set_itunes_metadata_boolean( lsmash_root_t *root, lsmash_itunes_metadata_type type, lsmash_boolean_t value, char *meaning, char *name );
 
 #ifdef LSMASH_DEMUXER_ENABLED
-int lsmash_print_movie( lsmash_root_t *root );
+int lsmash_print_movie( lsmash_root_t *root, const char *filename );
+
+/* This function might output BOM on Windows. Make sure that this is the first function that outputs something to stdout. */
+int lsmash_print_chapter_list( lsmash_root_t *root );
 
 int lsmash_copy_timeline_map( lsmash_root_t *dst, uint32_t dst_track_ID, lsmash_root_t *src, uint32_t src_track_ID );
 int lsmash_copy_decoder_specific_info( lsmash_root_t *dst, uint32_t dst_track_ID, lsmash_root_t *src, uint32_t src_track_ID );
 int lsmash_construct_timeline( lsmash_root_t *root, uint32_t track_ID );
 void lsmash_destruct_timeline( lsmash_root_t *root, uint32_t track_ID );
 int lsmash_get_last_sample_delta_from_media_timeline( lsmash_root_t *root, uint32_t track_ID, uint32_t *last_sample_delta );
+int lsmash_get_sample_delta_from_media_timeline( lsmash_root_t *root, uint32_t track_ID, uint32_t sample_number, uint32_t *sample_delta );
 int lsmash_get_dts_from_media_timeline( lsmash_root_t *root, uint32_t track_ID, uint32_t sample_number, uint64_t *dts );
+int lsmash_get_cts_from_media_timeline( lsmash_root_t *root, uint32_t track_ID, uint32_t sample_number, uint64_t *cts );
+int lsmash_get_composition_to_decode_shift_from_media_timeline( lsmash_root_t *root, uint32_t track_ID, uint32_t *ctd_shift );
+int lsmash_get_closest_random_accessible_point_from_media_timeline( lsmash_root_t *root, uint32_t track_ID, uint32_t sample_number, uint32_t *rap_number );
+int lsmash_get_closest_random_accessible_point_detail_from_media_timeline( lsmash_root_t *root, uint32_t track_ID, uint32_t sample_number,
+                                                                           uint32_t *rap_number, lsmash_random_access_type *type, uint32_t *leading, uint32_t *distance );
+uint32_t lsmash_get_sample_count_in_media_timeline( lsmash_root_t *root, uint32_t track_ID );
+uint32_t lsmash_get_max_sample_size_in_media_timeline( lsmash_root_t *root, uint32_t track_ID );
 lsmash_sample_t *lsmash_get_sample_from_media_timeline( lsmash_root_t *root, uint32_t track_ID, uint32_t sample_number );
 int lsmash_check_sample_existence_in_media_timeline( lsmash_root_t *root, uint32_t track_ID, uint32_t sample_number );
 
@@ -1277,7 +1388,10 @@ void lsmash_destroy_itunes_metadata( lsmash_itunes_metadata_list_t *list );
 
 int lsmash_set_media_timestamps( lsmash_root_t *root, uint32_t track_ID, lsmash_media_ts_list_t *ts_list );
 int lsmash_get_media_timestamps( lsmash_root_t *root, uint32_t track_ID, lsmash_media_ts_list_t *ts_list );
-int lsmash_get_media_timeline_shift( lsmash_root_t *root, uint32_t track_ID, int32_t *timeline_shift );
+void lsmash_delete_media_timestamps( lsmash_media_ts_list_t *ts_list );
+int lsmash_get_max_sample_delay( lsmash_media_ts_list_t *ts_list, uint32_t *max_sample_delay );
+void lsmash_sort_timestamps_decoding_order( lsmash_media_ts_list_t *ts_list );
+void lsmash_sort_timestamps_composition_order( lsmash_media_ts_list_t *ts_list );
 #endif
 
 /* to facilitate to make exdata (typically DecoderSpecificInfo or AudioSpecificConfig). */

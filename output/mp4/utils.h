@@ -1,7 +1,7 @@
 /*****************************************************************************
  * utils.h:
  *****************************************************************************
- * Copyright (C) 2010 L-SMASH project
+ * Copyright (C) 2010-2011 L-SMASH project
  *
  * Authors: Yusuke Nakamura <muken.the.vfrmaniac@gmail.com>
  *
@@ -49,7 +49,6 @@ lsmash_bs_t* lsmash_bs_create( char* filename );
 void lsmash_bs_cleanup( lsmash_bs_t *bs );
 
 /*---- bytestream writer ----*/
-
 void lsmash_bs_put_byte( lsmash_bs_t *bs, uint8_t value );
 void lsmash_bs_put_bytes( lsmash_bs_t *bs, void *value, uint32_t size );
 void lsmash_bs_put_be16( lsmash_bs_t *bs, uint16_t value );
@@ -65,6 +64,7 @@ int lsmash_bs_write_data( lsmash_bs_t *bs );
 void* lsmash_bs_export_data( lsmash_bs_t *bs, uint32_t* length );
 
 /*---- bytestream reader ----*/
+uint8_t lsmash_bs_show_byte( lsmash_bs_t *bs, uint32_t offset );
 uint8_t lsmash_bs_get_byte( lsmash_bs_t *bs );
 uint8_t *lsmash_bs_get_bytes( lsmash_bs_t *bs, uint32_t size );
 uint16_t lsmash_bs_get_be16( lsmash_bs_t *bs );
@@ -141,6 +141,19 @@ double lsmash_int2float64( uint64_t value );
 void *lsmash_malloc_zero( size_t size );
 void *lsmash_memdup( void *src, size_t size );
 
+typedef struct
+{
+    uint32_t number_of_buffers;
+    uint32_t buffer_size;
+    void    *buffers;
+} lsmash_multiple_buffers_t;
+
+lsmash_multiple_buffers_t *lsmash_create_multiple_buffers( uint32_t number_of_buffers, uint32_t buffer_size );
+void *lsmash_withdraw_buffer( lsmash_multiple_buffers_t *multiple_buffer, uint32_t buffer_number );
+lsmash_multiple_buffers_t *lsmash_resize_multiple_buffers( lsmash_multiple_buffers_t *multiple_buffer, uint32_t buffer_size );
+void lsmash_destroy_multiple_buffers( lsmash_multiple_buffers_t *multiple_buffer );
+
+/*---- others ----*/
 typedef enum
 {
     LSMASH_LOG_ERROR,
@@ -148,8 +161,8 @@ typedef enum
     LSMASH_LOG_INFO,
 } lsmash_log_level;
 
-/*---- others ----*/
 void lsmash_log( lsmash_log_level level, const char* message, ... );
+uint32_t lsmash_count_bits( uint32_t bits );
 int lsmash_compare_dts( const lsmash_media_ts_t *a, const lsmash_media_ts_t *b );
 int lsmash_compare_cts( const lsmash_media_ts_t *a, const lsmash_media_ts_t *b );
 

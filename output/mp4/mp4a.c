@@ -1,7 +1,7 @@
 /*****************************************************************************
  * mp4a.c:
  *****************************************************************************
- * Copyright (C) 2010 L-SMASH project
+ * Copyright (C) 2010-2011 L-SMASH project
  *
  * Authors: Takashi Hirata <silverfilain@gmail.com>
  *
@@ -262,7 +262,10 @@ static mp4a_ALSSpecificConfig_t *mp4a_create_ALSSpecificConfig( uint8_t *exdata,
         return NULL;
     alssc->data = lsmash_memdup( exdata, exdata_length );
     if( !alssc->data )
+    {
+        free( alssc );
         return NULL;
+    }
     alssc->size = exdata_length;
     return alssc;
 }
@@ -519,7 +522,7 @@ void mp4a_put_AudioSpecificConfig( lsmash_bs_t* bs, mp4a_AudioSpecificConfig_t* 
 
 static int mp4a_get_GASpecificConfig( lsmash_bits_t *bits, mp4a_AudioSpecificConfig_t *asc )
 {
-    mp4a_GASpecificConfig_t *gasc = (mp4a_GASpecificConfig_t *)malloc( sizeof(mp4a_GASpecificConfig_t) );
+    mp4a_GASpecificConfig_t *gasc = (mp4a_GASpecificConfig_t *)lsmash_malloc_zero( sizeof(mp4a_GASpecificConfig_t) );
     if( !gasc )
         return -1;
     asc->deepAudioSpecificConfig = gasc;
@@ -539,7 +542,7 @@ static int mp4a_get_MPEG_1_2_SpecificConfig( lsmash_bits_t *bits, mp4a_AudioSpec
 
 static int mp4a_get_ALSSpecificConfig( lsmash_bits_t *bits, mp4a_AudioSpecificConfig_t *asc )
 {
-    mp4a_ALSSpecificConfig_t *alssc = (mp4a_ALSSpecificConfig_t *)malloc( sizeof(mp4a_ALSSpecificConfig_t) );
+    mp4a_ALSSpecificConfig_t *alssc = (mp4a_ALSSpecificConfig_t *)lsmash_malloc_zero( sizeof(mp4a_ALSSpecificConfig_t) );
     if( !alssc )
         return -1;
     asc->deepAudioSpecificConfig = alssc;
@@ -613,7 +616,12 @@ static mp4a_AudioSpecificConfig_t * mp4a_get_AudioSpecificConfig( lsmash_bits_t 
         default :
             break;
     }
-    return ret ? NULL : asc;
+    if( ret )
+    {
+        free( asc );
+        return NULL;
+    }
+    return asc;
 }
 
 int mp4a_setup_summary_from_AudioSpecificConfig( lsmash_audio_summary_t *summary, uint8_t *dsi_payload, uint32_t dsi_payload_length )

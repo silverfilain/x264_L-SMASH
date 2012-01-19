@@ -1,7 +1,7 @@
 /*****************************************************************************
  * utils.c:
  *****************************************************************************
- * Copyright (C) 2010 L-SMASH project
+ * Copyright (C) 2010-2011 L-SMASH project
  *
  * Authors: Yusuke Nakamura <muken.the.vfrmaniac@gmail.com>
  *
@@ -190,6 +190,19 @@ void* lsmash_bs_export_data( lsmash_bs_t *bs, uint32_t* length )
 /*---- ----*/
 
 /*---- bitstream reader ----*/
+uint8_t lsmash_bs_show_byte( lsmash_bs_t *bs, uint32_t offset )
+{
+    if( bs->error || !bs->data )
+        return 0;
+    if( bs->pos + offset > bs->store )
+    {
+        lsmash_bs_free( bs );
+        bs->error = 1;
+        return 0;
+    }
+    return bs->data[bs->pos + offset];
+}
+
 uint8_t lsmash_bs_get_byte( lsmash_bs_t *bs )
 {
     if( bs->error || !bs->data )
@@ -684,6 +697,70 @@ void *lsmash_memdup( void *src, size_t size )
     memcpy( dst, src, size );
     return dst;
 }
+
+lsmash_multiple_buffers_t *lsmash_create_multiple_buffers( uint32_t number_of_buffers, uint32_t buffer_size )
+{
+    if( (uint64_t)number_of_buffers * buffer_size > UINT32_MAX )
+        return NULL;
+    lsmash_multiple_buffers_t *multiple_buffer = malloc( sizeof(lsmash_multiple_buffers_t) );
+    if( !multiple_buffer )
+        return NULL;
+    multiple_buffer->buffers = malloc( number_of_buffers * buffer_size );
+    if( !multiple_buffer->buffers )
+    {
+        free( multiple_buffer );
+        return NULL;
+    }
+    multiple_buffer->number_of_buffers = number_of_buffers;
+    multiple_buffer->buffer_size = buffer_size;
+    return multiple_buffer;
+}
+
+void *lsmash_withdraw_buffer( lsmash_multiple_buffers_t *multiple_buffer, uint32_t buffer_number )
+{
+    if( !multiple_buffer || !buffer_number || buffer_number > multiple_buffer->number_of_buffers )
+        return NULL;
+    return multiple_buffer->buffers + (buffer_number - 1) * multiple_buffer->buffer_size;
+}
+
+lsmash_multiple_buffers_t *lsmash_resize_multiple_buffers( lsmash_multiple_buffers_t *multiple_buffer, uint32_t buffer_size )
+{
+    if( !multiple_buffer )
+        return NULL;
+    if( buffer_size == multiple_buffer->buffer_size )
+        return multiple_buffer;
+    if( (uint64_t)multiple_buffer->number_of_buffers * buffer_size > UINT32_MAX )
+        return NULL;
+    void *temp;
+    if( buffer_size > multiple_buffer->buffer_size )
+    {
+        temp = realloc( multiple_buffer->buffers, multiple_buffer->number_of_buffers * buffer_size );
+        if( !temp )
+            return NULL;
+        for( uint32_t i = multiple_buffer->number_of_buffers - 1; i ; i-- )
+            memmove( temp + buffer_size, temp + i * multiple_buffer->buffer_size, multiple_buffer->buffer_size );
+    }
+    else
+    {
+        for( uint32_t i = 1; i < multiple_buffer->number_of_buffers; i++ )
+            memmove( multiple_buffer->buffers + buffer_size, multiple_buffer->buffers + i * multiple_buffer->buffer_size, multiple_buffer->buffer_size );
+        temp = realloc( multiple_buffer->buffers, multiple_buffer->number_of_buffers * buffer_size );
+        if( !temp )
+            return NULL;
+    }
+    multiple_buffer->buffers = temp;
+    multiple_buffer->buffer_size = buffer_size;
+    return multiple_buffer;
+}
+
+void lsmash_destroy_multiple_buffers( lsmash_multiple_buffers_t *multiple_buffer )
+{
+    if( !multiple_buffer )
+        return;
+    if( multiple_buffer->buffers )
+        free( multiple_buffer->buffers );
+    free( multiple_buffer );
+}
 /*---- ----*/
 
 /*---- others ----*/
@@ -712,6 +789,15 @@ void lsmash_log( lsmash_log_level level, const char* message, ... )
     fprintf( stderr, "[%s]: ", prefix );
     vfprintf( stderr, message, args );
     va_end( args );
+}
+
+uint32_t lsmash_count_bits( uint32_t bits )
+{
+    bits = (bits & 0x55555555) + ((bits >>  1) & 0x55555555);
+    bits = (bits & 0x33333333) + ((bits >>  2) & 0x33333333);
+    bits = (bits & 0x0f0f0f0f) + ((bits >>  4) & 0x0f0f0f0f);
+    bits = (bits & 0x00ff00ff) + ((bits >>  8) & 0x00ff00ff);
+    return (bits & 0x0000ffff) + ((bits >> 16) & 0x0000ffff);
 }
 
 /* for qsort function */

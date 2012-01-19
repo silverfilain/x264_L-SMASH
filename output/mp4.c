@@ -766,7 +766,7 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
 #endif
 
         if( p_mp4->psz_chapter && (p_mp4->major_brand != ISOM_BRAND_TYPE_QT) )
-            MP4_LOG_IF_ERR( lsmash_set_tyrant_chapter( p_mp4->p_root, p_mp4->psz_chapter ), "failed to set chapter list.\n" );
+            MP4_LOG_IF_ERR( lsmash_set_tyrant_chapter( p_mp4->p_root, p_mp4->psz_chapter, 0 ), "failed to set chapter list.\n" );
 
         if( !p_mp4->b_no_remux )
         {
