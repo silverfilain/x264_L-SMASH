@@ -260,7 +260,7 @@ static int close_file( hnd_t handle )
 {
     lavf_hnd_t *h = handle;
     avcodec_close( h->lavf->streams[h->stream_id]->codec );
-    av_close_input_file( h->lavf );
+    avformat_close_input( &h->lavf );
 #if HAVE_AUDIO
     free( h->filename );
 #endif
