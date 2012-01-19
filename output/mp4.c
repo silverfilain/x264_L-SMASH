@@ -384,6 +384,12 @@ static int audio_init( hnd_t handle, cli_output_opt_t *opt, hnd_t filters, char 
                 p_audio->codec_type = ISOM_CODEC_TYPE_ALAC_AUDIO;
                 p_mp4->b_brand_m4a = 1;
             }
+            else if( !strcmp( info->codec_name, "dca" ) )
+            {
+                audio_dts_info_t *dts_info = info->opaque;
+                p_audio->codec_type = dts_info->coding_name;
+                p_audio->b_mdct = (p_audio->codec_type == ISOM_CODEC_TYPE_DTSE_AUDIO);
+            }
             break;
         case ISOM_BRAND_TYPE_QT :
             if( !strcmp( info->codec_name, "aac" ) )
@@ -530,6 +536,15 @@ static int set_param_audio( mp4_hnd_t* p_mp4, uint64_t i_media_timescale, lsmash
             p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_NONE;
             MP4_FAIL_IF_ERR( mp4sys_amr_create_damr( p_audio->summary ),
                              "failed to create AMR specific info.\n" );
+            break;
+        case ISOM_CODEC_TYPE_DTSC_AUDIO :
+        case ISOM_CODEC_TYPE_DTSE_AUDIO :
+        case ISOM_CODEC_TYPE_DTSH_AUDIO :
+        case ISOM_CODEC_TYPE_DTSL_AUDIO :
+            p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_NONE;
+            MP4_FAIL_IF_ERR( p_audio->info->extradata_size != 28, "DTS specific info is absent.\n" );
+            MP4_FAIL_IF_ERR( lsmash_summary_add_exdata( (lsmash_summary_t *)p_audio->summary, p_audio->info->extradata, p_audio->info->extradata_size ),
+                             "failed to create DTS specific info.\n" );
             break;
         default :
             p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_NONE;

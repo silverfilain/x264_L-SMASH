@@ -68,6 +68,11 @@ typedef struct audio_aac_info_t
     int has_sbr;
 } audio_aac_info_t;
 
+typedef struct audio_dts_info_t
+{
+    uint32_t coding_name;
+} audio_dts_info_t;
+
 typedef struct audio_packet_t {
     int64_t         dts;
     float         **samples;
