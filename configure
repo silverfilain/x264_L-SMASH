@@ -1257,7 +1257,7 @@ cat conftest.log
 rm conftest.log
 
 [ "$SRCPATH" != "." ] && ln -sf ${SRCPATH}/Makefile ./Makefile
-mkdir -p common/{arm,ppc,sparc,x86} encoder extras filters/video input output tools
+mkdir -p audio/encoders common/{arm,ppc,sparc,x86} encoder extras filters/{audio,video} input/audio output/mp4 tools
 
 echo
 echo "You can run 'make' or 'make fprofiled' now."
