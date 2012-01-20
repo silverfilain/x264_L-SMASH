@@ -387,8 +387,18 @@ static int audio_init( hnd_t handle, cli_output_opt_t *opt, hnd_t filters, char 
             else if( !strcmp( info->codec_name, "dca" ) )
             {
                 audio_dts_info_t *dts_info = info->opaque;
-                p_audio->codec_type = dts_info->coding_name;
-                p_audio->b_mdct = (p_audio->codec_type == ISOM_CODEC_TYPE_DTSE_AUDIO);
+                if( dts_info )
+                {
+                    /* It's only available for L-SMASH importing currently.
+                     * From lavf input, can't generate DTSSpecificBox yet. */
+                    p_audio->codec_type = dts_info->coding_name;
+                    p_audio->b_mdct = (p_audio->codec_type == ISOM_CODEC_TYPE_DTSE_AUDIO);
+                }
+                else
+                {
+                    MP4_LOG_ERROR( "'dca' from lavf input is unsupported.\n" );
+                    goto error;
+                }
             }
             break;
         case ISOM_BRAND_TYPE_QT :
