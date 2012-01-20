@@ -181,6 +181,8 @@ static void lsmash_close( hnd_t handle )
         lsmash_cleanup_summary( (lsmash_summary_t *)h->summary );
     if( h->importer )
         mp4sys_importer_close( h->importer );
+    if( h->info.opaque )
+        free( h->info.opaque );
     if( h )
         free( h );
 }
