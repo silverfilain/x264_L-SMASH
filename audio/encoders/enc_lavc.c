@@ -74,6 +74,29 @@ static const struct {
     { CODEC_ID_NONE,    NULL, },
 };
 
+static int encode_audio( AVCodecContext *ctx, audio_packet_t *out, AVFrame *frame )
+{
+    AVPacket avpkt;
+    av_init_packet( &avpkt );
+    avpkt.data = NULL;
+    avpkt.size = 0;
+
+    int got_packet = 0;
+
+    if( avcodec_encode_audio2( ctx, &avpkt, frame, &got_packet ) < 0 )
+        return -1;
+
+    if( got_packet )
+    {
+        out->size = avpkt.size;
+        memcpy( out->data, avpkt.data, avpkt.size );
+    }
+    else
+        out->size = 0;
+
+    return 0;
+}
+
 #define ISCODEC( name ) (!strcmp( h->info.codec_name, #name ))
 
 static hnd_t init( hnd_t filter_chain, const char *opt_str )
@@ -127,6 +150,7 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     h->ctx->sample_rate     = h->info.samplerate;
     h->ctx->channels        = h->info.channels;
     h->ctx->channel_layout  = h->info.chanlayout;
+    h->ctx->time_base       = (AVRational){ 1, h->ctx->sample_rate };
     h->ctx->flags2         |= CODEC_FLAG2_BIT_RESERVOIR; // mp3
     h->ctx->flags          |= CODEC_FLAG_GLOBAL_HEADER; // aac
 
@@ -161,9 +185,20 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
         RETURN_IF_ERR( !pkt, "lavc", NULL, "could not get a audio frame\n" );
 
         pkt->data = malloc( FF_MIN_BUFFER_SIZE * 3 / 2 );
+        RETURN_IF_ERR( !pkt->data, "lavc", NULL, "malloc failed!\n" );
 
-        void *indata = x264_af_interleave2( h->smpfmt, pkt->samples, pkt->channels, pkt->samplecount );
-        pkt->size = avcodec_encode_audio( h->ctx, pkt->data, pkt->channels * pkt->samplecount, indata );
+        AVFrame frame;
+        avcodec_get_frame_defaults( &frame );
+        frame.nb_samples  = pkt->samplecount;
+        frame.linesize[0] = pkt->channels * pkt->samplecount;
+        frame.data[0]     = x264_af_interleave2( h->smpfmt, pkt->samples, pkt->channels, pkt->samplecount );
+
+        if( encode_audio( h->ctx, pkt, &frame ) < 0 )
+        {
+            x264_cli_log( "lavc", X264_LOG_ERROR, "error encoding audio! (%s)\n", strerror( -pkt->size ) );
+            x264_af_free_packet( pkt );
+            return NULL;
+        }
 
         h->ctx->frame_number = 0;
         h->ctx->extradata_size = pkt->size;
@@ -200,8 +235,12 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
 
     if( ISCODEC( alac ) )
         h->buf_size = 2 * (8 + h->info.framesize);
-    else if( IS_LPCM_CODEC_ID( h->ctx->codec->id ) )
-        h->buf_size = h->info.framesize;
+    else if( h->info.framelen == 0 )
+    {
+        /* framelen == 0 indicates the actual frame size is based on the buf_size passed to avcodec_encode_audio2(). */
+        h->info.framelen = 1;   /* arbitrary */
+        h->buf_size = h->info.framesize = h->info.framelen * h->info.samplesize;
+    }
     else
         h->buf_size = FF_MIN_BUFFER_SIZE * 3 / 2;
     h->last_dts = INVALID_DTS;
@@ -226,11 +265,11 @@ static audio_packet_t *get_next_packet( hnd_t handle )
         return NULL;
     assert( h->ctx );
 
-
     audio_packet_t *smp = NULL;
     audio_packet_t *out = calloc( 1, sizeof( audio_packet_t ) );
     out->info = h->info;
     out->data = malloc( h->buf_size );
+
     while( out->size == 0 )
     {
         smp = x264_af_get_samples( h->filter_chain, h->last_sample, h->last_sample + h->info.framelen );
@@ -270,11 +309,21 @@ static audio_packet_t *get_next_packet( hnd_t handle )
             h->last_dts = h->last_sample;
         h->last_sample += smp->samplecount;
 
-        void *indata   = x264_af_interleave2( h->smpfmt, smp->samples, smp->channels, smp->samplecount );
-        out->size      = avcodec_encode_audio( h->ctx, out->data, h->buf_size, indata );
+        AVFrame frame;
+        avcodec_get_frame_defaults( &frame );
+        frame.nb_samples  = smp->samplecount;
+        frame.linesize[0] = h->buf_size;
+        frame.data[0]     = x264_af_interleave2( h->smpfmt, smp->samples, smp->channels, smp->samplecount );
+
+        if( encode_audio( h->ctx, out, &frame ) < 0 )
+        {
+            x264_cli_log( "lavc", X264_LOG_ERROR, "error encoding audio! (%s)\n", strerror( -out->size ) );
+            goto error;
+        }
 
         x264_af_free_packet( smp );
     }
+
     if( out->size < 0 )
     {
         x264_cli_log( "lavc", X264_LOG_ERROR, "error encoding audio! (%s)\n", strerror( -out->size ) );
@@ -307,7 +356,9 @@ static audio_packet_t *finish( hnd_t handle )
     out->info     = h->info;
     out->channels = h->info.channels;
     out->data     = malloc( h->buf_size );
-    out->size     = avcodec_encode_audio( h->ctx, out->data, h->buf_size, NULL );
+
+    if( encode_audio( h->ctx, out, NULL ) < 0 )
+        goto error;
 
     if( out->size <= 0 )
         goto error;
