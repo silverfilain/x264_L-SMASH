@@ -22,10 +22,10 @@ const audio_encoder_entry_t registered_audio_encoders[] = {
     { "aac",    "faac",       &audio_encoder_faac, },
 #endif
 #if HAVE_LAVF
+    { "aac",        "libvo_aacenc",     &audio_encoder_lavc, },
     { "aac",        "aac",              &audio_encoder_lavc, },
     { "ac3",        "ac3",              &audio_encoder_lavc, },
     { "alac",       "alac",             &audio_encoder_lavc, },
-    { "aac",        "libvo_aacenc",     &audio_encoder_lavc, },
     { "amrwb",      "libvo_amrwbenc",   &audio_encoder_lavc, },
     { "mp2",        "mp2",              &audio_encoder_lavc, },
     { "pcm_f32be",  "pcm_f32be",        &audio_encoder_lavc, },
