@@ -16,7 +16,7 @@ typedef struct enc_lavc_t
     int64_t last_dts;
 
     AVCodecContext *ctx;
-    enum SampleFormat smpfmt;
+    enum AVSampleFormat smpfmt;
 } enc_lavc_t;
 
 static int is_encoder_available( const char *name, void **priv )
@@ -136,25 +136,28 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     for( j = 0; codec->sample_fmts[j] != -1; j++ )
     {
         // Prefer floats...
-        if( codec->sample_fmts[j] == SAMPLE_FMT_FLT )
+        if( codec->sample_fmts[j] == AV_SAMPLE_FMT_FLT )
         {
-            h->smpfmt = SAMPLE_FMT_FLT;
+            h->smpfmt = AV_SAMPLE_FMT_FLT;
             break;
         }
         else if( h->smpfmt < codec->sample_fmts[j] ) // or the best possible sample format (is this really The Right Thing?)
             h->smpfmt = codec->sample_fmts[j];
     }
+
     h->ctx                  = avcodec_alloc_context3( NULL );
     h->ctx->sample_fmt      = h->smpfmt;
     h->ctx->sample_rate     = h->info.samplerate;
     h->ctx->channels        = h->info.channels;
     h->ctx->channel_layout  = h->info.chanlayout;
     h->ctx->time_base       = (AVRational){ 1, h->ctx->sample_rate };
-    h->ctx->flags2         |= CODEC_FLAG2_BIT_RESERVOIR; // mp3
-    h->ctx->flags          |= CODEC_FLAG_GLOBAL_HEADER; // aac
+
+    AVDictionary *avopts = NULL;
+    av_dict_set( &avopts, "flags", "global_header", 0 ); // aac
+    av_dict_set( &avopts, "reservoir", "1", 0 ); // mp3
 
     if( ISCODEC( aac ) )
-        h->ctx->profile = FF_PROFILE_AAC_LOW; // TODO: decide by bitrate / quality
+        av_dict_set( &avopts, "profile", "aac_low", 0 ); // TODO: decide by bitrate / quality
 
     int is_vbr = x264_otob( x264_get_option( "is_vbr", opts ), ffcodecs[i].mode & MODE_VBR ? 1 : 0 );
 
@@ -170,13 +173,13 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
 
     if( is_vbr )
     {
-        h->ctx->flags         |= CODEC_FLAG_QSCALE;
+        av_dict_set( &avopts, "flags", "qscale", 0 );
         h->ctx->global_quality = FF_QP2LAMBDA * brval;
     }
     else
         h->ctx->bit_rate = lrintf( brval * 1000.0f );
 
-    RETURN_IF_ERR( avcodec_open2( h->ctx, codec, NULL ), "lavc", NULL, "could not open the %s encoder\n", codec->name );
+    RETURN_IF_ERR( avcodec_open2( h->ctx, codec, &avopts ), "lavc", NULL, "could not open the %s encoder\n", codec->name );
 
     if( ISCODEC( ac3 ) )
     {
