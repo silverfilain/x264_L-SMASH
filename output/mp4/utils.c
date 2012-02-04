@@ -81,7 +81,7 @@ void lsmash_bs_put_byte( lsmash_bs_t *bs, uint8_t value )
     bs->data[bs->store ++] = value;
 }
 
-void lsmash_bs_put_bytes( lsmash_bs_t *bs, void *value, uint32_t size )
+void lsmash_bs_put_bytes( lsmash_bs_t *bs, uint32_t size, void *value )
 {
     if( !size || !value )
         return;
@@ -384,7 +384,7 @@ static inline uint8_t lsmash_bits_mask_lsb8( uint32_t value, uint32_t width )
 }
 
 /* We can change value's type to unsigned int for 64-bit operation if needed. */
-void lsmash_bits_put( lsmash_bits_t *bits, uint32_t value, uint32_t width )
+void lsmash_bits_put( lsmash_bits_t *bits, uint32_t width, uint32_t value )
 {
     debug_if( !bits || !width )
         return;
