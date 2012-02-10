@@ -1493,6 +1493,7 @@ static int parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
                 break;
             case OPT_NOPROGRESS:
                 opt->b_progress = 0;
+                output_opt.no_progress = 1;
                 break;
             case OPT_VISUALIZE:
 #if HAVE_VISUALIZE

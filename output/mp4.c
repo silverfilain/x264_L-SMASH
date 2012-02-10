@@ -135,6 +135,7 @@ typedef struct
 #if HAVE_ANY_AUDIO
     mp4_audio_hnd_t *audio_hnd;
 #endif
+    int b_no_progress;
 } mp4_hnd_t;
 
 /*******************/
@@ -747,9 +748,17 @@ static int close_file_audio( mp4_hnd_t* p_mp4, double actual_duration )
 }
 #endif /* #if HAVE_ANY_AUDIO */
 
+typedef struct {
+    int64_t start;
+    int no_progress;
+} remux_cb_param;
+
 int remux_callback( void* param, uint64_t done, uint64_t total )
 {
-    int64_t elapsed = x264_mdate() - *(int64_t*)param;
+    remux_cb_param *cb_param = (remux_cb_param*)param;
+    if( cb_param->no_progress && done != total )
+        return 0;
+    int64_t elapsed = x264_mdate() - cb_param->start;
     double byterate = done / ( elapsed / 1000000. );
     fprintf( stderr, "remux [%5.2lf%%], %"PRIu64"/%"PRIu64" KiB, %u KiB/s, ",
         done*100./total, done/1024, total/1024, (unsigned)byterate/1024 );
@@ -827,11 +836,13 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
 
         if( !p_mp4->b_no_remux )
         {
-            int64_t start = x264_mdate();
+            remux_cb_param cb_param;
+            cb_param.no_progress = p_mp4->b_no_progress;
+            cb_param.start = x264_mdate();
             lsmash_adhoc_remux_t remux_info;
             remux_info.func = remux_callback;
             remux_info.buffer_size = 4*1024*1024; // 4MiB
-            remux_info.param = &start;
+            remux_info.param = &cb_param;
             MP4_LOG_IF_ERR( lsmash_finish_movie( p_mp4->p_root, &remux_info ), "failed to finish movie.\n" );
         }
         else
@@ -925,6 +936,7 @@ static int open_file( char *psz_filename, hnd_t *p_handle, cli_output_opt_t *opt
     if( !p_mp4->audio_hnd )
         MP4_LOG_INFO( "audio muxing feature is disabled.\n" );
 #endif
+    p_mp4->b_no_progress = opt->no_progress;
 
     *p_handle = p_mp4;
 

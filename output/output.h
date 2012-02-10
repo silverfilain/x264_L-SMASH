@@ -43,6 +43,7 @@ typedef struct
     char *chapter;
     char *language;
     uint32_t priming;
+    int no_progress;
 } cli_output_opt_t;
 
 typedef struct
