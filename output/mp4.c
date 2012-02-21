@@ -389,14 +389,32 @@ static int audio_init( hnd_t handle, cli_output_opt_t *opt, hnd_t filters, char 
                 audio_dts_info_t *dts_info = info->opaque;
                 if( dts_info )
                 {
-                    /* It's only available for L-SMASH importing currently.
-                     * From lavf input, can't generate DTSSpecificBox yet. */
+                    /* from L-SMASH importer */
                     p_audio->codec_type = dts_info->coding_name;
                     p_audio->b_mdct = (p_audio->codec_type == ISOM_CODEC_TYPE_DTSE_AUDIO);
                 }
+                else if( info->extradata && info->extradata_size > 0 )
+                {
+                    /* from lavf input
+                     * Create DTSSpecificBox from DTS audio frame by L-SMASH's DTS parser. */
+                    lsmash_dts_specific_parameters_t param = { 0 };
+                    if( lsmash_setup_dts_specific_parameters_from_frame( &param, info->extradata, info->extradata_size ) )
+                    {
+                        MP4_LOG_ERROR( "failed to parse DTS audio frame.\n" );
+                        goto error;
+                    }
+                    p_audio->codec_type = lsmash_dts_get_codingname( &param );
+                    free( info->extradata );
+                    info->extradata = lsmash_create_dts_specific_info( &param, (uint32_t *)&info->extradata_size );
+                    if( !info->extradata )
+                    {
+                        MP4_LOG_ERROR( "failed to create DTS specific info.\n" );
+                        goto error;
+                    }
+                }
                 else
                 {
-                    MP4_LOG_ERROR( "'dca' from lavf input is unsupported.\n" );
+                    MP4_LOG_ERROR( "no frame to create DTS specific info.\n" );
                     goto error;
                 }
             }

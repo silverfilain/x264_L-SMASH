@@ -235,7 +235,7 @@ static hnd_t copy_init( hnd_t filter_chain, const char *opts )
             h->info.extradata_size = h->ctx->extradata_size;
             h->info.codec_name = "als";
         }
-        else if( ( h->ctx->codec->id == CODEC_ID_AC3 ) && !h->ctx->extradata )
+        else if( ( h->ctx->codec->id == CODEC_ID_AC3 || h->ctx->codec->id == CODEC_ID_DTS ) && !h->ctx->extradata )
         {
             h->ctx->extradata_size = h->pkt->size;
             h->ctx->extradata = av_malloc( h->ctx->extradata_size );
@@ -248,7 +248,7 @@ static hnd_t copy_init( hnd_t filter_chain, const char *opts )
             h->out = convert_to_audio_packet( h, h->pkt );
             h->info.extradata = h->ctx->extradata;
             h->info.extradata_size = h->ctx->extradata_size;
-            h->info.codec_name = "ac3";
+            h->info.codec_name = h->ctx->codec->id == CODEC_ID_AC3 ? "ac3" : "dca";
         }
         else if( ( h->ctx->codec->id == CODEC_ID_AMR_NB ) )
         {
