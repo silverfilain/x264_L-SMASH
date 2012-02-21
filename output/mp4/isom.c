@@ -1025,14 +1025,46 @@ static int isom_set_extra_description( isom_audio_entry_t *audio )
 {
     lsmash_audio_summary_t *summary = &audio->summary;
     audio->data_reference_index = 1;
-    audio->samplerate = summary->frequency <= UINT16_MAX ? summary->frequency << 16 : 0;
     if( audio->type == ISOM_CODEC_TYPE_DTSC_AUDIO
      || audio->type == ISOM_CODEC_TYPE_DTSE_AUDIO
      || audio->type == ISOM_CODEC_TYPE_DTSH_AUDIO
      || audio->type == ISOM_CODEC_TYPE_DTSL_AUDIO )
+    {
+        switch( summary->frequency )
+        {
+            case 12000 :    /* Invalid? (No reference in the spec) */
+            case 24000 :
+            case 48000 :
+            case 96000 :
+            case 192000 :
+            case 384000 :   /* Invalid? (No reference in the spec) */
+                audio->samplerate = 48000 << 16;
+                break;
+            case 22050 :
+            case 44100 :
+            case 88200 :
+            case 176400 :
+            case 352800 :   /* Invalid? (No reference in the spec) */
+                audio->samplerate = 44100 << 16;
+                break;
+            case 8000 :     /* Invalid? (No reference in the spec) */
+            case 16000 :
+            case 32000 :
+            case 64000 :
+            case 128000 :
+                audio->samplerate = 32000 << 16;
+                break;
+            default :
+                audio->samplerate = 0;
+                break;
+        }
         audio->channelcount = summary->channels;
+    }
     else
+    {
+        audio->samplerate = summary->frequency <= UINT16_MAX ? summary->frequency << 16 : 0;
         audio->channelcount = 2;
+    }
     audio->samplesize = 16;
     if( summary->exdata )
     {
@@ -1415,21 +1447,28 @@ static int isom_add_stps_entry( isom_stbl_t *stbl, uint32_t sample_number )
     return 0;
 }
 
-static int isom_add_sdtp_entry( isom_stbl_t *stbl, lsmash_sample_property_t *prop, uint8_t avc_extensions )
+static int isom_add_sdtp_entry( isom_box_t *parent, lsmash_sample_property_t *prop, uint8_t avc_extensions )
 {
-    if( !prop )
+    if( !prop || !parent )
         return -1;
-    if( !stbl || !stbl->sdtp || !stbl->sdtp->list )
+    isom_sdtp_t *sdtp = NULL;
+    if( parent->type == ISOM_BOX_TYPE_STBL )
+        sdtp = ((isom_stbl_t *)parent)->sdtp;
+    else if( parent->type == ISOM_BOX_TYPE_TRAF )
+        sdtp = ((isom_traf_entry_t *)parent)->sdtp;
+    else
+        assert( 0 );
+    if( !sdtp || !sdtp->list )
         return -1;
     isom_sdtp_entry_t *data = malloc( sizeof(isom_sdtp_entry_t) );
     if( !data )
         return -1;
     /* isom_sdtp_entry_t is smaller than lsmash_sample_property_t. */
-    data->is_leading = (avc_extensions ? prop->leading : prop->allow_earlier) & 0x03;
-    data->sample_depends_on = prop->independent & 0x03;
+    data->is_leading            = (avc_extensions ? prop->leading : prop->allow_earlier) & 0x03;
+    data->sample_depends_on     = prop->independent & 0x03;
     data->sample_is_depended_on = prop->disposable & 0x03;
     data->sample_has_redundancy = prop->redundant & 0x03;
-    if( lsmash_add_entry( stbl->sdtp->list, data ) )
+    if( lsmash_add_entry( sdtp->list, data ) )
     {
         free( data );
         return -1;
@@ -2287,12 +2326,28 @@ static int isom_add_stps( isom_stbl_t *stbl )
     return 0;
 }
 
-static int isom_add_sdtp( isom_stbl_t *stbl )
+static int isom_add_sdtp( isom_box_t *parent )
 {
-    if( !stbl || stbl->sdtp )
+    if( !parent )
         return -1;
-    isom_create_list_box( sdtp, stbl, ISOM_BOX_TYPE_SDTP );
-    stbl->sdtp = sdtp;
+    if( parent->type == ISOM_BOX_TYPE_STBL )
+    {
+        isom_stbl_t *stbl = (isom_stbl_t *)parent;
+        if( stbl->sdtp )
+            return -1;
+        isom_create_list_box( sdtp, stbl, ISOM_BOX_TYPE_SDTP );
+        stbl->sdtp = sdtp;
+    }
+    else if( parent->type == ISOM_BOX_TYPE_TRAF )
+    {
+        isom_traf_entry_t *traf = (isom_traf_entry_t *)parent;
+        if( traf->sdtp )
+            return -1;
+        isom_create_list_box( sdtp, traf, ISOM_BOX_TYPE_SDTP );
+        traf->sdtp = sdtp;
+    }
+    else
+        assert( 0 );
     return 0;
 }
 
@@ -3219,7 +3274,17 @@ static void isom_remove_sdtp( isom_sdtp_t *sdtp )
     if( !sdtp )
         return;
     lsmash_remove_list( sdtp->list, NULL );
-    isom_remove_box( sdtp, isom_stbl_t );
+    if( sdtp->parent )
+    {
+        if( sdtp->parent->type == ISOM_BOX_TYPE_STBL )
+            isom_remove_box( sdtp, isom_stbl_t );
+        else if( sdtp->parent->type == ISOM_BOX_TYPE_TRAF )
+            isom_remove_box( sdtp, isom_traf_entry_t );
+        else
+            assert( 0 );
+        return;
+    }
+    free( sdtp );
 }
 
 static void isom_remove_stco( isom_stco_t *stco )
@@ -3564,6 +3629,7 @@ static void isom_remove_traf( isom_traf_entry_t *traf )
         return;
     isom_remove_tfhd( traf->tfhd );
     lsmash_remove_list( traf->trun_list, isom_remove_trun );
+    isom_remove_sdtp( traf->sdtp );
     free( traf );   /* Note: the list that contains this traf still has the address of the entry. */
 }
 
@@ -5462,7 +5528,9 @@ static uint64_t isom_update_traf_entry_size( isom_traf_entry_t *traf )
 {
     if( !traf )
         return 0;
-    traf->size = ISOM_BASEBOX_COMMON_SIZE + isom_update_tfhd_size( traf->tfhd );
+    traf->size = ISOM_BASEBOX_COMMON_SIZE
+               + isom_update_tfhd_size( traf->tfhd )
+               + isom_update_sdtp_size( traf->sdtp );
     if( traf->trun_list )
         for( lsmash_entry_t *entry = traf->trun_list->head; entry; entry = entry->next )
         {
@@ -7400,18 +7468,18 @@ static int isom_add_dependency_type( isom_trak_entry_t *trak, lsmash_sample_prop
     uint8_t avc_extensions = trak->root->avc_extensions;
     isom_stbl_t *stbl = trak->mdia->minf->stbl;
     if( stbl->sdtp )
-        return isom_add_sdtp_entry( stbl, prop, avc_extensions );
+        return isom_add_sdtp_entry( (isom_box_t *)stbl, prop, avc_extensions );
     if( !prop->allow_earlier && !prop->leading && !prop->independent && !prop->disposable && !prop->redundant )  /* no null check for prop */
         return 0;
-    if( isom_add_sdtp( stbl ) )
+    if( isom_add_sdtp( (isom_box_t *)stbl ) )
         return -1;
     uint32_t count = isom_get_sample_count( trak );
     /* fill past samples with ISOM_SAMPLE_*_UNKNOWN */
     lsmash_sample_property_t null_prop = { 0 };
     for( uint32_t i = 1; i < count; i++ )
-        if( isom_add_sdtp_entry( stbl, &null_prop, avc_extensions ) )
+        if( isom_add_sdtp_entry( (isom_box_t *)stbl, &null_prop, avc_extensions ) )
             return -1;
-    return isom_add_sdtp_entry( stbl, prop, avc_extensions );
+    return isom_add_sdtp_entry( (isom_box_t *)stbl, prop, avc_extensions );
 }
 
 static int isom_rap_grouping_established( isom_rap_group_t *group, int num_leading_samples_known, isom_sgpd_entry_t *sgpd )
