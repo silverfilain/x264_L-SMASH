@@ -1199,7 +1199,7 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
             if( p_picture->b_keyframe && p_picture->i_type != X264_TYPE_IDR )
             {
                 /* A picture with Recovery Point SEI */
-                p_sample->prop.random_access_type = ISOM_SAMPLE_RANDOM_ACCESS_TYPE_RECOVERY;
+                p_sample->prop.random_access_type = ISOM_SAMPLE_RANDOM_ACCESS_TYPE_POST_ROLL;
                 p_sample->prop.post_roll.complete = (p_sample->prop.post_roll.identifier + p_mp4->i_recovery_frame_cnt) % p_mp4->i_max_frame_num;
             }
         }
