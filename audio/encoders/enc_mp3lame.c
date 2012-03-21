@@ -97,9 +97,9 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     h->buf_index = 0;
     h->last_dts = INVALID_DTS;
 
-    x264_cli_log( "audio", X264_LOG_INFO, "opened lame mp3 encoder (%s: %g%s, quality: %d, samplerate: %dhz)\n",
+    x264_cli_log( "audio", X264_LOG_INFO, "opened lame mp3 encoder (%s: %g%s, quality: %d, samplerate: %dhz, %d priming samples)\n",
                   ( !is_vbr ? "bitrate" : "VBR" ), brval,
-                  ( !is_vbr ? "kbps" : "" ), quality, h->info.samplerate );
+                  ( !is_vbr ? "kbps" : "" ), quality, h->info.samplerate, h->info.priming );
 
     return h;
 }

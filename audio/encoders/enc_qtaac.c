@@ -636,11 +636,11 @@ static hnd_t qtaac_init( hnd_t filter_chain, const char *opt_str )
     h->info.extradata_size = asc_size;
     memcpy( h->info.extradata, asc, asc_size );
 
-    x264_cli_log( "audio", X264_LOG_INFO, "opened qtaac encoder (%s %s: %d%s, quality: %s, samplerate: %dhz)\n",
+    x264_cli_log( "audio", X264_LOG_INFO, "opened qtaac encoder (%s %s: %d%s, quality: %s, samplerate: %dhz, %d priming samples)\n",
                   ( !h->config.he_flag ? "AAC-LC" : "AAC-HE" ),
                   ( !h->config.is_vbr ? encoder_mode_names[!!h->config.he_flag][h->config.encoder_mode] : "VBR" ),
                   h->desired_brval, ( !h->config.is_vbr ? "kbps" : "" ),
-                  encoder_quality_names[h->config.encoder_quality], h->info.samplerate );
+                  encoder_quality_names[h->config.encoder_quality], h->info.samplerate, h->info.priming );
 
     return h;
 

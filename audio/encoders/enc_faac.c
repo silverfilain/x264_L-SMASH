@@ -133,9 +133,9 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     h->last_dts = INVALID_DTS;
     h->samplebuffer = NULL;
 
-    x264_cli_log( "audio", X264_LOG_INFO, "opened faac encoder (%s: %g%s, samplerate: %dhz)\n",
+    x264_cli_log( "audio", X264_LOG_INFO, "opened faac encoder (%s: %g%s, samplerate: %dhz, %d priming samples)\n",
                   ( !is_vbr ? "bitrate" : "VBR" ), brval,
-                  ( !is_vbr ? "kbps" : "" ), h->info.samplerate );
+                  ( !is_vbr ? "kbps" : "" ), h->info.samplerate, h->info.priming );
 
     return h;
 

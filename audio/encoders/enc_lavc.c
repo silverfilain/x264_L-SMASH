@@ -223,18 +223,7 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
                             : av_get_bytes_per_sample( h->ctx->sample_fmt );
     h->info.samplesize      = h->info.chansize * h->info.channels;
     h->info.framesize       = h->info.framelen * h->info.samplesize;
-
-    /* Set the number of priming samples. */
-    if( !strcmp( codec->name, "ac3" ) || !strcmp( codec->name, "eac3" ) )
-        h->info.priming = 256;
-#if 0   /* These encoders lose the frame that contain the last samples. */
-    else if( !strcmp( codec->name, "libvo_aacenc" ) )
-        h->info.priming = 1600;
-    else if( !strcmp( codec->name, "libfaac" ) || !strcmp( codec->name, "aac" ) )
-        h->info.priming = 1024;
-    else if( !strcmp( codec->name, "libmp3lame" ) )
-        h->info.priming = 576 + 529 + is_vbr * 1152;
-#endif
+    h->info.priming         = h->ctx->delay;
 
     if( ISCODEC( alac ) )
         h->buf_size = 2 * (8 + h->info.framesize);
@@ -248,8 +237,9 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
         h->buf_size = FF_MIN_BUFFER_SIZE * 3 / 2;
     h->last_dts = INVALID_DTS;
 
-    x264_cli_log( "audio", X264_LOG_INFO, "opened libavcodec's %s encoder (%s%.1f%s, %dbits, %dch, %dhz)\n", codec->name,
-                  is_vbr ? "V" : "", brval, is_vbr ? "" : "kbps", h->info.chansize * 8, h->info.channels, h->info.samplerate );
+    x264_cli_log( "audio", X264_LOG_INFO, "opened libavcodec's %s encoder (%s%.1f%s, %dbits, %dch, %dhz, %d priming samples)\n",
+                  codec->name, is_vbr ? "V" : "", brval, is_vbr ? "" : "kbps", h->info.chansize * 8, h->info.channels,
+                  h->info.samplerate, h->info.priming );
     return h;
 }
 
