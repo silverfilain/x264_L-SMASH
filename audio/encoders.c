@@ -11,50 +11,48 @@ typedef struct {
 
 const audio_encoder_entry_t registered_audio_encoders[] = {
 #if HAVE_AUDIO
-    { "raw",    "raw",        &audio_encoder_raw, },
+    { "raw",        "raw",               &audio_encoder_raw, },
 #if HAVE_LAME
-    { "mp3",    "lame",       &audio_encoder_lame, },
+    { "mp3",        "lame",              &audio_encoder_lame, },
 #endif
 #if HAVE_QT_AAC
-    { "aac",    "qtaac",      &audio_encoder_qtaac, },
+    { "aac",        "qtaac",             &audio_encoder_qtaac, },
 #endif
 #if HAVE_FAAC
-    { "aac",    "faac",       &audio_encoder_faac, },
+    { "aac",        "faac",              &audio_encoder_faac, },
 #endif
 #if HAVE_LAVF
-    { "aac",        "libvo_aacenc",     &audio_encoder_lavc, },
-    { "aac",        "aac",              &audio_encoder_lavc, },
-    { "ac3",        "ac3",              &audio_encoder_lavc, },
-    { "eac3",       "eac3",             &audio_encoder_lavc, },
-    { "alac",       "alac",             &audio_encoder_lavc, },
-    { "amrwb",      "libvo_amrwbenc",   &audio_encoder_lavc, },
-    { "mp2",        "mp2",              &audio_encoder_lavc, },
-    { "pcm_f32be",  "pcm_f32be",        &audio_encoder_lavc, },
-    { "pcm_f32le",  "pcm_f32le",        &audio_encoder_lavc, },
-    { "pcm_f64be",  "pcm_f64be",        &audio_encoder_lavc, },
-    { "pcm_f64le",  "pcm_f64le",        &audio_encoder_lavc, },
-    { "pcm_s16be",  "pcm_s16be",        &audio_encoder_lavc, },
-    { "pcm_s16le",  "pcm_s16le",        &audio_encoder_lavc, },
-    { "pcm_s24be",  "pcm_s24be",        &audio_encoder_lavc, },
-    { "pcm_s24le",  "pcm_s24le",        &audio_encoder_lavc, },
-    { "pcm_s32be",  "pcm_s32be",        &audio_encoder_lavc, },
-    { "pcm_s32le",  "pcm_s32le",        &audio_encoder_lavc, },
-    { "pcm_s8",     "pcm_s8",           &audio_encoder_lavc, },
-    { "pcm_u16be",  "pcm_u16be",        &audio_encoder_lavc, },
-    { "pcm_u16le",  "pcm_u16le",        &audio_encoder_lavc, },
-    { "pcm_u24be",  "pcm_u24be",        &audio_encoder_lavc, },
-    { "pcm_u24le",  "pcm_u24le",        &audio_encoder_lavc, },
-    { "pcm_u32be",  "pcm_u32be",        &audio_encoder_lavc, },
-    { "pcm_u32le",  "pcm_u32le",        &audio_encoder_lavc, },
-    { "pcm_u8",     "pcm_u8",           &audio_encoder_lavc, },
-#if 0
-    { "vorbis", "libvorbis",            &audio_encoder_lavc, },
-#endif
-    { "vorbis", "vorbis",               &audio_encoder_lavc, },
-    { "amrnb",  "libopencore_amrnb",    &audio_encoder_lavc, },
+    { "aac",        "libvo_aacenc",      &audio_encoder_lavc, },
+    { "aac",        "aac",               &audio_encoder_lavc, },
+    { "ac3",        "ac3",               &audio_encoder_lavc, },
+    { "eac3",       "eac3",              &audio_encoder_lavc, },
+    { "alac",       "alac",              &audio_encoder_lavc, },
+    { "amrwb",      "libvo_amrwbenc",    &audio_encoder_lavc, },
+    { "mp2",        "mp2",               &audio_encoder_lavc, },
+    { "pcm_f32be",  "pcm_f32be",         &audio_encoder_lavc, },
+    { "pcm_f32le",  "pcm_f32le",         &audio_encoder_lavc, },
+    { "pcm_f64be",  "pcm_f64be",         &audio_encoder_lavc, },
+    { "pcm_f64le",  "pcm_f64le",         &audio_encoder_lavc, },
+    { "pcm_s16be",  "pcm_s16be",         &audio_encoder_lavc, },
+    { "pcm_s16le",  "pcm_s16le",         &audio_encoder_lavc, },
+    { "pcm_s24be",  "pcm_s24be",         &audio_encoder_lavc, },
+    { "pcm_s24le",  "pcm_s24le",         &audio_encoder_lavc, },
+    { "pcm_s32be",  "pcm_s32be",         &audio_encoder_lavc, },
+    { "pcm_s32le",  "pcm_s32le",         &audio_encoder_lavc, },
+    { "pcm_s8",     "pcm_s8",            &audio_encoder_lavc, },
+    { "pcm_u16be",  "pcm_u16be",         &audio_encoder_lavc, },
+    { "pcm_u16le",  "pcm_u16le",         &audio_encoder_lavc, },
+    { "pcm_u24be",  "pcm_u24be",         &audio_encoder_lavc, },
+    { "pcm_u24le",  "pcm_u24le",         &audio_encoder_lavc, },
+    { "pcm_u32be",  "pcm_u32be",         &audio_encoder_lavc, },
+    { "pcm_u32le",  "pcm_u32le",         &audio_encoder_lavc, },
+    { "pcm_u8",     "pcm_u8",            &audio_encoder_lavc, },
+    { "vorbis",     "libvorbis",         &audio_encoder_lavc, },
+    { "vorbis",     "vorbis",            &audio_encoder_lavc, },
+    { "amrnb",      "libopencore_amrnb", &audio_encoder_lavc, },
 #endif
 #if HAVE_AMRWB_3GPP
-    { "amrwb",  "amrnb_3gpp", &audio_encoder_amrwb_3gpp, },
+    { "amrwb",      "amrnb_3gpp",        &audio_encoder_amrwb_3gpp, },
 #endif
 #endif /* HAVE_AUDIO */
     { NULL, },

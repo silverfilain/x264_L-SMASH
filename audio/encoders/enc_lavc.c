@@ -44,15 +44,15 @@ static const struct {
     uint8_t mode;
     float default_brval;
 } ffcodecs[] = {
-   /* CODEC_ID,         name,      allowed mode,          default quality/bitrate */
-    { CODEC_ID_MP2,     "mp2",     MODE_BITRATE,          112 },
-    { CODEC_ID_VORBIS,  "vorbis",  MODE_VBR,              50 },
-    { CODEC_ID_AAC,     "aac",     MODE_BITRATE,          96 },
-    { CODEC_ID_AC3,     "ac3",     MODE_BITRATE,          96 },
-    { CODEC_ID_EAC3,    "eac3",    MODE_BITRATE,          96 },
-    { CODEC_ID_ALAC,    "alac",    MODE_IGNORED,          64 },
-    { CODEC_ID_AMR_NB,  "amrnb",   MODE_BITRATE,          12.2 },
-    { CODEC_ID_AMR_WB,  "amrwb",   MODE_BITRATE,          12.65 },
+   /* CODEC_ID,           name,        allowed mode,  default quality/bitrate */
+    { CODEC_ID_MP2,       "mp2",       MODE_BITRATE,    112 },
+    { CODEC_ID_VORBIS,    "vorbis",    MODE_VBR,        5.0 },
+    { CODEC_ID_AAC,       "aac",       MODE_BITRATE,     96 },
+    { CODEC_ID_AC3,       "ac3",       MODE_BITRATE,     96 },
+    { CODEC_ID_EAC3,      "eac3",      MODE_BITRATE,     96 },
+    { CODEC_ID_ALAC,      "alac",      MODE_IGNORED,     64 },
+    { CODEC_ID_AMR_NB,    "amrnb",     MODE_BITRATE,   12.2 },
+    { CODEC_ID_AMR_WB,    "amrwb",     MODE_BITRATE,  12.65 },
     { CODEC_ID_PCM_F32BE, "pcm_f32be", MODE_IGNORED,      0 },
     { CODEC_ID_PCM_F32LE, "pcm_f32le", MODE_IGNORED,      0 },
     { CODEC_ID_PCM_F64BE, "pcm_f64be", MODE_IGNORED,      0 },
@@ -71,7 +71,7 @@ static const struct {
     { CODEC_ID_PCM_U32BE, "pcm_u32be", MODE_IGNORED,      0 },
     { CODEC_ID_PCM_U32LE, "pcm_u32le", MODE_IGNORED,      0 },
     { CODEC_ID_PCM_U8,    "pcm_u8",    MODE_IGNORED,      0 },
-    { CODEC_ID_NONE,    NULL, },
+    { CODEC_ID_NONE,      NULL, },
 };
 
 static int encode_audio( AVCodecContext *ctx, audio_packet_t *out, AVFrame *frame )
