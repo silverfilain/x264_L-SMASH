@@ -1071,7 +1071,47 @@ typedef enum
 /* CODEC specific data types */
 typedef struct
 {
+    uint8_t fscod;          /* the same value as the fscod field in the AC-3 bitstream */
+    uint8_t bsid;           /* the same value as the bsid field in the AC-3 bitstream */
+    uint8_t bsmod;          /* the same value as the bsmod field in the AC-3 bitstream */
+    uint8_t acmod;          /* the same value as the acmod field in the AC-3 bitstream */
+    uint8_t lfeon;          /* the same value as the lfeon field in the AC-3 bitstream */
+    uint8_t frmsizecod;     /* the same value as the frmsizecod field in the AC-3 bitstream */
+} lsmash_ac3_specific_parameters_t;
+
+typedef struct
+{
+    uint8_t  fscod;         /* the same value as the fscod field in the independent substream */
+    uint8_t  fscod2;        /* Any user must not use this. */
+    uint8_t  bsid;          /* the same value as the bsid field in the independent substream */
+    uint8_t  bsmod;         /* the same value as the bsmod field in the independent substream
+                             * If the bsmod field is not present in the independent substream, this field shall be set to 0. */
+    uint8_t  acmod;         /* the same value as the acmod field in the independent substream */
+    uint8_t  lfeon;         /* the same value as the lfeon field in the independent substream */
+    uint8_t  num_dep_sub;   /* the number of dependent substreams that are associated with the independent substream */
+    uint16_t chan_loc;      /* channel locations of dependent substreams associated with the independent substream
+                             * This information is extracted from the chanmap field of each dependent substream. */
+} lsmash_eac3_substream_info_t;
+
+typedef struct
+{
+    uint16_t data_rate;     /* the data rate of the Enhanced AC-3 bitstream in kbit/s
+                             * If the Enhanced AC-3 stream is variable bitrate, then this value indicates the maximum data rate of the stream. */
+    uint8_t  num_ind_sub;   /* the number of independent substreams that are present in the Enhanced AC-3 bitstream
+                             * The value of this field is one less than the number of independent substreams present
+                             * and shall be in the range of 0 to 7, inclusive. */
+    lsmash_eac3_substream_info_t independent_info[8];
+} lsmash_eac3_specific_parameters_t;
+
+typedef struct
+{
     uint32_t DTSSamplingFrequency;  /* the maximum sampling frequency stored in the compressed audio stream */
+    uint32_t maxBitrate;            /* the peak bit rate, in bits per second, of the audio elementary stream for the duration of the track,
+                                     * including the core substream (if present) and all extension substreams.
+                                     * If the stream is a constant bit rate, this parameter shall have the same value as avgBitrate.
+                                     * If the maximum bit rate is unknown, this parameter shall be set to 0. */
+    uint32_t avgBitrate;            /* the average bit rate, in bits per second, of the audio elementary stream for the duration of the track,
+                                     * including the core substream and any extension substream that may be present. */
     uint8_t  pcmSampleDepth;        /* the bit depth of the rendered audio
                                      * The value is 16 or 24 bits. */
     uint8_t  FrameDuration;         /* the number of audio samples decoded in a complete audio access unit at DTSSamplingFrequency
@@ -1110,11 +1150,11 @@ typedef struct
                              * If this identifier equals a certain identifier of random access recovery point,
                              * then this sample is the random access recovery point of the earliest unestablished post-roll group. */
     uint32_t complete;      /* the identifier of future random access recovery point, which is necessary for the recovery from its starting point to be completed
-                             * For muxing, this value is used only if both random_access_type is set to ISOM_SAMPLE_RANDOM_ACCESS_TYPE_POST_ROLL.
+                             * For muxing, this value is used only if random_access_type is set to ISOM_SAMPLE_RANDOM_ACCESS_TYPE_POST_ROLL.
                              * The following is an example of use for gradual decoder refresh of H.264/AVC.
                              *   For each sample, set 'frame_num' to the 'identifier'.
-                             *   For samples with recovery point SEI message, set ISOM_SAMPLE_RANDOM_ACCESS_TYPE_POST_ROLL to random_access_type,
-                             *   set 0 to pre-roll 'distance', and set '(frame_num + recovery_frame_cnt) % MaxFrameNum' to the 'complete'.
+                             *   For samples with recovery point SEI message, set ISOM_SAMPLE_RANDOM_ACCESS_TYPE_POST_ROLL to random_access_type
+                             *   and set '(frame_num + recovery_frame_cnt) % MaxFrameNum' to the 'complete'.
                              *   The above-mentioned values are set appropriately, then L-SMASH will establish appropriate post-roll grouping. */
 } lsmash_post_roll_t;
 
@@ -1465,6 +1505,7 @@ uint32_t lsmash_get_sample_count_in_media_timeline( lsmash_root_t *root, uint32_
 uint32_t lsmash_get_max_sample_size_in_media_timeline( lsmash_root_t *root, uint32_t track_ID );
 lsmash_sample_t *lsmash_get_sample_from_media_timeline( lsmash_root_t *root, uint32_t track_ID, uint32_t sample_number );
 int lsmash_get_sample_info_from_media_timeline( lsmash_root_t *root, uint32_t track_ID, uint32_t sample_number, lsmash_sample_t *sample );
+int lsmash_get_sample_property_from_media_timeline( lsmash_root_t *root, uint32_t track_ID, uint32_t sample_number, lsmash_sample_property_t *prop );
 int lsmash_check_sample_existence_in_media_timeline( lsmash_root_t *root, uint32_t track_ID, uint32_t sample_number );
 
 lsmash_itunes_metadata_list_t *lsmash_export_itunes_metadata( lsmash_root_t *root );
@@ -1485,6 +1526,15 @@ int lsmash_summary_add_exdata( lsmash_summary_t *summary, void* exdata, uint32_t
 
 lsmash_summary_t *lsmash_create_summary( lsmash_mp4sys_stream_type stream_type );
 void lsmash_cleanup_summary( lsmash_summary_t *summary );
+
+/* AC-3 tools to make exdata (AC-3 specific info). */
+int lsmash_setup_ac3_specific_parameters_from_syncframe( lsmash_ac3_specific_parameters_t *param, uint8_t *data, uint32_t data_length );
+uint8_t *lsmash_create_ac3_specific_info( lsmash_ac3_specific_parameters_t *param, uint32_t *data_length );
+
+/* Eanhanced AC-3 tools to make exdata (Enhanced AC-3 specific info). */
+int lsmash_setup_eac3_specific_parameters_from_frame( lsmash_eac3_specific_parameters_t *param, uint8_t *data, uint32_t data_length );
+uint16_t lsmash_eac3_get_chan_loc_from_chanmap( uint16_t chanmap );
+uint8_t *lsmash_create_eac3_specific_info( lsmash_eac3_specific_parameters_t *param, uint32_t *data_length );
 
 /* DTS audio tools to make exdata (DTS specific info). */
 int lsmash_setup_dts_specific_parameters_from_frame( lsmash_dts_specific_parameters_t *param, uint8_t *data, uint32_t data_length );

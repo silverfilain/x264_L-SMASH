@@ -182,7 +182,7 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
 
     RETURN_IF_ERR( avcodec_open2( h->ctx, codec, &avopts ), "lavc", NULL, "could not open the %s encoder\n", codec->name );
 
-    if( ISCODEC( ac3 ) )
+    if( ISCODEC( ac3 ) || ISCODEC( eac3 ) )
     {
         audio_packet_t *pkt = x264_af_get_samples( h->filter_chain, 0, h->ctx->frame_size );
         RETURN_IF_ERR( !pkt, "lavc", NULL, "could not get a audio frame\n" );

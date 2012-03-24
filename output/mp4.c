@@ -374,11 +374,51 @@ static int audio_init( hnd_t handle, cli_output_opt_t *opt, hnd_t filters, char 
             {
                 p_audio->codec_type = ISOM_CODEC_TYPE_AC_3_AUDIO;
                 p_audio->b_mdct = 1;
+                lsmash_ac3_specific_parameters_t param = { 0 };
+                if( !info->extradata || info->extradata_size == 0 )
+                {
+                    MP4_LOG_ERROR( "no frame to create AC-3 specific info.\n" );
+                    goto error;
+                }
+                else if( lsmash_setup_ac3_specific_parameters_from_syncframe( &param, info->extradata, info->extradata_size ) == 0 )
+                {
+                    /* from lavf input
+                     * Create AC3SpecificBox from AC-3 syncframe by L-SMASH's AC-3 parser. */
+                    free( info->extradata );
+                    uint32_t extradata_size;
+                    info->extradata = lsmash_create_ac3_specific_info( &param, &extradata_size );
+                    if( !info->extradata )
+                    {
+                        MP4_LOG_ERROR( "failed to create AC-3 specific info.\n" );
+                        goto error;
+                    }
+                    info->extradata_size = extradata_size;
+                }
             }
             else if( !strcmp( info->codec_name, "eac3" ) )
             {
                 p_audio->codec_type = ISOM_CODEC_TYPE_EC_3_AUDIO;
                 p_audio->b_mdct = 1;
+                lsmash_eac3_specific_parameters_t param = { 0 };
+                if( !info->extradata || info->extradata_size == 0 )
+                {
+                    MP4_LOG_ERROR( "no frame to create Enhanced AC-3 specific info.\n" );
+                    goto error;
+                }
+                else if( lsmash_setup_eac3_specific_parameters_from_frame( &param, info->extradata, info->extradata_size ) == 0 )
+                {
+                    /* from lavf input
+                     * Create EC3SpecificBox from Enhanced AC-3 syncframes by L-SMASH's Enhanced AC-3 parser. */
+                    free( info->extradata );
+                    uint32_t extradata_size;
+                    info->extradata = lsmash_create_eac3_specific_info( &param, &extradata_size );
+                    if( !info->extradata )
+                    {
+                        MP4_LOG_ERROR( "failed to create Enhanced AC-3 specific info.\n" );
+                        goto error;
+                    }
+                    info->extradata_size = extradata_size;
+                }
             }
             else if( !strcmp( info->codec_name, "alac" ) )
             {
@@ -389,11 +429,8 @@ static int audio_init( hnd_t handle, cli_output_opt_t *opt, hnd_t filters, char 
             {
                 audio_dts_info_t *dts_info = info->opaque;
                 if( dts_info )
-                {
                     /* from L-SMASH importer */
                     p_audio->codec_type = dts_info->coding_name;
-                    p_audio->b_mdct = (p_audio->codec_type == ISOM_CODEC_TYPE_DTSE_AUDIO);
-                }
                 else if( info->extradata && info->extradata_size > 0 )
                 {
                     /* from lavf input
@@ -406,18 +443,21 @@ static int audio_init( hnd_t handle, cli_output_opt_t *opt, hnd_t filters, char 
                     }
                     p_audio->codec_type = lsmash_dts_get_codingname( &param );
                     free( info->extradata );
-                    info->extradata = lsmash_create_dts_specific_info( &param, (uint32_t *)&info->extradata_size );
+                    uint32_t extradata_size;
+                    info->extradata = lsmash_create_dts_specific_info( &param, &extradata_size );
                     if( !info->extradata )
                     {
                         MP4_LOG_ERROR( "failed to create DTS specific info.\n" );
                         goto error;
                     }
+                    info->extradata_size = extradata_size;
                 }
                 else
                 {
                     MP4_LOG_ERROR( "no frame to create DTS specific info.\n" );
                     goto error;
                 }
+                p_audio->b_mdct = (p_audio->codec_type == ISOM_CODEC_TYPE_DTSE_AUDIO);
             }
             break;
         case ISOM_BRAND_TYPE_QT :
@@ -538,24 +578,14 @@ static int set_param_audio( mp4_hnd_t* p_mp4, uint64_t i_media_timescale, lsmash
             break;
         case ISOM_CODEC_TYPE_AC_3_AUDIO :
             p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_NONE;     /* MP4SYS_OBJECT_TYPE_AC_3_AUDIO is forbidden to use for ISO Base Media. */
-            if( p_audio->info->extradata_size > 1 && p_audio->info->extradata[0] == 0x0B && p_audio->info->extradata[1] == 0x77 )
-            {
-                /* from lavf input */
-                MP4_FAIL_IF_ERR( mp4sys_create_dac3_from_syncframe( p_audio->summary, p_audio->info->extradata, p_audio->info->extradata_size ),
-                                 "failed to create AC-3 specific info.\n" );
-            }
-            else
-            {
-                /* from lsmash input */
-                MP4_FAIL_IF_ERR( !p_audio->info->extradata || p_audio->info->extradata_size != 11,
-                                 "AC-3 specific info is absent.\n" );
-                MP4_FAIL_IF_ERR( lsmash_summary_add_exdata( (lsmash_summary_t *)p_audio->summary, p_audio->info->extradata, p_audio->info->extradata_size ),
-                                 "failed to create AC-3 specific info.\n" );
-            }
+            MP4_FAIL_IF_ERR( !p_audio->info->extradata || p_audio->info->extradata_size != 11,
+                             "AC-3 specific info is absent.\n" );
+            MP4_FAIL_IF_ERR( lsmash_summary_add_exdata( (lsmash_summary_t *)p_audio->summary, p_audio->info->extradata, p_audio->info->extradata_size ),
+                             "failed to create AC-3 specific info.\n" );
             break;
         case ISOM_CODEC_TYPE_EC_3_AUDIO :
             p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_NONE;     /* MP4SYS_OBJECT_TYPE_EC_3_AUDIO is forbidden to use for ISO Base Media. */
-            MP4_FAIL_IF_ERR( !p_audio->info->extradata,
+            MP4_FAIL_IF_ERR( !p_audio->info->extradata || p_audio->info->extradata_size > 42,
                              "EAC-3 specific info is absent.\n" );
             MP4_FAIL_IF_ERR( lsmash_summary_add_exdata( (lsmash_summary_t *)p_audio->summary, p_audio->info->extradata, p_audio->info->extradata_size ),
                              "failed to create EAC-3 specific info.\n" );
