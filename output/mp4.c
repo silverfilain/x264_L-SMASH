@@ -124,6 +124,7 @@ typedef struct
     int b_use_recovery;
     int i_recovery_frame_cnt;
     int i_max_frame_num;
+    int i_chroma_format_idc;
     uint64_t i_last_intra_cts;
     uint32_t i_display_width;
     uint32_t i_display_height;
@@ -987,6 +988,10 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     p_mp4->i_time_inc = p_param->i_timebase_num * p_mp4->i_dts_compress_multiplier;
     FAIL_IF_ERR( i_media_timescale > UINT32_MAX, "mp4", "MP4 media timescale %"PRIu64" exceeds maximum\n", i_media_timescale );
 
+    int csp = p_param->i_csp & X264_CSP_MASK;
+    p_mp4->i_chroma_format_idc = csp >= X264_CSP_I444 ? CHROMA_444 :
+                                 csp >= X264_CSP_I422 ? CHROMA_422 : CHROMA_420;
+
     /* Select brands. */
     lsmash_brand_type brands[11] = { 0 };
     uint32_t minor_version = 0;
@@ -1111,15 +1116,6 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     p_mp4->i_video_timescale = lsmash_get_media_timescale( p_mp4->p_root, p_mp4->i_track );
     MP4_FAIL_IF_ERR( !p_mp4->i_video_timescale, "media timescale for video is broken.\n" );
 
-    /* Add a sample entry. */
-    p_mp4->i_sample_entry = lsmash_add_sample_entry( p_mp4->p_root, p_mp4->i_track, ISOM_CODEC_TYPE_AVC1_VIDEO, p_mp4->summary );
-    MP4_FAIL_IF_ERR( !p_mp4->i_sample_entry,
-                     "failed to add sample entry for video.\n" );
-
-    if( p_mp4->major_brand != ISOM_BRAND_TYPE_QT )
-        MP4_FAIL_IF_ERR( lsmash_add_btrt( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry ),
-                         "failed to add btrt.\n" );
-
 #if HAVE_ANY_AUDIO
     MP4_FAIL_IF_ERR( p_mp4->audio_hnd && set_param_audio( p_mp4, i_media_timescale, track_mode ),
                      "failed to set audio param\n" );
@@ -1140,14 +1136,39 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
     uint8_t *pps = p_nal[1].p_payload + 4;
     uint8_t *sei = p_nal[2].p_payload;
 
-    MP4_FAIL_IF_ERR( lsmash_set_avc_config( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry, 1, sps[1], sps[2], sps[3], 3, 1, BIT_DEPTH-8, BIT_DEPTH-8 ),
-                     "failed to set avc config.\n" );
+    lsmash_h264_specific_parameters_t param = { 0 };
+    param.AVCProfileIndication    = sps[1];
+    param.profile_compatibility   = sps[2];
+    param.AVCLevelIndication      = sps[3];
+    param.chroma_format           = p_mp4->i_chroma_format_idc;
+    param.bit_depth_luma_minus8   = BIT_DEPTH - 8;
+    param.bit_depth_chroma_minus8 = BIT_DEPTH - 8;
+
     /* SPS */
-    MP4_FAIL_IF_ERR( lsmash_add_sps_entry( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry, sps, sps_size ),
-                     "failed to add sps.\n" );
+    MP4_FAIL_IF_ERR( lsmash_append_h264_parameter_set( &param, H264_PARAMETER_SET_TYPE_SPS, sps, sps_size ),
+                     "failed to append SPS.\n" )
     /* PPS */
-    MP4_FAIL_IF_ERR( lsmash_add_pps_entry( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry, pps, pps_size ),
-                     "failed to add pps.\n" );
+    MP4_FAIL_IF_ERR( lsmash_append_h264_parameter_set( &param, H264_PARAMETER_SET_TYPE_PPS, pps, pps_size ),
+                     "failed to append PPS.\n" )
+
+    uint32_t avc_config_size;
+    uint8_t *avc_config = lsmash_create_h264_specific_info( &param, &avc_config_size );
+    MP4_FAIL_IF_ERR( !avc_config || avc_config_size == 0,
+                     "failed to create AVC specific info.\n" );
+
+    lsmash_destroy_h264_parameter_sets( &param );
+
+    MP4_FAIL_IF_ERR( lsmash_summary_add_exdata( (lsmash_summary_t *)p_mp4->summary, avc_config, avc_config_size ),
+                     "failed to append AVC specific info.\n" );
+
+    p_mp4->i_sample_entry = lsmash_add_sample_entry( p_mp4->p_root, p_mp4->i_track, ISOM_CODEC_TYPE_AVC1_VIDEO, p_mp4->summary );
+    MP4_FAIL_IF_ERR( !p_mp4->i_sample_entry,
+                     "failed to add sample entry for video.\n" );
+
+    if( p_mp4->major_brand != ISOM_BRAND_TYPE_QT )
+        MP4_FAIL_IF_ERR( lsmash_add_btrt( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry ),
+                         "failed to add btrt.\n" );
+
     /* SEI */
     p_mp4->p_sei_buffer = malloc( sei_size );
     MP4_FAIL_IF_ERR( !p_mp4->p_sei_buffer,

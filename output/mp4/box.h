@@ -59,6 +59,8 @@ typedef struct isom_box_tag isom_box_t;
 #define LSMASH_QTFF_BASE         0x04
 #define LSMASH_VIDEO_DESCRIPTION 0x08
 #define LSMASH_AUDIO_DESCRIPTION 0x10
+#define LSMASH_FULLBOX           0x20
+#define LSMASH_LAST_BOX          0x40
 
 
 struct isom_box_tag
@@ -2098,7 +2100,7 @@ typedef enum
 } isom_grouping_type;
 
 int isom_is_fullbox( void *box );
-int isom_is_lpcm_audio( uint32_t type );
+int isom_is_lpcm_audio( void *box );
 int isom_is_uncompressed_ycbcr( uint32_t type );
 
 void isom_init_box_common( void *box, void *parent, uint32_t type );
