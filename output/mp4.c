@@ -984,8 +984,8 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     p_mp4->i_delay_frames = p_param->i_bframe ? (p_param->i_bframe_pyramid ? 2 : 1) : 0;
     p_mp4->i_dts_compress_multiplier = p_mp4->b_dts_compress * p_mp4->i_delay_frames + 1;
 
-    i_media_timescale = p_param->i_timebase_den * p_mp4->i_dts_compress_multiplier;
-    p_mp4->i_time_inc = p_param->i_timebase_num * p_mp4->i_dts_compress_multiplier;
+    i_media_timescale = (uint64_t)p_param->i_timebase_den * p_mp4->i_dts_compress_multiplier;
+    p_mp4->i_time_inc = (uint64_t)p_param->i_timebase_num * p_mp4->i_dts_compress_multiplier;
     FAIL_IF_ERR( i_media_timescale > UINT32_MAX, "mp4", "MP4 media timescale %"PRIu64" exceeds maximum\n", i_media_timescale );
 
     int csp = p_param->i_csp & X264_CSP_MASK;
