@@ -1141,6 +1141,7 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
     param.AVCProfileIndication    = sps[1];
     param.profile_compatibility   = sps[2];
     param.AVCLevelIndication      = sps[3];
+    param.lengthSizeMinusOne      = 3;
     param.chroma_format           = p_mp4->i_chroma_format_idc;
     param.bit_depth_luma_minus8   = BIT_DEPTH - 8;
     param.bit_depth_chroma_minus8 = BIT_DEPTH - 8;
