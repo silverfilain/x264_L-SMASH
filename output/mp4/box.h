@@ -167,7 +167,7 @@ typedef struct
 
 /* Edit List Box
  * This box contains an explicit timeline map.
- * Each entry defines part of the track timeline: by mapping part of the media timeline, or by indicating 'empty' time, 
+ * Each entry defines part of the track timeline: by mapping part of the media timeline, or by indicating 'empty' time,
  * or by defining a 'dwell', where a single time-point in the media is held for a period.
  * The last edit in a track shall never be an empty edit.
  * Any difference between the duration in the Movie Header Box, and the track's duration is expressed as an implicit empty edit at the end.
@@ -410,6 +410,14 @@ typedef struct
     uint32_t avgBitrate;    /* the average rate in bits/second over the entire presentation */
 } isom_btrt_t;
 
+/* Global Header Box */
+typedef struct
+{
+    ISOM_BASEBOX_COMMON;
+    uint32_t header_size;
+    uint8_t *header_data;
+} isom_glbl_t;
+
 /* Clean Aperture Box
  * There are notionally four values in this box and these parameters are represented as a fraction N/D.
  * Here, we refer to the pair of parameters fooN and fooD as foo.
@@ -569,6 +577,7 @@ typedef struct
     /* MP4 specific extension */
     isom_esds_t *esds;          /* ES Descriptor Box */
     /* QuickTime specific extension */
+    isom_glbl_t *glbl;          /* Global Header Box */
     isom_colr_t *colr;          /* Color Parameter Box @ optional */
     isom_gama_t *gama;          /* Gamma Level Box @ optional */
     isom_fiel_t *fiel;          /* Field/Frame Information Box @ optional */
@@ -1422,7 +1431,7 @@ typedef struct
     isom_mehd_t         *mehd;          /* Movie Extends Header Box / omitted when used in live streaming */
     lsmash_entry_list_t *trex_list;     /* Track Extends Box */
 
-        uint64_t placeholder_pos;       /* placeholder position for Movie Extends Header Box */ 
+        uint64_t placeholder_pos;       /* placeholder position for Movie Extends Header Box */
 } isom_mvex_t;
 
 /* Movie Fragment Header Box
@@ -1445,7 +1454,7 @@ typedef struct
     /* all the following are optional fields */
     uint64_t            base_data_offset;           /* an explicit anchor for the data offsets in each track run
                                                      * Offsets are file offsets as like as chunk_offset in Chunk Offset Box.
-                                                     * If not provided, the base_data_offset for the first track in the movie fragment is the position 
+                                                     * If not provided, the base_data_offset for the first track in the movie fragment is the position
                                                      * of the first byte of the enclosing Movie Fragment Box, and for second and subsequent track fragments,
                                                      * the default is the end of the data defined by the preceding fragment.
                                                      * To avoid the case this field might overflow, e.g. semi-permanent live streaming and broadcasting,
@@ -1557,7 +1566,7 @@ typedef struct
     isom_mfro_t         *mfro;          /* Movie Fragment Random Access Offset Box */
 } isom_mfra_t;
 
-/* Movie fragment manager 
+/* Movie fragment manager
  * The presence of this means we use the structure of movie fragments. */
 typedef struct
 {
@@ -1584,7 +1593,7 @@ typedef struct
 /* ROOT */
 struct lsmash_root_tag
 {
-    ISOM_FULLBOX_COMMON;                /* the size field expresses total file size 
+    ISOM_FULLBOX_COMMON;                /* the size field expresses total file size
                                          * the flags field expresses file mode */
     isom_ftyp_t         *ftyp;          /* File Type Box */
     isom_moov_t         *moov;          /* Movie Box */
@@ -1823,6 +1832,7 @@ enum qt_box_type
     QT_BOX_TYPE_FIEL    = LSMASH_4CC( 'f', 'i', 'e', 'l' ),
     QT_BOX_TYPE_FRMA    = LSMASH_4CC( 'f', 'r', 'm', 'a' ),
     QT_BOX_TYPE_GAMA    = LSMASH_4CC( 'g', 'a', 'm', 'a' ),
+    QT_BOX_TYPE_GLBL    = LSMASH_4CC( 'g', 'l', 'b', 'l' ),
     QT_BOX_TYPE_GMHD    = LSMASH_4CC( 'g', 'm', 'h', 'd' ),
     QT_BOX_TYPE_GMIN    = LSMASH_4CC( 'g', 'm', 'i', 'n' ),
     QT_BOX_TYPE_IMAP    = LSMASH_4CC( 'i', 'm', 'a', 'p' ),
@@ -2120,6 +2130,7 @@ int isom_add_edts( isom_trak_entry_t *trak );
 int isom_add_elst( isom_edts_t *edts );
 int isom_add_clap( isom_visual_entry_t *visual );
 int isom_add_pasp( isom_visual_entry_t *visual );
+int isom_add_glbl( isom_visual_entry_t *visual );
 int isom_add_colr( isom_visual_entry_t *visual );
 int isom_add_gama( isom_visual_entry_t *visual );
 int isom_add_fiel( isom_visual_entry_t *visual );
@@ -2135,10 +2146,19 @@ int isom_add_mp4a( isom_wave_t *wave );
 int isom_add_terminator( isom_wave_t *wave );
 int isom_add_chan( isom_audio_entry_t *audio );
 int isom_add_ftab( isom_tx3g_entry_t *tx3g );
+int isom_add_hdlr( isom_mdia_t *mdia, isom_meta_t *meta, isom_minf_t *minf, uint32_t media_type );
+int isom_add_metaitem( isom_ilst_t *ilst, uint32_t type );
+int isom_add_mean( isom_metaitem_t *metaitem );
+int isom_add_name( isom_metaitem_t *metaitem );
+int isom_add_data( isom_metaitem_t *metaitem );
+int isom_add_ilst( isom_moov_t *moov );
+int isom_add_meta( isom_box_t *parent );
+int isom_add_udta( lsmash_root_t *root, uint32_t track_ID );
 
 void isom_remove_tapt( isom_tapt_t *tapt );
 void isom_remove_clap( isom_clap_t *clap );
 void isom_remove_pasp( isom_pasp_t *pasp );
+void isom_remove_glbl( isom_glbl_t *glbl );
 void isom_remove_colr( isom_colr_t *colr );
 void isom_remove_gama( isom_gama_t *gama );
 void isom_remove_cspc( isom_cspc_t *cspc );
@@ -2154,6 +2174,11 @@ void isom_remove_terminator( isom_terminator_t *terminator );
 void isom_remove_wave( isom_wave_t *wave );
 void isom_remove_chan( isom_chan_t *chan );
 void isom_remove_ftab( isom_ftab_t *ftab );
+void isom_remove_mean( isom_mean_t *mean );
+void isom_remove_name( isom_name_t *name );
+void isom_remove_data( isom_data_t *data );
+void isom_remove_metaitem( isom_metaitem_t *metaitem );
+void isom_remove_ilst( isom_ilst_t *ilst );
 void isom_remove_sample_description( isom_sample_entry_t *sample );
 
 #define isom_create_box( box_name, parent_name, box_4cc ) \

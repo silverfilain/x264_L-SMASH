@@ -1046,7 +1046,8 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     p_mp4->i_movie_timescale = lsmash_get_movie_timescale( p_mp4->p_root );
     MP4_FAIL_IF_ERR( !p_mp4->i_movie_timescale, "movie timescale is broken.\n" );
     if( p_mp4->b_brand_m4a )
-        MP4_FAIL_IF_ERR( lsmash_set_itunes_metadata_string( p_mp4->p_root, ITUNES_METADATA_TYPE_ENCODING_TOOL, "x264 "X264_POINTVER, NULL, NULL ),
+        MP4_FAIL_IF_ERR( lsmash_set_itunes_metadata( p_mp4->p_root, ITUNES_METADATA_ITEM_ENCODING_TOOL, ITUNES_METADATA_TYPE_NONE,
+                                                     (lsmash_itunes_metadata_t){ .string = "x264 "X264_POINTVER }, NULL, NULL ),
                          "failed to set metadata\n" );
 
     /* Create a video track. */
