@@ -1161,6 +1161,8 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
     MP4_FAIL_IF_ERR( lsmash_summary_add_exdata( (lsmash_summary_t *)p_mp4->summary, avc_config, avc_config_size ),
                      "failed to append AVC specific info.\n" );
 
+    free( avc_config );
+
     p_mp4->i_sample_entry = lsmash_add_sample_entry( p_mp4->p_root, p_mp4->i_track, ISOM_CODEC_TYPE_AVC1_VIDEO, p_mp4->summary );
     MP4_FAIL_IF_ERR( !p_mp4->i_sample_entry,
                      "failed to add sample entry for video.\n" );
