@@ -106,7 +106,7 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     audio_hnd_t *chain = h->filter_chain = filter_chain;
     h->preinfo = h->info = chain->info;
 
-    char **opts = x264_split_options( opt_str, (const char*[]){ AUDIO_CODEC_COMMON_OPTIONS, NULL } );
+    char **opts = x264_split_options( opt_str, (const char*[]){ AUDIO_CODEC_COMMON_OPTIONS, "profile", "cutoff", NULL } );
     if( !opts )
     {
         x264_cli_log( "lavc", X264_LOG_ERROR, "wrong audio options.\n" );
@@ -157,12 +157,27 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     av_dict_set( &avopts, "flags", "global_header", 0 ); // aac
     av_dict_set( &avopts, "reservoir", "1", 0 ); // mp3
 
-    if( ISCODEC( aac ) )
+    char *acutoff = x264_otos( x264_get_option( "cutoff", opts ), NULL );
+    if( acutoff )
+        av_dict_set( &avopts, "cutoff", acutoff, 0 );
+
+    char *aprofile = x264_otos( x264_get_option( "profile", opts ), NULL );
+    if( aprofile )
+    {
+        av_dict_set( &avopts, "profile", aprofile, 0 );
+        if( ISCODEC( aac ) && strstr( aprofile, "he" ) )
+        {
+            audio_aac_info_t *aacinfo = malloc( sizeof( audio_aac_info_t ) );
+            aacinfo->has_sbr          = 1;
+            h->info.opaque            = aacinfo;
+        }
+    }
+    else if( ISCODEC( aac ) )
         av_dict_set( &avopts, "profile", "aac_low", 0 ); // TODO: decide by bitrate / quality
 
     int is_vbr = x264_otob( x264_get_option( "is_vbr", opts ), ffcodecs[i].mode & MODE_VBR ? 1 : 0 );
 
-    RETURN_IF_ERR( ( !(ffcodecs[i].mode & MODE_BITRATE) && !is_vbr ) || ( !(ffcodecs[i].mode & MODE_VBR) && is_vbr ),
+    RETURN_IF_ERR( ( ( !(ffcodecs[i].mode & MODE_BITRATE) && !is_vbr ) || ( !(ffcodecs[i].mode & MODE_VBR) && is_vbr ) ) && ( strcmp(codecname, "libfdk_aac") ),
                    "lavc", NULL, "libavcodec's %s encoder doesn't allow %s mode.\n", codecname, is_vbr ? "VBR" : "bitrate" );
 
     float default_brval = is_vbr ? ffcodecs[i].default_brval : ffcodecs[i].default_brval * h->ctx->channels;
@@ -381,6 +396,40 @@ static void lavc_close( hnd_t handle )
     free( h );
 }
 
+static void lavc_help_aac( const char * const encoder_name )
+{
+    printf( "      * (ff)%s encoder help\n", encoder_name );
+    printf( "        --aquality        VBR quality\n" );
+    printf( "                          Cannot be used for HE-AAC and possible values are:\n" );
+    printf( "                             1, 2, 3, 4, 5\n" );
+    printf( "                          1 is lowest and 5 is highest.\n" );
+    printf( "        --abitrate        Enables bitrate mode [192]\n" );
+    printf( "                          Bitrate should be one of the discrete preset values depending on\n" );
+    printf( "                          profile, channels count, and samplerate.\n" );
+    printf( "                          Examples for typical configurations\n" );
+    printf( "                           - for 44100Hz to 48000Hz with 1ch\n" );
+    printf( "                             LC: 40, 48, 56, 64, 72, 80, 96, 112, 128, 144, 160, 192, 224, 256\n" );
+    printf( "                             HE: 12, 16, 24, 32, 40\n" );
+    printf( "                           - for 44100Hz to 48000Hz with 2ch\n" );
+    printf( "                             LC: 64, 72, 80, 96, 112, 128, 144, 160, 192, 224, 256, 288, 320, 384, 512\n" );
+    printf( "                             HE: 32, 40, 48, 56, 64, 80, 96, 112, 128\n" );
+    printf( "                           - for 64000Hz to 96000Hz with 2ch\n" );
+    printf( "                             LC: 80, 96, 112, 128, 144, 160, 192, 224, 256, 288, 320, 384, 512, 768, 1024\n" );
+    printf( "                             HE: 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 256\n" );
+    printf( "                           - for 44100Hz to 48000Hz with 5.1ch\n" );
+    printf( "                             LC: 160, 192, 224, 256, 288, 320, 384, 448, 512, 576, 640, 768, 1024, 1280\n");
+    printf( "                             HE: 80, 96, 112, 128, 160, 192, 256\n");
+    printf( "                           - for 64000Hz to 96000Hz with 5.1ch\n" );
+    printf( "                             LC: 256, 288, 320, 384, 448, 512, 576, 640, 768, 1024, 1280, 1600, 1920, 2560\n");
+    printf( "                             HE: 128, 160, 192, 256, 320, 384, 512, 640\n");
+    printf( "                          The lower samplerate, the lower min/max values are applied\n" );
+    printf( "        --aextraopt       Profile and bitrate mode\n" );
+    printf( "                             cutoff: set cutoff in Hz\n" );
+    printf( "                             profile : profile for aac codec [\"aac_low\"]\n" );
+    printf( "                                       \"aac_low\", \"aac_he\"\n" );
+    printf( "\n" );
+}
+
 static void lavc_help_amrnb( const char * const encoder_name )
 {
     printf( "      * (ff)%s encoder help\n", encoder_name );
@@ -398,6 +447,7 @@ static void lavc_help( const char * const encoder_name )
         return;
 
 #define SHOWHELP( encoder, helpname ) if( !strcmp( enc->name, #encoder ) ) lavc_help_##helpname ( #encoder );
+    SHOWHELP( libfdk_aac, aac );
     SHOWHELP( libopencore_amrnb, amrnb );
 #undef SHOWHELP
 

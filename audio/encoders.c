@@ -22,6 +22,9 @@ const audio_encoder_entry_t registered_audio_encoders[] = {
     { "aac",        "faac",              &audio_encoder_faac, },
 #endif
 #if HAVE_LAVF
+#if HAVE_NONFREE
+    { "aac",        "libfdk_aac",        &audio_encoder_lavc, },
+#endif
     { "aac",        "libvo_aacenc",      &audio_encoder_lavc, },
     { "aac",        "aac",               &audio_encoder_lavc, },
     { "ac3",        "ac3",               &audio_encoder_lavc, },
