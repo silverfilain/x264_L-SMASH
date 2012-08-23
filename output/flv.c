@@ -26,6 +26,9 @@
 #include "output.h"
 #include "flv_bytestream.h"
 #include "audio/encoders.h"
+#if HAVE_AUDIO
+#include "mp4/lsmash.h"
+#endif
 
 #define CHECK(x)\
 do {\
@@ -387,16 +390,54 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
     if( a_flv && a_flv->codecid == FLV_CODECID_AAC )
     {
         FAIL_IF_ERR( !a_flv->info->extradata, "flv", "audio codec is AAC but extradata is NULL\n" );
+
+        uint8_t *extradata;
+        uint32_t extradata_size;
+        if( a_flv->info->extradata_type == EXTRADATA_TYPE_LIBAVCODEC )
+        {
+            extradata = a_flv->info->extradata;
+            extradata_size = a_flv->info->extradata_size;
+        }
+        else if( a_flv->info->extradata_type == EXTRADATA_TYPE_LSMASH )
+        {
+            lsmash_codec_specific_t *orig = NULL;
+            uint32_t num_extensions = a_flv->info->extradata_size / sizeof(lsmash_codec_specific_t *);
+            for( uint32_t i = 0; i < num_extensions; i++ )
+            {
+                orig = ((lsmash_codec_specific_t **)a_flv->info->extradata)[i];
+                if( orig && orig->type == LSMASH_CODEC_SPECIFIC_DATA_TYPE_MP4SYS_DECODER_CONFIG )
+                    break;
+            }
+            FAIL_IF_ERR( !orig, "flv", "no extradata for AAC found!\n" );
+
+            assert( orig->format == LSMASH_CODEC_SPECIFIC_FORMAT_UNSTRUCTURED );
+
+            lsmash_codec_specific_t *conv = lsmash_convert_codec_specific_format( orig, LSMASH_CODEC_SPECIFIC_FORMAT_STRUCTURED );
+            FAIL_IF_ERR( !conv, "flv", "failed to convert format of AAC specific info.\n" );
+
+            lsmash_mp4sys_decoder_parameters_t *param = (lsmash_mp4sys_decoder_parameters_t *)conv->data.structured;
+            assert( param->objectTypeIndication == MP4SYS_OBJECT_TYPE_Audio_ISO_14496_3 );
+
+            int err = lsmash_get_mp4sys_decoder_specific_info( param, &extradata, &extradata_size );
+            lsmash_destroy_codec_specific_data( conv );
+            FAIL_IF_ERR( err, "flv", "failed to get AAC specific info.\n" );
+        }
+        else
+        {
+            x264_cli_log( "flv", X264_LOG_ERROR, "unknown extradata type.\n" );
+            return -1;
+        }
+
         flv_put_byte( c, FLV_TAG_TYPE_AUDIO );
-        flv_put_be24( c, 2 + a_flv->info->extradata_size );
+        flv_put_be24( c, 2 + extradata_size );
         flv_put_be24( c, 0 );
         flv_put_byte( c, 0 );
         flv_put_be24( c, 0 );
 
         flv_put_byte( c, a_flv->header );
         flv_put_byte( c, 0 );
-        flv_append_data( c, a_flv->info->extradata, a_flv->info->extradata_size );
-        flv_put_be32( c, 11 + 2 + a_flv->info->extradata_size );
+        flv_append_data( c, extradata, extradata_size );
+        flv_put_be32( c, 11 + 2 + extradata_size );
     }
 #endif
 

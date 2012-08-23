@@ -50,7 +50,7 @@ static int lsmash_init( hnd_t *handle, const char *opt_str )
 
     h->summary = (lsmash_audio_summary_t *)mp4sys_duplicate_summary( h->importer, 1 );
 
-    if( h->summary->stream_type != MP4SYS_STREAM_TYPE_AudioStream )
+    if( h->summary->summary_type != LSMASH_SUMMARY_TYPE_AUDIO )
     {
         AF_LOG_ERR( h, "unsupported stream type.\n" );
         goto error;
@@ -61,7 +61,10 @@ static int lsmash_init( hnd_t *handle, const char *opt_str )
     switch( h->summary->sample_type )
     {
         case ISOM_CODEC_TYPE_MP4A_AUDIO :
-            switch( h->summary->object_type_indication )
+        {
+            /* Investigate what CODEC is used. */
+            lsmash_mp4sys_object_type_indication objectTypeIndication = lsmash_mp4sys_get_object_type_indication( (lsmash_summary_t *)h->summary );
+            switch( objectTypeIndication )
             {
                 case MP4SYS_OBJECT_TYPE_Audio_ISO_14496_3:
                     if( h->summary->aot == MP4A_AUDIO_OBJECT_TYPE_ALS )
@@ -84,6 +87,7 @@ static int lsmash_init( hnd_t *handle, const char *opt_str )
                     break;
             }
             break;
+        }
         case ISOM_CODEC_TYPE_SAMR_AUDIO :
             h->info.codec_name = "amrnb";
             break;
@@ -116,24 +120,29 @@ static int lsmash_init( hnd_t *handle, const char *opt_str )
     h->info.samplerate     = h->summary->frequency;
     h->info.channels       = h->summary->channels;
     h->info.framelen       = h->summary->samples_in_frame;
-    h->info.chansize       = h->summary->bit_depth>>3;
+    h->info.chansize       = h->summary->sample_size >> 3;
     h->info.samplesize     = h->info.chansize * h->info.channels;
     h->info.framesize      = h->info.framelen * h->info.samplesize;
-    h->info.depth          = h->summary->bit_depth;
+    h->info.depth          = h->summary->sample_size;
     h->info.timebase       = (timebase_t){ 1, h->summary->frequency };
     h->info.last_delta     = h->info.framelen;
     h->info.priming        = 0;     /* No one can detect this. */
 
-    if( h->summary->exdata_length > 0 )
+    uint32_t num_extensions = lsmash_count_codec_specific_data( (lsmash_summary_t *)h->summary );
+    if( num_extensions )
     {
-        h->info.extradata_size = h->summary->exdata_length;
-        h->info.extradata      = malloc( h->summary->exdata_length );
+        h->info.extradata_type = EXTRADATA_TYPE_LSMASH;
+        h->info.extradata = malloc( num_extensions * sizeof(lsmash_codec_specific_t *) );
         if( !h->info.extradata )
-        {
             AF_LOG_ERR( h, "malloc failed!\n" );
-            goto error;
+        h->info.extradata_size = num_extensions * sizeof(lsmash_codec_specific_t *);
+        for( uint32_t i = 0; i < num_extensions; i++ )
+        {
+            lsmash_codec_specific_t **extradata = (lsmash_codec_specific_t **)h->info.extradata;
+            lsmash_codec_specific_t *src = lsmash_get_codec_specific_data( (lsmash_summary_t *)h->summary, i + 1 );
+            lsmash_codec_specific_t *dst = lsmash_convert_codec_specific_format( src, LSMASH_CODEC_SPECIFIC_FORMAT_UNSTRUCTURED );
+            extradata[i] = dst;
         }
-        memcpy( h->info.extradata, h->summary->exdata, h->summary->exdata_length );
     }
 
     h->frame_count = 0;

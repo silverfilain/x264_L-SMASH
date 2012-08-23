@@ -38,6 +38,11 @@ enum AudioFlags
 
 #define INVALID_DTS (INT64_MIN)
 
+enum extradata_type
+{
+    EXTRADATA_TYPE_LIBAVCODEC = 0,
+    EXTRADATA_TYPE_LSMASH     = 1
+};
 
 typedef struct timebase_t
 {
@@ -58,6 +63,7 @@ typedef struct audio_info_t
     timebase_t  timebase;
     uint8_t    *extradata;
     int         extradata_size;
+    int         extradata_type;
     void       *opaque;
     uint32_t    last_delta;
     uint32_t    priming;

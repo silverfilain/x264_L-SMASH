@@ -32,6 +32,7 @@
 #include "mp4a.h"
 #include "mp4sys.h"
 #include "write.h"
+#include "description.h"
 #ifdef LSMASH_DEMUXER_ENABLED
 #include "read.h"
 #include "print.h"
@@ -172,6 +173,22 @@ void isom_init_box_common( void *box, void *parent, uint32_t type )
         isom_init_basebox_common( (isom_box_t *)box, (isom_box_t *)parent, type );
 }
 
+uint32_t isom_skip_box_common( uint8_t **p_data )
+{
+    uint8_t *orig = *p_data;
+    uint8_t *data = *p_data;
+    uint64_t size = (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3];
+    data += ISOM_BASEBOX_COMMON_SIZE;
+    if( size == 1 )
+    {
+        size = ((uint64_t)data[0] << 56) | ((uint64_t)data[1] << 48) | ((uint64_t)data[2] << 40) | ((uint64_t)data[3] << 32)
+             | ((uint64_t)data[4] << 24) | ((uint64_t)data[5] << 16) | ((uint64_t)data[6] <<  8) |  (uint64_t)data[7];
+        data += 8;
+    }
+    *p_data = data;
+    return data - orig;
+}
+
 isom_trak_entry_t *isom_get_trak( lsmash_root_t *root, uint32_t track_ID )
 {
     if( !track_ID || !root || !root->moov || !root->moov->trak_list )
@@ -187,7 +204,7 @@ isom_trak_entry_t *isom_get_trak( lsmash_root_t *root, uint32_t track_ID )
     return NULL;
 }
 
-static isom_trex_entry_t *isom_get_trex( isom_mvex_t *mvex, uint32_t track_ID )
+isom_trex_entry_t *isom_get_trex( isom_mvex_t *mvex, uint32_t track_ID )
 {
     if( !track_ID || !mvex || !mvex->trex_list )
         return NULL;
@@ -217,7 +234,7 @@ static isom_traf_entry_t *isom_get_traf( isom_moof_entry_t *moof, uint32_t track
     return NULL;
 }
 
-static isom_tfra_entry_t *isom_get_tfra( isom_mfra_t *mfra, uint32_t track_ID )
+isom_tfra_entry_t *isom_get_tfra( isom_mfra_t *mfra, uint32_t track_ID )
 {
     if( !track_ID || !mfra || !mfra->tfra_list )
         return NULL;
@@ -335,373 +352,6 @@ void isom_remove_avcC_ps( isom_avcC_ps_entry_t *ps )
     free( ps );
 }
 
-int isom_add_avcC( isom_visual_entry_t *visual )
-{
-    if( !visual )
-        return -1;
-    isom_create_box( avcC, visual, ISOM_BOX_TYPE_AVCC );
-    avcC->sequenceParameterSets = lsmash_create_entry_list();
-    if( !avcC->sequenceParameterSets )
-    {
-        free( avcC );
-        return -1;
-    }
-    avcC->pictureParameterSets = lsmash_create_entry_list();
-    if( !avcC->pictureParameterSets )
-    {
-        isom_remove_avcC( avcC );
-        return -1;
-    }
-    avcC->sequenceParameterSetExt = lsmash_create_entry_list();
-    if( !avcC->sequenceParameterSetExt )
-    {
-        isom_remove_avcC( avcC );
-        return -1;
-    }
-    visual->avcC = avcC;
-    return 0;
-}
-
-int isom_add_clap( isom_visual_entry_t *visual )
-{
-    if( !visual || visual->clap )
-        return -1;
-    isom_create_box( clap, visual, ISOM_BOX_TYPE_CLAP );
-    clap->cleanApertureWidthN = visual->width;
-    clap->cleanApertureWidthD = 1;
-    clap->cleanApertureHeightN = visual->height;
-    clap->cleanApertureHeightD = 1;
-    clap->horizOffN = 0;
-    clap->horizOffD = 1;
-    clap->vertOffN = 0;
-    clap->vertOffD = 1;
-    visual->clap = clap;
-    return 0;
-}
-
-int isom_add_pasp( isom_visual_entry_t *visual )
-{
-    if( !visual || visual->pasp )
-        return -1;
-    isom_create_box( pasp, visual, ISOM_BOX_TYPE_PASP );
-    pasp->hSpacing = 1;
-    pasp->vSpacing = 1;
-    visual->pasp = pasp;
-    return 0;
-}
-
-int isom_add_glbl( isom_visual_entry_t *visual )
-{
-    if( !visual || visual->glbl )
-        return -1;
-    isom_create_box( glbl, visual, QT_BOX_TYPE_GLBL );
-    visual->glbl = glbl;
-    return 0;
-}
-
-int isom_add_colr( isom_visual_entry_t *visual )
-{
-    if( !visual || visual->colr )
-        return -1;
-    isom_create_box( colr, visual, QT_BOX_TYPE_COLR );
-    isom_color_parameter_t *param = (isom_color_parameter_t *)(&isom_color_parameter_tbl[0]);
-    colr->color_parameter_type = QT_COLOR_PARAMETER_TYPE_NCLC;
-    colr->primaries_index = param->primaries;
-    colr->transfer_function_index = param->transfer;
-    colr->matrix_index = param->matrix;
-    visual->colr = colr;
-    return 0;
-}
-
-int isom_add_gama( isom_visual_entry_t *visual )
-{
-    if( !visual || visual->gama )
-        return -1;
-    isom_create_box( gama, visual, QT_BOX_TYPE_GAMA );
-    gama->level = 0;    /* platform's standard gamma */
-    visual->gama = gama;
-    return 0;
-}
-
-int isom_add_fiel( isom_visual_entry_t *visual )
-{
-    if( !visual || visual->fiel )
-        return -1;
-    isom_create_box( fiel, visual, QT_BOX_TYPE_FIEL );
-    fiel->fields = 1;
-    visual->fiel = fiel;
-    return 0;
-}
-
-int isom_add_cspc( isom_visual_entry_t *visual )
-{
-    if( !visual || visual->cspc )
-        return -1;
-    isom_create_box( cspc, visual, QT_BOX_TYPE_CSPC );
-    visual->cspc = cspc;
-    return 0;
-}
-
-int isom_add_sgbt( isom_visual_entry_t *visual )
-{
-    if( !visual || visual->sgbt )
-        return -1;
-    isom_create_box( sgbt, visual, QT_BOX_TYPE_SGBT );
-    sgbt->significantBits = 8;
-    visual->sgbt = sgbt;
-    return 0;
-}
-
-int isom_add_stsl( isom_visual_entry_t *visual )
-{
-    if( !visual || visual->stsl )
-        return -1;
-    isom_create_box( stsl, visual, ISOM_BOX_TYPE_STSL );
-    stsl->scale_method = ISOM_SCALING_METHOD_HIDDEN;
-    visual->stsl = stsl;
-    return 0;
-}
-
-static void isom_remove_esds( isom_esds_t *esds );
-static void isom_remove_visual_extensions( isom_visual_entry_t *visual );
-
-static int isom_add_visual_extensions( isom_visual_entry_t *visual, lsmash_video_summary_t *summary )
-{
-    /* Check if set up Track Aperture Modes. */
-    isom_trak_entry_t *trak = (isom_trak_entry_t *)visual->parent->parent->parent->parent->parent;
-    int qt_compatible = trak->root->qt_compatible;
-    isom_tapt_t *tapt = trak->tapt;
-    int set_aperture_modes = qt_compatible                      /* Track Aperture Modes is only available under QuickTime file format. */
-        && !summary->scaling_method                             /* Sample scaling method might conflict with this feature. */
-        && tapt && tapt->clef && tapt->prof && tapt->enof       /* Check if required boxes exist. */
-        && !((isom_stsd_t *)visual->parent)->list->entry_count; /* Multiple sample description might conflict with this, so in that case, disable this feature.
-                                                                 * Note: this sample description isn't added yet here. */
-    if( !set_aperture_modes )
-        isom_remove_tapt( trak->tapt );
-    int uncompressed_ycbcr = qt_compatible && isom_is_uncompressed_ycbcr( visual->type );
-    /* Set up Clean Aperture. */
-    if( set_aperture_modes || uncompressed_ycbcr || summary->crop_top || summary->crop_left || summary->crop_bottom || summary->crop_right )
-    {
-        if( isom_add_clap( visual ) )
-        {
-            isom_remove_visual_extensions( visual );
-            return -1;
-        }
-        isom_clap_t *clap = visual->clap;
-        clap->cleanApertureWidthN = summary->width - (summary->crop_left + summary->crop_right);
-        clap->cleanApertureHeightN = summary->height - (summary->crop_top + summary->crop_bottom);
-        clap->horizOffN = (int64_t)summary->crop_left - summary->crop_right;
-        clap->vertOffN = (int64_t)summary->crop_top - summary->crop_bottom;
-        if( !(clap->horizOffN & 0x1) )
-        {
-            clap->horizOffN /= 2;
-            clap->horizOffD = 1;
-        }
-        else
-            clap->horizOffD = 2;
-        if( !(clap->vertOffN & 0x1) )
-        {
-            clap->vertOffN /= 2;
-            clap->vertOffD = 1;
-        }
-        else
-            clap->vertOffD = 2;
-    }
-    /* Set up Pixel Aspect Ratio. */
-    if( set_aperture_modes || (summary->par_h && summary->par_v) )
-    {
-        if( isom_add_pasp( visual ) )
-        {
-            isom_remove_visual_extensions( visual );
-            return -1;
-        }
-        isom_pasp_t *pasp = visual->pasp;
-        pasp->hSpacing = LSMASH_MAX( summary->par_h, 1 );
-        pasp->vSpacing = LSMASH_MAX( summary->par_v, 1 );
-    }
-    /* Set up Color Parameter. */
-    if( qt_compatible && (uncompressed_ycbcr || summary->primaries || summary->transfer || summary->matrix) )
-    {
-        if( isom_add_colr( visual ) )
-        {
-            isom_remove_visual_extensions( visual );
-            return -1;
-        }
-        isom_colr_t *colr = visual->colr;
-        uint16_t primaries = summary->primaries;
-        uint16_t transfer  = summary->transfer;
-        uint16_t matrix    = summary->matrix;
-        /* Set 'nclc' to parameter type, we don't support 'prof'. */
-        colr->color_parameter_type = QT_COLOR_PARAMETER_TYPE_NCLC;
-        /* primaries */
-        if( primaries >= QT_COLOR_PARAMETER_END )
-            return -1;
-        else if( primaries > UINT16_MAX )
-            colr->primaries_index = isom_color_parameter_tbl[primaries - UINT16_MAX_PLUS_ONE].primaries;
-        else
-            colr->primaries_index = (primaries == 1 || primaries == 5 || primaries == 6) ? primaries : 2;
-        /* transfer */
-        if( transfer >= QT_COLOR_PARAMETER_END )
-            return -1;
-        else if( transfer > UINT16_MAX )
-            colr->transfer_function_index = isom_color_parameter_tbl[transfer - UINT16_MAX_PLUS_ONE].transfer;
-        else
-            colr->transfer_function_index = (transfer == 1 || transfer == 7) ? transfer : 2;
-        /* matrix */
-        if( matrix >= QT_COLOR_PARAMETER_END )
-            return -1;
-        else if( matrix > UINT16_MAX )
-            colr->matrix_index = isom_color_parameter_tbl[matrix - UINT16_MAX_PLUS_ONE].matrix;
-        else
-            colr->matrix_index = (matrix == 1 || matrix == 6 || matrix == 7) ? matrix : 2;
-    }
-    /* Set up Field/Frame Information. */
-    if( qt_compatible && (uncompressed_ycbcr || summary->field_orderings != QT_FIELD_ORDERINGS_PROGRESSIVE) )
-    {
-        if( isom_add_fiel( visual ) )
-        {
-            isom_remove_visual_extensions( visual );
-            return -1;
-        }
-        visual->fiel->fields = summary->field_orderings == QT_FIELD_ORDERINGS_PROGRESSIVE ? 1 : 2;
-        visual->fiel->detail = summary->field_orderings;
-    }
-    /* Set up the pixel format type. */
-    if( qt_compatible && summary->pixel_format )
-    {
-        if( isom_add_cspc( visual ) )
-        {
-            isom_remove_visual_extensions( visual );
-            return -1;
-        }
-        visual->cspc->pixel_format = summary->pixel_format;
-    }
-    /* Set up the number of significant bits per component. */
-    if( qt_compatible && (visual->type == QT_CODEC_TYPE_V216_VIDEO || summary->significant_bits) )
-    {
-        if( summary->significant_bits == 0 || isom_add_sgbt( visual ) )
-        {
-            isom_remove_visual_extensions( visual );
-            return -1;
-        }
-        visual->sgbt->significantBits = summary->significant_bits;
-    }
-    /* Set up Sample Scaling. */
-    if( !qt_compatible && summary->scaling_method )
-    {
-        if( isom_add_stsl( visual ) )
-        {
-            isom_remove_visual_extensions( visual );
-            return -1;
-        }
-        isom_stsl_t *stsl = visual->stsl;
-        stsl->constraint_flag = 1;
-        stsl->scale_method = summary->scaling_method;
-    }
-    /* Set up Decoder Specific Information. */
-    static const struct
-    {
-        uint32_t codec_type;
-        uint32_t minimum_length;
-        uint32_t fourcc;
-        int (*add_func)( isom_visual_entry_t * );
-    } dsi_table[] =
-        {
-            { ISOM_CODEC_TYPE_AVC1_VIDEO, 15, ISOM_BOX_TYPE_AVCC, isom_add_avcC },
-            { ISOM_CODEC_TYPE_AVC2_VIDEO, 15, ISOM_BOX_TYPE_AVCC, isom_add_avcC },
-            { ISOM_CODEC_TYPE_AVCP_VIDEO, 15, ISOM_BOX_TYPE_AVCC, isom_add_avcC },
-            { ISOM_CODEC_TYPE_VC_1_VIDEO, 11, ISOM_BOX_TYPE_DVC1, NULL },
-            { 0 }
-        };
-    for( int i = 0; dsi_table[i].codec_type; i++ )
-        if( visual->type == dsi_table[i].codec_type )
-        {
-            if( summary->exdata_length >= dsi_table[i].minimum_length )
-            {
-                /* Chech if Decoder Specific Information is constructed as exdata. */
-                uint8_t *exdata = (uint8_t *)summary->exdata;
-                uint32_t length = (exdata[0] << 24) | (exdata[1] << 16) | (exdata[2] << 8) | exdata[3];
-                if( length == summary->exdata_length
-                 && LSMASH_4CC( exdata[4], exdata[5], exdata[6], exdata[7] ) == dsi_table[i].fourcc )
-                {
-                    visual->exdata = lsmash_memdup( summary->exdata, summary->exdata_length );
-                    if( !visual->exdata )
-                        return -1;
-                    visual->exdata_length = summary->exdata_length;
-                    break;
-                }
-            }
-            if( dsi_table[i].add_func && dsi_table[i].add_func( visual ) )
-                return -1;
-            break;
-        }
-    /* Set up Track Apeture Modes. */
-    if( set_aperture_modes )
-    {
-        uint32_t width  = visual->width  << 16;
-        uint32_t height = visual->height << 16;
-        double clap_width  = ((double)visual->clap->cleanApertureWidthN  / visual->clap->cleanApertureWidthD)  * (1<<16);
-        double clap_height = ((double)visual->clap->cleanApertureHeightN / visual->clap->cleanApertureHeightD) * (1<<16);
-        double par = (double)visual->pasp->hSpacing / visual->pasp->vSpacing;
-        if( par >= 1.0 )
-        {
-            tapt->clef->width  = clap_width * par;
-            tapt->clef->height = clap_height;
-            tapt->prof->width  = width * par;
-            tapt->prof->height = height;
-        }
-        else
-        {
-            tapt->clef->width  = clap_width;
-            tapt->clef->height = clap_height / par;
-            tapt->prof->width  = width;
-            tapt->prof->height = height / par;
-        }
-        tapt->enof->width  = width;
-        tapt->enof->height = height;
-    }
-    return 0;
-}
-
-static int isom_add_visual_entry( isom_stsd_t *stsd, uint32_t sample_type, lsmash_video_summary_t *summary )
-{
-    if( !stsd || !stsd->list || !summary )
-        return -1;
-    lsmash_entry_list_t *list = stsd->list;
-    isom_visual_entry_t *visual = lsmash_malloc_zero( sizeof(isom_visual_entry_t) );
-    if( !visual )
-        return -1;
-    isom_init_box_common( visual, stsd, sample_type );
-    visual->manager |= LSMASH_VIDEO_DESCRIPTION;
-    visual->data_reference_index = 1;
-    visual->width = (uint16_t)summary->width;
-    visual->height = (uint16_t)summary->height;
-    visual->horizresolution = visual->vertresolution = 0x00480000;
-    visual->frame_count = 1;
-    switch( sample_type )
-    {
-        case ISOM_CODEC_TYPE_AVC1_VIDEO :
-        case ISOM_CODEC_TYPE_AVC2_VIDEO :
-            strcpy( visual->compressorname, "\012AVC Coding" );
-            break;
-        case ISOM_CODEC_TYPE_AVCP_VIDEO :
-            strcpy( visual->compressorname, "\016AVC Parameters" );
-            break;
-        default :
-            break;
-    }
-    visual->depth = 0x0018;
-    visual->color_table_ID = -1;
-    if( isom_add_visual_extensions( visual, summary )
-     || lsmash_add_entry( list, visual ) )
-    {
-        isom_remove_visual_extensions( visual );
-        free( visual );
-        return -1;
-    }
-    return 0;
-}
-
 #if 0
 static int isom_add_mp4s_entry( isom_stsd_t *stsd )
 {
@@ -720,15 +370,6 @@ static int isom_add_mp4s_entry( isom_stsd_t *stsd )
     return 0;
 }
 #endif
-
-int isom_add_wave( isom_audio_entry_t *audio )
-{
-    if( !audio || audio->wave )
-        return -1;
-    isom_create_box( wave, audio, QT_BOX_TYPE_WAVE );
-    audio->wave = wave;
-    return 0;
-}
 
 int isom_add_frma( isom_wave_t *wave )
 {
@@ -764,342 +405,6 @@ int isom_add_terminator( isom_wave_t *wave )
     isom_create_box( terminator, wave, QT_BOX_TYPE_TERMINATOR );
     wave->terminator = terminator;
     return 0;
-}
-
-int isom_add_chan( isom_audio_entry_t *audio )
-{
-    if( !audio || audio->chan )
-        return -1;
-    isom_create_box( chan, audio, QT_BOX_TYPE_CHAN );
-    chan->channelLayoutTag = QT_CHANNEL_LAYOUT_UNKNOWN;
-    audio->chan = chan;
-    return 0;
-}
-
-static int isom_set_qtff_mp4a_description( isom_audio_entry_t *audio )
-{
-    lsmash_audio_summary_t *summary = &audio->summary;
-    if( isom_add_wave( audio )
-     || isom_add_frma( audio->wave )
-     || isom_add_mp4a( audio->wave )
-     || isom_add_terminator( audio->wave ) )
-        return -1;
-    audio->data_reference_index = 1;
-    audio->version = (summary->channels > 2 || summary->frequency > UINT16_MAX) ? 2 : 1;
-    audio->channelcount = audio->version == 2 ? 3 : LSMASH_MIN( summary->channels, 2 );
-    audio->samplesize = 16;
-    audio->compression_ID = QT_COMPRESSION_ID_VARIABLE_COMPRESSION;
-    audio->packet_size = 0;
-    if( audio->version == 1 )
-    {
-        audio->samplerate = summary->frequency << 16;
-        audio->samplesPerPacket = summary->samples_in_frame;
-        audio->bytesPerPacket = 1;      /* Apparently, this field is set to 1. */
-        audio->bytesPerFrame = audio->bytesPerPacket * summary->channels;
-        audio->bytesPerSample = 1 + (summary->bit_depth != 8);
-    }
-    else    /* audio->version == 2 */
-    {
-        audio->samplerate = 0x00010000;
-        audio->sizeOfStructOnly = 72;
-        audio->audioSampleRate = (union {double d; uint64_t i;}){summary->frequency}.i;
-        audio->numAudioChannels = summary->channels;
-        audio->always7F000000 = 0x7F000000;
-        audio->constBitsPerChannel = 0;         /* compressed audio */
-        audio->formatSpecificFlags = 0;
-        audio->constBytesPerAudioPacket = 0;    /* variable */
-        audio->constLPCMFramesPerAudioPacket = summary->samples_in_frame;
-    }
-    audio->wave->frma->data_format = audio->type;
-    /* create ES Descriptor */
-    isom_esds_t *esds = lsmash_malloc_zero( sizeof(isom_esds_t) );
-    if( !esds )
-        return -1;
-    isom_init_box_common( esds, audio->wave, ISOM_BOX_TYPE_ESDS );
-    mp4sys_ES_Descriptor_params_t esd_param;
-    memset( &esd_param, 0, sizeof(mp4sys_ES_Descriptor_params_t) );
-    esd_param.objectTypeIndication = summary->object_type_indication;
-    esd_param.streamType = summary->stream_type;
-    esd_param.dsi_payload = summary->exdata;
-    esd_param.dsi_payload_length = summary->exdata_length;
-    esds->ES = mp4sys_setup_ES_Descriptor( &esd_param );
-    if( !esds->ES )
-    {
-        free( esds );
-        return -1;
-    }
-    audio->wave->esds = esds;
-    return 0;
-}
-
-static int isom_set_isom_mp4a_description( isom_audio_entry_t *audio )
-{
-    lsmash_audio_summary_t *summary = &audio->summary;
-    if( summary->stream_type != MP4SYS_STREAM_TYPE_AudioStream )
-        return -1;
-    switch( summary->object_type_indication )
-    {
-        case MP4SYS_OBJECT_TYPE_Audio_ISO_14496_3:
-        case MP4SYS_OBJECT_TYPE_Audio_ISO_13818_7_Main_Profile:
-        case MP4SYS_OBJECT_TYPE_Audio_ISO_13818_7_LC_Profile:
-        case MP4SYS_OBJECT_TYPE_Audio_ISO_13818_7_SSR_Profile:
-        case MP4SYS_OBJECT_TYPE_Audio_ISO_13818_3:      /* Legacy Interface */
-        case MP4SYS_OBJECT_TYPE_Audio_ISO_11172_3:      /* Legacy Interface */
-            break;
-        default:
-            return -1;
-    }
-    isom_create_box( esds, audio, ISOM_BOX_TYPE_ESDS );
-    mp4sys_ES_Descriptor_params_t esd_param;
-    esd_param.ES_ID = 0;              /* This is esds internal, so 0 is allowed. */
-    esd_param.objectTypeIndication = summary->object_type_indication;
-    esd_param.streamType = summary->stream_type;
-    esd_param.bufferSizeDB = 0;       /* NOTE: ISO/IEC 14496-3 does not mention this, so we use 0. */
-    esd_param.maxBitrate = 0;         /* This will be updated later if needed. or... I think this can be arbitrary value. */
-    esd_param.avgBitrate = 0;         /* FIXME: 0 if VBR. */
-    esd_param.dsi_payload = summary->exdata;
-    esd_param.dsi_payload_length = summary->exdata_length;
-    esds->ES = mp4sys_setup_ES_Descriptor( &esd_param );
-    if( !esds->ES )
-        return -1;
-    audio->data_reference_index = 1;
-    /* WARNING: This field cannot retain frequency above 65535Hz.
-       This is not "FIXME", I just honestly implemented what the spec says.
-       BTW, who ever expects sampling frequency takes fixed-point decimal??? */
-    audio->samplerate = summary->frequency <= UINT16_MAX ? summary->frequency << 16 : 0;
-    /* In pure mp4 file, these "template" fields shall be default values according to the spec.
-       But not pure - hybrid with other spec - mp4 file can take other values.
-       Which is to say, these template values shall be ignored in terms of mp4, except some object_type_indications.
-       see 14496-14, "Template fields used". */
-    audio->channelcount = 2;
-    audio->samplesize = 16;
-    audio->esds = esds;
-    return 0;
-}
-
-static int isom_set_qtff_lpcm_description( isom_audio_entry_t *audio )
-{
-    uint32_t sample_type = audio->type;
-    lsmash_audio_summary_t *summary = &audio->summary;
-    /* Convert the sample type into 'lpcm' if the description doesn't match the format or version = 2 fields are needed. */
-    if( (sample_type == QT_CODEC_TYPE_RAW_AUDIO && (summary->bit_depth != 8 || summary->sample_format))
-     || (sample_type == QT_CODEC_TYPE_FL32_AUDIO && (summary->bit_depth != 32 || !summary->sample_format))
-     || (sample_type == QT_CODEC_TYPE_FL64_AUDIO && (summary->bit_depth != 64 || !summary->sample_format))
-     || (sample_type == QT_CODEC_TYPE_IN24_AUDIO && (summary->bit_depth != 24 || summary->sample_format))
-     || (sample_type == QT_CODEC_TYPE_IN32_AUDIO && (summary->bit_depth != 32 || summary->sample_format))
-     || (sample_type == QT_CODEC_TYPE_23NI_AUDIO && (summary->bit_depth != 32 || summary->sample_format || !summary->endianness))
-     || (sample_type == QT_CODEC_TYPE_SOWT_AUDIO && (summary->bit_depth != 16 || summary->sample_format || !summary->endianness))
-     || (sample_type == QT_CODEC_TYPE_TWOS_AUDIO && ((summary->bit_depth != 16 && summary->bit_depth != 8) || summary->sample_format || summary->endianness))
-     || (sample_type == QT_CODEC_TYPE_NONE_AUDIO && ((summary->bit_depth != 16 && summary->bit_depth != 8) || summary->sample_format || summary->endianness))
-     || (sample_type == QT_CODEC_TYPE_NOT_SPECIFIED && ((summary->bit_depth != 16 && summary->bit_depth != 8) || summary->sample_format || summary->endianness))
-     || (summary->channels > 2 || summary->frequency > UINT16_MAX || summary->bit_depth % 8) )
-    {
-        audio->type = QT_CODEC_TYPE_LPCM_AUDIO;
-        audio->version = 2;
-    }
-    else if( sample_type == QT_CODEC_TYPE_LPCM_AUDIO )
-        audio->version = 2;
-    else if( summary->bit_depth > 16
-     || (sample_type != QT_CODEC_TYPE_RAW_AUDIO && sample_type != QT_CODEC_TYPE_TWOS_AUDIO
-     && sample_type != QT_CODEC_TYPE_NONE_AUDIO && sample_type != QT_CODEC_TYPE_NOT_SPECIFIED) )
-        audio->version = 1;
-    audio->data_reference_index = 1;
-    /* Set up constBytesPerAudioPacket field.
-     * We use constBytesPerAudioPacket as the actual size of audio frame even when version is not 2. */
-    audio->constBytesPerAudioPacket = (summary->bit_depth * summary->channels) / 8;
-    /* Set up other fields in this description by its version. */
-    if( audio->version == 2 )
-    {
-        audio->channelcount = 3;
-        audio->samplesize = 16;
-        audio->compression_ID = -2;
-        audio->samplerate = 0x00010000;
-        audio->sizeOfStructOnly = 72;
-        audio->audioSampleRate = (union {double d; uint64_t i;}){summary->frequency}.i;
-        audio->numAudioChannels = summary->channels;
-        audio->always7F000000 = 0x7F000000;
-        audio->constBitsPerChannel = summary->bit_depth;
-        audio->constLPCMFramesPerAudioPacket = 1;
-        if( summary->sample_format )
-            audio->formatSpecificFlags |= QT_LPCM_FORMAT_FLAG_FLOAT;
-        if( sample_type == QT_CODEC_TYPE_TWOS_AUDIO || !summary->endianness )
-            audio->formatSpecificFlags |= QT_LPCM_FORMAT_FLAG_BIG_ENDIAN;
-        if( !summary->sample_format && summary->signedness )
-            audio->formatSpecificFlags |= QT_LPCM_FORMAT_FLAG_SIGNED_INTEGER;
-        if( summary->packed )
-            audio->formatSpecificFlags |= QT_LPCM_FORMAT_FLAG_PACKED;
-        if( !summary->packed && summary->alignment )
-            audio->formatSpecificFlags |= QT_LPCM_FORMAT_FLAG_ALIGNED_HIGH;
-        if( !summary->interleaved )
-            audio->formatSpecificFlags |= QT_LPCM_FORMAT_FLAG_NON_INTERLEAVED;
-    }
-    else if( audio->version == 1 )
-    {
-        audio->channelcount = summary->channels;
-        audio->samplesize = 16;
-        /* Audio formats other than 'raw ' and 'twos' are treated as compressed audio. */
-        if( sample_type == QT_CODEC_TYPE_RAW_AUDIO || sample_type == QT_CODEC_TYPE_TWOS_AUDIO )
-            audio->compression_ID = QT_COMPRESSION_ID_NOT_COMPRESSED;
-        else
-            audio->compression_ID = QT_COMPRESSION_ID_FIXED_COMPRESSION;
-        audio->samplerate = summary->frequency << 16;
-        audio->samplesPerPacket = 1;
-        audio->bytesPerPacket = summary->bit_depth / 8;
-        audio->bytesPerFrame = audio->bytesPerPacket * summary->channels;   /* sample_size field in stsz box is NOT used. */
-        audio->bytesPerSample = 1 + (summary->bit_depth != 8);
-        if( sample_type == QT_CODEC_TYPE_FL32_AUDIO || sample_type == QT_CODEC_TYPE_FL64_AUDIO
-         || sample_type == QT_CODEC_TYPE_IN24_AUDIO || sample_type == QT_CODEC_TYPE_IN32_AUDIO )
-        {
-            if( isom_add_wave( audio )
-             || isom_add_frma( audio->wave )
-             || isom_add_enda( audio->wave )
-             || isom_add_terminator( audio->wave ) )
-                return -1;
-            audio->wave->frma->data_format = sample_type;
-            audio->wave->enda->littleEndian = summary->endianness;
-        }
-    }
-    else    /* audio->version == 0 */
-    {
-        audio->channelcount = summary->channels;
-        audio->samplesize = summary->bit_depth;
-        audio->compression_ID = QT_COMPRESSION_ID_NOT_COMPRESSED;
-        audio->samplerate = summary->frequency << 16;
-    }
-    return 0;
-}
-
-static int isom_set_extra_description( isom_audio_entry_t *audio )
-{
-    lsmash_audio_summary_t *summary = &audio->summary;
-    audio->data_reference_index = 1;
-    if( audio->type == ISOM_CODEC_TYPE_DTSC_AUDIO
-     || audio->type == ISOM_CODEC_TYPE_DTSE_AUDIO
-     || audio->type == ISOM_CODEC_TYPE_DTSH_AUDIO
-     || audio->type == ISOM_CODEC_TYPE_DTSL_AUDIO )
-    {
-        switch( summary->frequency )
-        {
-            case 12000 :    /* Invalid? (No reference in the spec) */
-            case 24000 :
-            case 48000 :
-            case 96000 :
-            case 192000 :
-            case 384000 :   /* Invalid? (No reference in the spec) */
-                audio->samplerate = 48000 << 16;
-                break;
-            case 22050 :
-            case 44100 :
-            case 88200 :
-            case 176400 :
-            case 352800 :   /* Invalid? (No reference in the spec) */
-                audio->samplerate = 44100 << 16;
-                break;
-            case 8000 :     /* Invalid? (No reference in the spec) */
-            case 16000 :
-            case 32000 :
-            case 64000 :
-            case 128000 :
-                audio->samplerate = 32000 << 16;
-                break;
-            default :
-                audio->samplerate = 0;
-                break;
-        }
-        audio->channelcount = summary->channels;
-    }
-    else
-    {
-        audio->samplerate = summary->frequency <= UINT16_MAX ? summary->frequency << 16 : 0;
-        audio->channelcount = 2;
-    }
-    audio->samplesize = 16;
-    if( summary->exdata )
-    {
-        audio->exdata = lsmash_memdup( summary->exdata, summary->exdata_length );
-        if( !audio->exdata )
-            return -1;
-        audio->exdata_length = summary->exdata_length;
-    }
-    else
-    {
-        /* No CODEC Specific Info */
-        switch( audio->type )
-        {
-            case ISOM_CODEC_TYPE_AC_3_AUDIO :
-            case ISOM_CODEC_TYPE_ALAC_AUDIO :
-            case ISOM_CODEC_TYPE_DTSC_AUDIO :
-            case ISOM_CODEC_TYPE_DTSE_AUDIO :
-            case ISOM_CODEC_TYPE_DTSH_AUDIO :
-            case ISOM_CODEC_TYPE_DTSL_AUDIO :
-            case ISOM_CODEC_TYPE_EC_3_AUDIO :
-            case ISOM_CODEC_TYPE_SAMR_AUDIO :
-            case ISOM_CODEC_TYPE_SAWB_AUDIO :
-                return -1;
-            default :
-                break;
-        }
-        audio->exdata = NULL;
-        audio->exdata_length = 0;
-    }
-    return 0;
-}
-
-static int isom_add_audio_entry( isom_stsd_t *stsd, uint32_t sample_type, lsmash_audio_summary_t *summary )
-{
-    if( !stsd || !stsd->list || !summary )
-        return -1;
-    isom_audio_entry_t *audio = lsmash_malloc_zero( sizeof(isom_audio_entry_t) );
-    if( !audio )
-        return -1;
-    isom_init_box_common( audio, stsd, sample_type );
-    audio->manager |= LSMASH_AUDIO_DESCRIPTION;
-    memcpy( &audio->summary, summary, sizeof(lsmash_audio_summary_t) );
-    int ret = 0;
-    lsmash_root_t *root = stsd->root;
-    if( sample_type == ISOM_CODEC_TYPE_MP4A_AUDIO )
-    {
-        if( root->ftyp && root->ftyp->major_brand == ISOM_BRAND_TYPE_QT )
-            ret = isom_set_qtff_mp4a_description( audio );
-        else
-            ret = isom_set_isom_mp4a_description( audio );
-    }
-    else if( isom_is_lpcm_audio( audio ) )
-        ret = isom_set_qtff_lpcm_description( audio );
-    else
-        ret = isom_set_extra_description( audio );
-    if( ret )
-        goto fail;
-    if( root->qt_compatible )
-    {
-        lsmash_channel_layout_tag layout_tag = summary->layout_tag;
-        lsmash_channel_bitmap bitmap = summary->bitmap;
-        if( layout_tag == QT_CHANNEL_LAYOUT_USE_CHANNEL_DESCRIPTIONS    /* We don't support the feature of Channel Descriptions. */
-         || (layout_tag == QT_CHANNEL_LAYOUT_USE_CHANNEL_BITMAP && (!bitmap || bitmap > QT_CHANNEL_BIT_FULL)) )
-        {
-            layout_tag = summary->layout_tag = QT_CHANNEL_LAYOUT_UNKNOWN | summary->channels;
-            bitmap = summary->bitmap = 0;
-        }
-        /* Don't create Audio Channel Layout Box if the channel layout is unknown. */
-        if( (layout_tag ^ QT_CHANNEL_LAYOUT_UNKNOWN) >> 16 )
-        {
-            if( isom_add_chan( audio ) )
-                goto fail;
-            audio->chan->channelLayoutTag = layout_tag;
-            audio->chan->channelBitmap = bitmap;
-        }
-    }
-    if( lsmash_add_entry( stsd->list, audio ) )
-        goto fail;
-    return 0;
-fail:
-    isom_remove_esds( audio->esds );
-    isom_remove_wave( audio->wave );
-    isom_remove_chan( audio->chan );
-    if( audio->exdata )
-        free( audio->exdata );
-    free( audio );
-    return -1;
 }
 
 static int isom_add_text_entry( isom_stsd_t *stsd )
@@ -1156,8 +461,10 @@ static int isom_add_tx3g_entry( isom_stsd_t *stsd )
 }
 
 /* This function returns 0 if failed, sample_entry_number if succeeded. */
-int lsmash_add_sample_entry( lsmash_root_t *root, uint32_t track_ID, uint32_t sample_type, void *summary )
+int lsmash_add_sample_entry( lsmash_root_t *root, uint32_t track_ID, void *summary )
 {
+    if( !summary )
+        return 0;
     isom_trak_entry_t *trak = isom_get_trak( root, track_ID );
     if( !trak || !trak->root || !trak->root->ftyp || !trak->mdia || !trak->mdia->minf
      || !trak->mdia->minf->stbl || !trak->mdia->minf->stbl->stsd || !trak->mdia->minf->stbl->stsd->list )
@@ -1165,6 +472,7 @@ int lsmash_add_sample_entry( lsmash_root_t *root, uint32_t track_ID, uint32_t sa
     isom_stsd_t *stsd = trak->mdia->minf->stbl->stsd;
     lsmash_entry_list_t *list = stsd->list;
     int ret = -1;
+    lsmash_codec_type sample_type = ((lsmash_summary_t *)summary)->sample_type;
     switch( sample_type )
     {
         case ISOM_CODEC_TYPE_AVC1_VIDEO :
@@ -1207,7 +515,7 @@ int lsmash_add_sample_entry( lsmash_root_t *root, uint32_t track_ID, uint32_t sa
         case ISOM_CODEC_TYPE_MJP2_VIDEO :
         case ISOM_CODEC_TYPE_S263_VIDEO :
 #endif
-            ret = isom_add_visual_entry( stsd, sample_type, (lsmash_video_summary_t *)summary );
+            ret = isom_setup_visual_description( stsd, sample_type, (lsmash_video_summary_t *)summary );
             break;
 #if 0
         case ISOM_CODEC_TYPE_MP4S_SYSTEM :
@@ -1248,7 +556,7 @@ int lsmash_add_sample_entry( lsmash_root_t *root, uint32_t track_ID, uint32_t sa
         case ISOM_CODEC_TYPE_SSMV_AUDIO :
         case ISOM_CODEC_TYPE_TWOS_AUDIO :
 #endif
-            ret = isom_add_audio_entry( stsd, sample_type, (lsmash_audio_summary_t *)summary );
+            ret = isom_setup_audio_description( stsd, sample_type, (lsmash_audio_summary_t *)summary );
             break;
         case ISOM_CODEC_TYPE_TX3G_TEXT :
             ret = isom_add_tx3g_entry( stsd );
@@ -1258,9 +566,9 @@ int lsmash_add_sample_entry( lsmash_root_t *root, uint32_t track_ID, uint32_t sa
             break;
         case LSMASH_CODEC_TYPE_RAW :
             if( trak->mdia->minf->vmhd )
-                ret = isom_add_visual_entry( stsd, sample_type, (lsmash_video_summary_t *)summary );
+                ret = isom_setup_visual_description( stsd, sample_type, (lsmash_video_summary_t *)summary );
             else if( trak->mdia->minf->smhd )
-                ret = isom_add_audio_entry( stsd, sample_type, (lsmash_audio_summary_t *)summary );
+                ret = isom_setup_audio_description( stsd, sample_type, (lsmash_audio_summary_t *)summary );
             break;
         default :
             return 0;
@@ -1801,11 +1109,12 @@ static int isom_scan_trak_profileLevelIndication( isom_trak_entry_t* trak, mp4a_
             {
                 isom_audio_entry_t *audio = (isom_audio_entry_t *)sample_entry;
 #ifdef LSMASH_DEMUXER_ENABLED
-                if( !audio->esds || !audio->esds->ES )
+                isom_esds_t *esds = (isom_esds_t *)isom_get_extension_box( &audio->extensions, ISOM_BOX_TYPE_ESDS );
+                if( !esds || !esds->ES )
                     return -1;
                 if( audio->summary.sample_type != ISOM_CODEC_TYPE_MP4A_AUDIO )
                     /* This is needed when copying descriptions. */
-                    mp4sys_setup_summary_from_DecoderSpecificInfo( &audio->summary, audio->esds->ES );
+                    mp4sys_setup_summary_from_DecoderSpecificInfo( &audio->summary, esds->ES );
 #endif
                 *audio_pli = mp4a_max_audioProfileLevelIndication( *audio_pli, mp4a_get_audioProfileLevelIndication( &audio->summary ) );
                 break;
@@ -2207,24 +1516,6 @@ static int isom_add_stsd( isom_stbl_t *stbl )
     isom_create_list_box( stsd, stbl, ISOM_BOX_TYPE_STSD );
     stbl->stsd = stsd;
     return 0;
-}
-
-int isom_add_btrt( isom_visual_entry_t *visual )
-{
-    if( !visual || visual->btrt )
-        return -1;
-    isom_create_box( btrt, visual, ISOM_BOX_TYPE_BTRT );
-    visual->btrt = btrt;
-    return 0;
-}
-
-int lsmash_add_btrt( lsmash_root_t *root, uint32_t track_ID, uint32_t entry_number )
-{
-    isom_trak_entry_t *trak = isom_get_trak( root, track_ID );
-    if( !trak || !trak->mdia || !trak->mdia->minf || !trak->mdia->minf->stbl || !trak->mdia->minf->stbl->stsd || !trak->mdia->minf->stbl->stsd->list )
-        return -1;
-    isom_visual_entry_t *data = (isom_visual_entry_t *)lsmash_get_entry_data( trak->mdia->minf->stbl->stsd->list, entry_number );
-    return isom_add_btrt( data );
 }
 
 static int isom_add_stts( isom_stbl_t *stbl )
@@ -2648,6 +1939,15 @@ static int isom_add_mfro( isom_mfra_t *mfra )
             parent->box_name = NULL; \
     } while( 0 )
 
+void isom_remove_unknown_box( isom_unknown_box_t *unknown_box )
+{
+    if( !unknown_box )
+        return;
+    if( unknown_box->unknown_field )
+        free( unknown_box->unknown_field );
+    free( unknown_box );
+}
+
 static void isom_remove_ftyp( isom_ftyp_t *ftyp )
 {
     if( !ftyp )
@@ -2811,14 +2111,14 @@ void isom_remove_clap( isom_clap_t *clap )
 {
     if( !clap )
         return;
-    isom_remove_box( clap, isom_visual_entry_t );
+    free( clap );
 }
 
 void isom_remove_pasp( isom_pasp_t *pasp )
 {
     if( !pasp )
         return;
-    isom_remove_box( pasp, isom_visual_entry_t );
+    free( pasp );
 }
 
 void isom_remove_glbl( isom_glbl_t *glbl )
@@ -2827,78 +2127,56 @@ void isom_remove_glbl( isom_glbl_t *glbl )
         return;
     if( glbl->header_data )
         free( glbl->header_data );
-    isom_remove_box( glbl, isom_visual_entry_t );
+    free( glbl );
 }
 
 void isom_remove_colr( isom_colr_t *colr )
 {
     if( !colr )
         return;
-    isom_remove_box( colr, isom_visual_entry_t );
+    free( colr );
 }
 
 void isom_remove_gama( isom_gama_t *gama )
 {
     if( !gama )
         return;
-    isom_remove_box( gama, isom_visual_entry_t );
+    free( gama );
 }
 
 void isom_remove_fiel( isom_fiel_t *fiel )
 {
     if( !fiel )
         return;
-    isom_remove_box( fiel, isom_visual_entry_t );
+    free( fiel );
 }
 
 void isom_remove_cspc( isom_cspc_t *cspc )
 {
     if( !cspc )
         return;
-    isom_remove_box( cspc, isom_visual_entry_t );
+    free( cspc );
 }
 
 void isom_remove_sgbt( isom_sgbt_t *sgbt )
 {
     if( !sgbt )
         return;
-    isom_remove_box( sgbt, isom_visual_entry_t );
+    free( sgbt );
 }
 
 void isom_remove_stsl( isom_stsl_t *stsl )
 {
     if( !stsl )
         return;
-    isom_remove_box( stsl, isom_visual_entry_t );
+    free( stsl );
 }
 
-static void isom_remove_esds( isom_esds_t *esds )
+void isom_remove_esds( isom_esds_t *esds )
 {
     if( !esds )
         return;
     mp4sys_remove_ES_Descriptor( esds->ES );
-    if( esds->parent )
-    {
-        switch( esds->parent->type )
-        {
-            case ISOM_CODEC_TYPE_MP4V_VIDEO :
-                isom_remove_box( esds, isom_visual_entry_t );
-                break;
-            case ISOM_CODEC_TYPE_MP4A_AUDIO :
-            case ISOM_CODEC_TYPE_M4AE_AUDIO :
-                isom_remove_box( esds, isom_audio_entry_t );
-                break;
-            case QT_BOX_TYPE_WAVE :
-                isom_remove_box( esds, isom_wave_t );
-                break;
-            case ISOM_CODEC_TYPE_MP4S_SYSTEM :
-                isom_remove_box( esds, isom_mp4s_entry_t );
-                break;
-            default :
-                assert( 0 );
-        }
-        return;
-    }
     free( esds );
 }
 
@@ -2909,32 +2187,14 @@ void isom_remove_avcC( isom_avcC_t *avcC )
     lsmash_remove_list( avcC->sequenceParameterSets,   isom_remove_avcC_ps );
     lsmash_remove_list( avcC->pictureParameterSets,    isom_remove_avcC_ps );
     lsmash_remove_list( avcC->sequenceParameterSetExt, isom_remove_avcC_ps );
-    isom_remove_box( avcC, isom_visual_entry_t );
+    free( avcC );
 }
 
 void isom_remove_btrt( isom_btrt_t *btrt )
 {
     if( !btrt )
         return;
-    isom_remove_box( btrt, isom_visual_entry_t );
-}
-
-static void isom_remove_visual_extensions( isom_visual_entry_t *visual )
-{
-    if( !visual )
-        return;
-    isom_remove_avcC( visual->avcC );
-    isom_remove_btrt( visual->btrt );
-    isom_remove_esds( visual->esds );
-    isom_remove_glbl( visual->glbl );
-    isom_remove_colr( visual->colr );
-    isom_remove_gama( visual->gama );
-    isom_remove_fiel( visual->fiel );
-    isom_remove_cspc( visual->cspc );
-    isom_remove_sgbt( visual->sgbt );
-    isom_remove_stsl( visual->stsl );
-    isom_remove_clap( visual->clap );
-    isom_remove_pasp( visual->pasp );
+    free( btrt );
 }
 
 static void isom_remove_font_record( isom_font_record_t *font_record )
@@ -2989,11 +2249,8 @@ void isom_remove_wave( isom_wave_t *wave )
     isom_remove_frma( wave->frma );
     isom_remove_enda( wave->enda );
     isom_remove_mp4a( wave->mp4a );
-    isom_remove_esds( wave->esds );
     isom_remove_terminator( wave->terminator );
-    if( wave->exdata )
-        free( wave->exdata );
-    isom_remove_box( wave, isom_audio_entry_t );
+    free( wave );
 }
 
 void isom_remove_chan( isom_chan_t *chan )
@@ -3002,23 +2259,25 @@ void isom_remove_chan( isom_chan_t *chan )
         return;
     if( chan->channelDescriptions )
         free( chan->channelDescriptions );
-    isom_remove_box( chan, isom_audio_entry_t );
+    free( chan );
 }
 
 static void isom_remove_visual_description( isom_visual_entry_t *visual )
 {
-    isom_remove_visual_extensions( visual );
+    isom_remove_sample_description_extensions( &visual->extensions );
     free( visual );
 }
 
 static void isom_remove_audio_description( isom_audio_entry_t *audio )
 {
-    isom_remove_esds( audio->esds );
-    isom_remove_wave( audio->wave );
-    isom_remove_chan( audio->chan );
-    if( audio->exdata )
-        free( audio->exdata );
+    isom_remove_sample_description_extensions( &audio->extensions );
     free( audio );
+}
+
+static void isom_remove_mp4s_description( isom_mp4s_entry_t *mp4s )
+{
+    isom_remove_sample_description_extensions( &mp4s->extensions );
+    free( mp4s );
 }
 
 void isom_remove_sample_description( isom_sample_entry_t *sample )
@@ -3180,9 +2439,7 @@ void isom_remove_sample_description( isom_sample_entry_t *sample )
         }
         case ISOM_CODEC_TYPE_MP4S_SYSTEM :
         {
-            isom_mp4s_entry_t *mp4s = (isom_mp4s_entry_t *)sample;
-            isom_remove_esds( mp4s->esds );
-            free( mp4s );
+            isom_remove_mp4s_description( (isom_mp4s_entry_t *)sample );
             break;
         }
         case LSMASH_CODEC_TYPE_RAW :
@@ -4284,7 +3541,7 @@ static int isom_update_bitrate_description( isom_mdia_t *mdia )
                 isom_visual_entry_t *stsd_data = (isom_visual_entry_t *)sample_entry;
                 if( !stsd_data )
                     return -1;
-                isom_btrt_t *btrt = stsd_data->btrt;
+                isom_btrt_t *btrt = (isom_btrt_t *)isom_get_extension_box( &stsd_data->extensions, ISOM_BOX_TYPE_BTRT );
                 if( btrt )
                 {
                     if( isom_calculate_bitrate_description( mdia, &bufferSizeDB, &maxBitrate, &avgBitrate, sample_description_index ) )
@@ -4298,9 +3555,11 @@ static int isom_update_bitrate_description( isom_mdia_t *mdia )
             case ISOM_CODEC_TYPE_MP4V_VIDEO :
             {
                 isom_visual_entry_t *stsd_data = (isom_visual_entry_t *)sample_entry;
-                if( !stsd_data || !stsd_data->esds || !stsd_data->esds->ES )
+                if( !stsd_data )
                     return -1;
-                isom_esds_t *esds = stsd_data->esds;
+                isom_esds_t *esds = (isom_esds_t *)isom_get_extension_box( &stsd_data->extensions, ISOM_BOX_TYPE_ESDS );
+                if( !esds || !esds->ES )
+                    return -1;
                 if( isom_calculate_bitrate_description( mdia, &bufferSizeDB, &maxBitrate, &avgBitrate, sample_description_index ) )
                     return -1;
                 /* FIXME: avgBitrate is 0 only if VBR in proper. */
@@ -4310,22 +3569,22 @@ static int isom_update_bitrate_description( isom_mdia_t *mdia )
             }
             case ISOM_CODEC_TYPE_MP4A_AUDIO :
             {
+                isom_audio_entry_t *stsd_data = (isom_audio_entry_t *)sample_entry;
+                if( !stsd_data )
+                    return -1;
                 isom_esds_t *esds = NULL;
                 if( ((isom_audio_entry_t *)sample_entry)->version )
                 {
                     /* MPEG-4 Audio in QTFF */
-                    isom_audio_entry_t *stsd_data = (isom_audio_entry_t *)sample_entry;
-                    if( !stsd_data || !stsd_data->wave || !stsd_data->wave->esds || !stsd_data->wave->esds->ES )
+                    isom_wave_t *wave = (isom_wave_t *)isom_get_extension_box( &stsd_data->extensions, QT_BOX_TYPE_WAVE );
+                    if( !wave )
                         return -1;
-                    esds = stsd_data->wave->esds;
+                    esds = (isom_esds_t *)isom_get_extension_box( &wave->extensions, ISOM_BOX_TYPE_ESDS );
                 }
                 else
-                {
-                    isom_audio_entry_t *stsd_data = (isom_audio_entry_t *)sample_entry;
-                    if( !stsd_data || !stsd_data->esds || !stsd_data->esds->ES )
-                        return -1;
-                    esds = stsd_data->esds;
-                }
+                    esds = (isom_esds_t *)isom_get_extension_box( &stsd_data->extensions, ISOM_BOX_TYPE_ESDS );
+                if( !esds || !esds->ES )
+                    return -1;
                 if( isom_calculate_bitrate_description( mdia, &bufferSizeDB, &maxBitrate, &avgBitrate, sample_description_index ) )
                     return -1;
                 /* FIXME: avgBitrate is 0 only if VBR in proper. */
@@ -4338,20 +3597,50 @@ static int isom_update_bitrate_description( isom_mdia_t *mdia )
                 isom_audio_entry_t *alac = (isom_audio_entry_t *)sample_entry;
                 if( !alac )
                     return -1;
-                if( alac->exdata_length < 36 || !alac->exdata )
+                uint8_t *exdata      = NULL;
+                uint32_t exdata_size = 0;
+                isom_extension_box_t *alac_ext = isom_get_sample_description_extension( &alac->extensions, QT_BOX_TYPE_WAVE );
+                if( alac_ext )
                 {
-                    isom_wave_t *wave = alac->wave;
-                    if( !wave || wave->exdata_length < 36 || !wave->exdata )
-                        return -1;
-                    break;      /* Apparently, average bitrate field is 0. */
+                    /* Apple Lossless Audio inside QuickTime file format
+                     * Though average bitrate field we found is always set to 0 apparently,
+                     * we set up maxFrameBytes and avgBitRate fields. */
+                    if( alac_ext->format == EXTENSION_FORMAT_BINARY )
+                        exdata = isom_get_child_box_position( alac_ext->form.binary, alac_ext->size, QT_BOX_TYPE_ALAC, &exdata_size );
+                    else
+                    {
+                        isom_wave_t *wave = (isom_wave_t *)alac_ext->form.box;
+                        isom_extension_box_t *wave_ext = isom_get_sample_description_extension( &wave->extensions, QT_BOX_TYPE_ALAC );
+                        if( !wave_ext || wave_ext->format != EXTENSION_FORMAT_BINARY )
+                            return -1;
+                        exdata      = wave_ext->form.binary;
+                        exdata_size = wave_ext->size;
+                    }
                 }
+                else
+                {
+                    /* Apple Lossless Audio inside ISO Base Media file format */
+                    isom_extension_box_t *ext = isom_get_sample_description_extension( &alac->extensions, ISOM_BOX_TYPE_ALAC );
+                    if( !ext || ext->format != EXTENSION_FORMAT_BINARY )
+                        return -1;
+                    exdata      = ext->form.binary;
+                    exdata_size = ext->size;
+                }
+                if( !exdata || exdata_size < 36 )
+                    return -1;
                 if( isom_calculate_bitrate_description( mdia, &bufferSizeDB, &maxBitrate, &avgBitrate, sample_description_index ) )
                     return -1;
-                uint8_t *exdata = (uint8_t *)alac->exdata + 28;
-                exdata[0] = (avgBitrate >> 24) & 0xff;
-                exdata[1] = (avgBitrate >> 16) & 0xff;
-                exdata[2] = (avgBitrate >>  8) & 0xff;
-                exdata[3] =  avgBitrate        & 0xff;
+                exdata += 24;
+                /* maxFrameBytes */
+                exdata[0] = (bufferSizeDB >> 24) & 0xff;
+                exdata[1] = (bufferSizeDB >> 16) & 0xff;
+                exdata[2] = (bufferSizeDB >>  8) & 0xff;
+                exdata[3] =  bufferSizeDB        & 0xff;
+                /* avgBitRate */
+                exdata[4] = (avgBitrate   >> 24) & 0xff;
+                exdata[5] = (avgBitrate   >> 16) & 0xff;
+                exdata[6] = (avgBitrate   >>  8) & 0xff;
+                exdata[7] =  avgBitrate          & 0xff;
                 break;
             }
             case ISOM_CODEC_TYPE_DTSC_AUDIO :
@@ -4362,13 +3651,14 @@ static int isom_update_bitrate_description( isom_mdia_t *mdia )
                 isom_audio_entry_t *dts_audio = (isom_audio_entry_t *)sample_entry;
                 if( !dts_audio )
                     return -1;
-                if( dts_audio->exdata_length < 28 || !dts_audio->exdata )
+                isom_extension_box_t *ext = isom_get_sample_description_extension( &dts_audio->extensions, ISOM_BOX_TYPE_DDTS );
+                if( !(ext && ext->format == EXTENSION_FORMAT_BINARY && ext->form.binary && ext->size >= 28) )
                     return -1;
                 if( isom_calculate_bitrate_description( mdia, &bufferSizeDB, &maxBitrate, &avgBitrate, sample_description_index ) )
                     return -1;
                 if( !stbl->stsz->list )
                     maxBitrate = avgBitrate;
-                uint8_t *exdata = (uint8_t *)dts_audio->exdata + 12;
+                uint8_t *exdata = ext->form.binary + 12;
                 exdata[0] = (maxBitrate >> 24) & 0xff;
                 exdata[1] = (maxBitrate >> 16) & 0xff;
                 exdata[2] = (maxBitrate >>  8) & 0xff;
@@ -4384,7 +3674,8 @@ static int isom_update_bitrate_description( isom_mdia_t *mdia )
                 isom_audio_entry_t *eac3 = (isom_audio_entry_t *)sample_entry;
                 if( !eac3 )
                     return -1;
-                if( eac3->exdata_length < 10 || !eac3->exdata )
+                isom_extension_box_t *ext = isom_get_sample_description_extension( &eac3->extensions, ISOM_BOX_TYPE_DEC3 );
+                if( !(ext && ext->format == EXTENSION_FORMAT_BINARY && ext->form.binary && ext->size >= 10) )
                     return -1;
                 uint16_t bitrate;
                 if( stbl->stsz->list )
@@ -4395,7 +3686,7 @@ static int isom_update_bitrate_description( isom_mdia_t *mdia )
                 }
                 else
                     bitrate = stbl->stsz->sample_size * (eac3->samplerate >> 16) / 192000;      /* 192000 == 1536 * 1000 / 8 */
-                uint8_t *exdata = (uint8_t *)eac3->exdata + 8;
+                uint8_t *exdata = ext->form.binary + 8;
                 exdata[0] = (bitrate >> 5) & 0xff;
                 exdata[1] = (bitrate & 0x1f) << 3;
                 break;
@@ -4499,7 +3790,20 @@ static int isom_set_movie_creation_time( lsmash_root_t *root )
     return 0;
 }
 
-#define CHECK_LARGESIZE( size ) if( (size) > UINT32_MAX ) (size) += 8
+#define CHECK_LARGESIZE( x ) \
+    (x->size) += isom_update_extension_boxes( x ); \
+    if( (x->size) > UINT32_MAX ) (x->size) += 8
+
+static uint64_t isom_update_extension_boxes( void *box );
+
+static uint64_t isom_update_unknown_box_size( isom_unknown_box_t *unknown_box )
+{
+    if( !unknown_box )
+        return 0;
+    unknown_box->size = ISOM_BASEBOX_COMMON_SIZE + unknown_box->unknown_size;
+    CHECK_LARGESIZE( unknown_box );
+    return unknown_box->size;
+}
 
 static uint64_t isom_update_mvhd_size( isom_mvhd_t *mvhd )
 {
@@ -4509,7 +3813,7 @@ static uint64_t isom_update_mvhd_size( isom_mvhd_t *mvhd )
     if( mvhd->creation_time > UINT32_MAX || mvhd->modification_time > UINT32_MAX || mvhd->duration > UINT32_MAX )
         mvhd->version = 1;
     mvhd->size = ISOM_FULLBOX_COMMON_SIZE + 96 + (uint64_t)mvhd->version * 12;
-    CHECK_LARGESIZE( mvhd->size );
+    CHECK_LARGESIZE( mvhd );
     return mvhd->size;
 }
 
@@ -4518,7 +3822,7 @@ static uint64_t isom_update_iods_size( isom_iods_t *iods )
     if( !iods || !iods->OD )
         return 0;
     iods->size = ISOM_FULLBOX_COMMON_SIZE + mp4sys_update_ObjectDescriptor_size( iods->OD );
-    CHECK_LARGESIZE( iods->size );
+    CHECK_LARGESIZE( iods );
     return iods->size;
 }
 
@@ -4530,7 +3834,7 @@ static uint64_t isom_update_tkhd_size( isom_tkhd_t *tkhd )
     if( tkhd->creation_time > UINT32_MAX || tkhd->modification_time > UINT32_MAX || tkhd->duration > UINT32_MAX )
         tkhd->version = 1;
     tkhd->size = ISOM_FULLBOX_COMMON_SIZE + 80 + (uint64_t)tkhd->version * 12;
-    CHECK_LARGESIZE( tkhd->size );
+    CHECK_LARGESIZE( tkhd );
     return tkhd->size;
 }
 
@@ -4539,7 +3843,7 @@ static uint64_t isom_update_clef_size( isom_clef_t *clef )
     if( !clef )
         return 0;
     clef->size = ISOM_FULLBOX_COMMON_SIZE + 8;
-    CHECK_LARGESIZE( clef->size );
+    CHECK_LARGESIZE( clef );
     return clef->size;
 }
 
@@ -4548,7 +3852,7 @@ static uint64_t isom_update_prof_size( isom_prof_t *prof )
     if( !prof )
         return 0;
     prof->size = ISOM_FULLBOX_COMMON_SIZE + 8;
-    CHECK_LARGESIZE( prof->size );
+    CHECK_LARGESIZE( prof );
     return prof->size;
 }
 
@@ -4557,7 +3861,7 @@ static uint64_t isom_update_enof_size( isom_enof_t *enof )
     if( !enof )
         return 0;
     enof->size = ISOM_FULLBOX_COMMON_SIZE + 8;
-    CHECK_LARGESIZE( enof->size );
+    CHECK_LARGESIZE( enof );
     return enof->size;
 }
 
@@ -4569,7 +3873,7 @@ static uint64_t isom_update_tapt_size( isom_tapt_t *tapt )
         + isom_update_clef_size( tapt->clef )
         + isom_update_prof_size( tapt->prof )
         + isom_update_enof_size( tapt->enof );
-    CHECK_LARGESIZE( tapt->size );
+    CHECK_LARGESIZE( tapt );
     return tapt->size;
 }
 
@@ -4586,7 +3890,7 @@ static uint64_t isom_update_elst_size( isom_elst_t *elst )
             elst->version = 1;
     }
     elst->size = ISOM_LIST_FULLBOX_COMMON_SIZE + (uint64_t)i * ( elst->version ? 20 : 12 );
-    CHECK_LARGESIZE( elst->size );
+    CHECK_LARGESIZE( elst );
     return elst->size;
 }
 
@@ -4595,7 +3899,7 @@ static uint64_t isom_update_edts_size( isom_edts_t *edts )
     if( !edts )
         return 0;
     edts->size = ISOM_BASEBOX_COMMON_SIZE + isom_update_elst_size( edts->elst );
-    CHECK_LARGESIZE( edts->size );
+    CHECK_LARGESIZE( edts );
     return edts->size;
 }
 
@@ -4609,10 +3913,10 @@ static uint64_t isom_update_tref_size( isom_tref_t *tref )
         {
             isom_tref_type_t *ref = (isom_tref_type_t *)entry->data;
             ref->size = ISOM_BASEBOX_COMMON_SIZE + (uint64_t)ref->ref_count * 4;
-            CHECK_LARGESIZE( ref->size );
+            CHECK_LARGESIZE( ref );
             tref->size += ref->size;
         }
-    CHECK_LARGESIZE( tref->size );
+    CHECK_LARGESIZE( tref );
     return tref->size;
 }
 
@@ -4624,7 +3928,7 @@ static uint64_t isom_update_mdhd_size( isom_mdhd_t *mdhd )
     if( mdhd->creation_time > UINT32_MAX || mdhd->modification_time > UINT32_MAX || mdhd->duration > UINT32_MAX )
         mdhd->version = 1;
     mdhd->size = ISOM_FULLBOX_COMMON_SIZE + 20 + (uint64_t)mdhd->version * 12;
-    CHECK_LARGESIZE( mdhd->size );
+    CHECK_LARGESIZE( mdhd );
     return mdhd->size;
 }
 
@@ -4633,7 +3937,7 @@ static uint64_t isom_update_hdlr_size( isom_hdlr_t *hdlr )
     if( !hdlr )
         return 0;
     hdlr->size = ISOM_FULLBOX_COMMON_SIZE + 20 + (uint64_t)hdlr->componentName_length;
-    CHECK_LARGESIZE( hdlr->size );
+    CHECK_LARGESIZE( hdlr );
     return hdlr->size;
 }
 
@@ -4642,7 +3946,7 @@ static uint64_t isom_update_dref_entry_size( isom_dref_entry_t *urln )
     if( !urln )
         return 0;
     urln->size = ISOM_FULLBOX_COMMON_SIZE + (uint64_t)urln->name_length + urln->location_length;
-    CHECK_LARGESIZE( urln->size );
+    CHECK_LARGESIZE( urln );
     return urln->size;
 }
 
@@ -4657,7 +3961,7 @@ static uint64_t isom_update_dref_size( isom_dref_t *dref )
             isom_dref_entry_t *data = (isom_dref_entry_t *)entry->data;
             dref->size += isom_update_dref_entry_size( data );
         }
-    CHECK_LARGESIZE( dref->size );
+    CHECK_LARGESIZE( dref );
     return dref->size;
 }
 
@@ -4666,7 +3970,7 @@ static uint64_t isom_update_dinf_size( isom_dinf_t *dinf )
     if( !dinf )
         return 0;
     dinf->size = ISOM_BASEBOX_COMMON_SIZE + isom_update_dref_size( dinf->dref );
-    CHECK_LARGESIZE( dinf->size );
+    CHECK_LARGESIZE( dinf );
     return dinf->size;
 }
 
@@ -4675,7 +3979,7 @@ static uint64_t isom_update_vmhd_size( isom_vmhd_t *vmhd )
     if( !vmhd )
         return 0;
     vmhd->size = ISOM_FULLBOX_COMMON_SIZE + 8;
-    CHECK_LARGESIZE( vmhd->size );
+    CHECK_LARGESIZE( vmhd );
     return vmhd->size;
 }
 
@@ -4684,7 +3988,7 @@ static uint64_t isom_update_smhd_size( isom_smhd_t *smhd )
     if( !smhd )
         return 0;
     smhd->size = ISOM_FULLBOX_COMMON_SIZE + 4;
-    CHECK_LARGESIZE( smhd->size );
+    CHECK_LARGESIZE( smhd );
     return smhd->size;
 }
 
@@ -4693,7 +3997,7 @@ static uint64_t isom_update_hmhd_size( isom_hmhd_t *hmhd )
     if( !hmhd )
         return 0;
     hmhd->size = ISOM_FULLBOX_COMMON_SIZE + 16;
-    CHECK_LARGESIZE( hmhd->size );
+    CHECK_LARGESIZE( hmhd );
     return hmhd->size;
 }
 
@@ -4702,7 +4006,7 @@ static uint64_t isom_update_nmhd_size( isom_nmhd_t *nmhd )
     if( !nmhd )
         return 0;
     nmhd->size = ISOM_FULLBOX_COMMON_SIZE;
-    CHECK_LARGESIZE( nmhd->size );
+    CHECK_LARGESIZE( nmhd );
     return nmhd->size;
 }
 
@@ -4711,7 +4015,7 @@ static uint64_t isom_update_gmin_size( isom_gmin_t *gmin )
     if( !gmin )
         return 0;
     gmin->size = ISOM_FULLBOX_COMMON_SIZE + 12;
-    CHECK_LARGESIZE( gmin->size );
+    CHECK_LARGESIZE( gmin );
     return gmin->size;
 }
 
@@ -4720,7 +4024,7 @@ static uint64_t isom_update_text_size( isom_text_t *text )
     if( !text )
         return 0;
     text->size = ISOM_BASEBOX_COMMON_SIZE + 36;
-    CHECK_LARGESIZE( text->size );
+    CHECK_LARGESIZE( text );
     return text->size;
 }
 
@@ -4731,7 +4035,7 @@ static uint64_t isom_update_gmhd_size( isom_gmhd_t *gmhd )
     gmhd->size = ISOM_BASEBOX_COMMON_SIZE
         + isom_update_gmin_size( gmhd->gmin )
         + isom_update_text_size( gmhd->text );
-    CHECK_LARGESIZE( gmhd->size );
+    CHECK_LARGESIZE( gmhd);
     return gmhd->size;
 }
 
@@ -4740,7 +4044,7 @@ static uint64_t isom_update_pasp_size( isom_pasp_t *pasp )
     if( !pasp )
         return 0;
     pasp->size = ISOM_BASEBOX_COMMON_SIZE + 8;
-    CHECK_LARGESIZE( pasp->size );
+    CHECK_LARGESIZE( pasp );
     return pasp->size;
 }
 
@@ -4749,7 +4053,7 @@ static uint64_t isom_update_clap_size( isom_clap_t *clap )
     if( !clap )
         return 0;
     clap->size = ISOM_BASEBOX_COMMON_SIZE + 32;
-    CHECK_LARGESIZE( clap->size );
+    CHECK_LARGESIZE( clap );
     return clap->size;
 }
 
@@ -4758,7 +4062,7 @@ static uint64_t isom_update_glbl_size( isom_glbl_t *glbl )
     if( !glbl )
         return 0;
     glbl->size = ISOM_BASEBOX_COMMON_SIZE + (uint64_t)glbl->header_size;
-    CHECK_LARGESIZE( glbl->size );
+    CHECK_LARGESIZE( glbl );
     return glbl->size;
 }
 
@@ -4767,18 +4071,20 @@ static uint64_t isom_update_colr_size( isom_colr_t *colr )
     if( !colr || colr->color_parameter_type == QT_COLOR_PARAMETER_TYPE_PROF )
         return 0;
     colr->size = ISOM_BASEBOX_COMMON_SIZE + 10;
-    CHECK_LARGESIZE( colr->size );
+    CHECK_LARGESIZE( colr );
     return colr->size;
 }
 
 static uint64_t isom_update_gama_size( isom_gama_t *gama )
 {
+    if( !gama || !gama->parent )
+        return 0;
     /* Note: 'gama' box is superseded by 'colr' box.
      * Therefore, writers of QTFF should never write both 'colr' and 'gama' box into an Image Description. */
-    if( !gama || (gama->parent && ((isom_visual_entry_t *)gama->parent)->colr) )
+    if( isom_get_extension_box( &((isom_visual_entry_t *)gama->parent)->extensions, QT_BOX_TYPE_COLR ) )
         return 0;
     gama->size = ISOM_BASEBOX_COMMON_SIZE + 4;
-    CHECK_LARGESIZE( gama->size );
+    CHECK_LARGESIZE( gama );
     return gama->size;
 }
 
@@ -4787,7 +4093,7 @@ static uint64_t isom_update_fiel_size( isom_fiel_t *fiel )
     if( !fiel )
         return 0;
     fiel->size = ISOM_BASEBOX_COMMON_SIZE + 2;
-    CHECK_LARGESIZE( fiel->size );
+    CHECK_LARGESIZE( fiel );
     return fiel->size;
 }
 
@@ -4796,7 +4102,7 @@ static uint64_t isom_update_cspc_size( isom_cspc_t *cspc )
     if( !cspc )
         return 0;
     cspc->size = ISOM_BASEBOX_COMMON_SIZE + 4;
-    CHECK_LARGESIZE( cspc->size );
+    CHECK_LARGESIZE( cspc );
     return cspc->size;
 }
 
@@ -4805,7 +4111,7 @@ static uint64_t isom_update_sgbt_size( isom_sgbt_t *sgbt )
     if( !sgbt )
         return 0;
     sgbt->size = ISOM_BASEBOX_COMMON_SIZE + 1;
-    CHECK_LARGESIZE( sgbt->size );
+    CHECK_LARGESIZE( sgbt );
     return sgbt->size;
 }
 
@@ -4814,7 +4120,7 @@ static uint64_t isom_update_stsl_size( isom_stsl_t *stsl )
     if( !stsl )
         return 0;
     stsl->size = ISOM_FULLBOX_COMMON_SIZE + 6;
-    CHECK_LARGESIZE( stsl->size );
+    CHECK_LARGESIZE( stsl );
     return stsl->size;
 }
 
@@ -4823,37 +4129,8 @@ static uint64_t isom_update_esds_size( isom_esds_t *esds )
     if( !esds )
         return 0;
     esds->size = ISOM_FULLBOX_COMMON_SIZE + mp4sys_update_ES_Descriptor_size( esds->ES );
-    CHECK_LARGESIZE( esds->size );
+    CHECK_LARGESIZE( esds );
     return esds->size;
-}
-
-static uint64_t isom_update_avcC_size( isom_avcC_t *avcC )
-{
-    if( !avcC || !avcC->sequenceParameterSets || !avcC->pictureParameterSets )
-        return 0;
-    uint64_t size = ISOM_BASEBOX_COMMON_SIZE + 7;
-    for( lsmash_entry_t *entry = avcC->sequenceParameterSets->head; entry; entry = entry->next )
-    {
-        isom_avcC_ps_entry_t *data = (isom_avcC_ps_entry_t *)entry->data;
-        size += 2 + data->parameterSetLength;
-    }
-    for( lsmash_entry_t *entry = avcC->pictureParameterSets->head; entry; entry = entry->next )
-    {
-        isom_avcC_ps_entry_t *data = (isom_avcC_ps_entry_t *)entry->data;
-        size += 2 + data->parameterSetLength;
-    }
-    if( ISOM_REQUIRES_AVCC_EXTENSION( avcC->AVCProfileIndication ) )
-    {
-        size += 4;
-        for( lsmash_entry_t *entry = avcC->sequenceParameterSetExt->head; entry; entry = entry->next )
-        {
-            isom_avcC_ps_entry_t *data = (isom_avcC_ps_entry_t *)entry->data;
-            size += 2 + data->parameterSetLength;
-        }
-    }
-    avcC->size = size;
-    CHECK_LARGESIZE( avcC->size );
-    return avcC->size;
 }
 
 static uint64_t isom_update_btrt_size( isom_btrt_t *btrt )
@@ -4861,7 +4138,7 @@ static uint64_t isom_update_btrt_size( isom_btrt_t *btrt )
     if( !btrt )
         return 0;
     btrt->size = ISOM_BASEBOX_COMMON_SIZE + 12;
-    CHECK_LARGESIZE( btrt->size );
+    CHECK_LARGESIZE( btrt );
     return btrt->size;
 }
 
@@ -4869,21 +4146,8 @@ static uint64_t isom_update_visual_entry_size( isom_visual_entry_t *visual )
 {
     if( !visual )
         return 0;
-    visual->size = ISOM_BASEBOX_COMMON_SIZE + 78
-        + isom_update_avcC_size( visual->avcC )
-        + isom_update_btrt_size( visual->btrt )
-        + isom_update_esds_size( visual->esds )
-        + isom_update_glbl_size( visual->glbl )
-        + isom_update_colr_size( visual->colr )
-        + isom_update_gama_size( visual->gama )
-        + isom_update_fiel_size( visual->fiel )
-        + isom_update_cspc_size( visual->cspc )
-        + isom_update_sgbt_size( visual->sgbt )
-        + isom_update_stsl_size( visual->stsl )
-        + isom_update_clap_size( visual->clap )
-        + isom_update_pasp_size( visual->pasp )
-        + (uint64_t)visual->exdata_length;
-    CHECK_LARGESIZE( visual->size );
+    visual->size = ISOM_BASEBOX_COMMON_SIZE + 78;
+    CHECK_LARGESIZE( visual );
     return visual->size;
 }
 
@@ -4893,7 +4157,7 @@ static uint64_t isom_update_mp4s_entry_size( isom_mp4s_entry_t *mp4s )
     if( !mp4s || mp4s->type != ISOM_CODEC_TYPE_MP4S_SYSTEM )
         return 0;
     mp4s->size = ISOM_BASEBOX_COMMON_SIZE + 8 + isom_update_esds_size( mp4s->esds );
-    CHECK_LARGESIZE( mp4s->size );
+    CHECK_LARGESIZE( mp4s );
     return mp4s->size;
 }
 #endif
@@ -4903,7 +4167,7 @@ static uint64_t isom_update_frma_size( isom_frma_t *frma )
     if( !frma )
         return 0;
     frma->size = ISOM_BASEBOX_COMMON_SIZE + 4;
-    CHECK_LARGESIZE( frma->size );
+    CHECK_LARGESIZE( frma );
     return frma->size;
 }
 
@@ -4912,7 +4176,7 @@ static uint64_t isom_update_enda_size( isom_enda_t *enda )
     if( !enda )
         return 0;
     enda->size = ISOM_BASEBOX_COMMON_SIZE + 2;
-    CHECK_LARGESIZE( enda->size );
+    CHECK_LARGESIZE( enda );
     return enda->size;
 }
 
@@ -4921,7 +4185,7 @@ static uint64_t isom_update_mp4a_size( isom_mp4a_t *mp4a )
     if( !mp4a )
         return 0;
     mp4a->size = ISOM_BASEBOX_COMMON_SIZE + 4;
-    CHECK_LARGESIZE( mp4a->size );
+    CHECK_LARGESIZE( mp4a );
     return mp4a->size;
 }
 
@@ -4930,7 +4194,7 @@ static uint64_t isom_update_terminator_size( isom_terminator_t *terminator )
     if( !terminator )
         return 0;
     terminator->size = ISOM_BASEBOX_COMMON_SIZE;
-    CHECK_LARGESIZE( terminator->size );
+    CHECK_LARGESIZE( terminator );
     return terminator->size;
 }
 
@@ -4942,10 +4206,8 @@ static uint64_t isom_update_wave_size( isom_wave_t *wave )
         + isom_update_frma_size( wave->frma )
         + isom_update_enda_size( wave->enda )
         + isom_update_mp4a_size( wave->mp4a )
-        + isom_update_esds_size( wave->esds )
-        + isom_update_terminator_size( wave->terminator )
-        + (uint64_t)wave->exdata_length;
-    CHECK_LARGESIZE( wave->size );
+        + isom_update_terminator_size( wave->terminator );
+    CHECK_LARGESIZE( wave );
     return wave->size;
 }
 
@@ -4954,7 +4216,7 @@ static uint64_t isom_update_chan_size( isom_chan_t *chan )
     if( !chan )
         return 0;
     chan->size = ISOM_FULLBOX_COMMON_SIZE + 12 + 20 * (uint64_t)chan->numberChannelDescriptions;
-    CHECK_LARGESIZE( chan->size );
+    CHECK_LARGESIZE( chan );
     return chan->size;
 }
 
@@ -4962,16 +4224,12 @@ static uint64_t isom_update_audio_entry_size( isom_audio_entry_t *audio )
 {
     if( !audio )
         return 0;
-    audio->size = ISOM_BASEBOX_COMMON_SIZE + 28
-        + isom_update_esds_size( audio->esds )
-        + isom_update_wave_size( audio->wave )
-        + isom_update_chan_size( audio->chan )
-        + (uint64_t)audio->exdata_length;
+    audio->size = ISOM_BASEBOX_COMMON_SIZE + 28;
     if( audio->version == 1 )
         audio->size += 16;
     else if( audio->version == 2 )
         audio->size += 36;
-    CHECK_LARGESIZE( audio->size );
+    CHECK_LARGESIZE( audio );
     return audio->size;
 }
 
@@ -4980,7 +4238,7 @@ static uint64_t isom_update_text_entry_size( isom_text_entry_t *text )
     if( !text )
         return 0;
     text->size = ISOM_BASEBOX_COMMON_SIZE + 51 + (uint64_t)text->font_name_length;
-    CHECK_LARGESIZE( text->size );
+    CHECK_LARGESIZE( text );
     return text->size;
 }
 
@@ -4994,7 +4252,7 @@ static uint64_t isom_update_ftab_size( isom_ftab_t *ftab )
         isom_font_record_t *data = (isom_font_record_t *)entry->data;
         ftab->size += 3 + data->font_name_length;
     }
-    CHECK_LARGESIZE( ftab->size );
+    CHECK_LARGESIZE( ftab );
     return ftab->size;
 }
 
@@ -5003,7 +4261,7 @@ static uint64_t isom_update_tx3g_entry_size( isom_tx3g_entry_t *tx3g )
     if( !tx3g )
         return 0;
     tx3g->size = ISOM_BASEBOX_COMMON_SIZE + 38 + isom_update_ftab_size( tx3g->ftab );
-    CHECK_LARGESIZE( tx3g->size );
+    CHECK_LARGESIZE( tx3g );
     return tx3g->size;
 }
 
@@ -5119,7 +4377,7 @@ static uint64_t isom_update_stsd_size( isom_stsd_t *stsd )
         }
     }
     stsd->size = size;
-    CHECK_LARGESIZE( stsd->size );
+    CHECK_LARGESIZE( stsd );
     return stsd->size;
 }
 
@@ -5128,7 +4386,7 @@ static uint64_t isom_update_stts_size( isom_stts_t *stts )
     if( !stts || !stts->list )
         return 0;
     stts->size = ISOM_LIST_FULLBOX_COMMON_SIZE + (uint64_t)stts->list->entry_count * 8;
-    CHECK_LARGESIZE( stts->size );
+    CHECK_LARGESIZE( stts );
     return stts->size;
 }
 
@@ -5137,7 +4395,7 @@ static uint64_t isom_update_ctts_size( isom_ctts_t *ctts )
     if( !ctts || !ctts->list )
         return 0;
     ctts->size = ISOM_LIST_FULLBOX_COMMON_SIZE + (uint64_t)ctts->list->entry_count * 8;
-    CHECK_LARGESIZE( ctts->size );
+    CHECK_LARGESIZE( ctts );
     return ctts->size;
 }
 
@@ -5146,7 +4404,7 @@ static uint64_t isom_update_cslg_size( isom_cslg_t *cslg )
     if( !cslg )
         return 0;
     cslg->size = ISOM_FULLBOX_COMMON_SIZE + 20;
-    CHECK_LARGESIZE( cslg->size );
+    CHECK_LARGESIZE( cslg );
     return cslg->size;
 }
 
@@ -5155,7 +4413,7 @@ static uint64_t isom_update_stsz_size( isom_stsz_t *stsz )
     if( !stsz )
         return 0;
     stsz->size = ISOM_FULLBOX_COMMON_SIZE + 8 + ( stsz->list ? (uint64_t)stsz->list->entry_count * 4 : 0 );
-    CHECK_LARGESIZE( stsz->size );
+    CHECK_LARGESIZE( stsz );
     return stsz->size;
 }
 
@@ -5164,7 +4422,7 @@ static uint64_t isom_update_stss_size( isom_stss_t *stss )
     if( !stss || !stss->list )
         return 0;
     stss->size = ISOM_LIST_FULLBOX_COMMON_SIZE + (uint64_t)stss->list->entry_count * 4;
-    CHECK_LARGESIZE( stss->size );
+    CHECK_LARGESIZE( stss );
     return stss->size;
 }
 
@@ -5173,7 +4431,7 @@ static uint64_t isom_update_stps_size( isom_stps_t *stps )
     if( !stps || !stps->list )
         return 0;
     stps->size = ISOM_LIST_FULLBOX_COMMON_SIZE + (uint64_t)stps->list->entry_count * 4;
-    CHECK_LARGESIZE( stps->size );
+    CHECK_LARGESIZE( stps );
     return stps->size;
 }
 
@@ -5182,7 +4440,7 @@ static uint64_t isom_update_sdtp_size( isom_sdtp_t *sdtp )
     if( !sdtp || !sdtp->list )
         return 0;
     sdtp->size = ISOM_FULLBOX_COMMON_SIZE + (uint64_t)sdtp->list->entry_count;
-    CHECK_LARGESIZE( sdtp->size );
+    CHECK_LARGESIZE( sdtp );
     return sdtp->size;
 }
 
@@ -5191,7 +4449,7 @@ static uint64_t isom_update_stsc_size( isom_stsc_t *stsc )
     if( !stsc || !stsc->list )
         return 0;
     stsc->size = ISOM_LIST_FULLBOX_COMMON_SIZE + (uint64_t)stsc->list->entry_count * 12;
-    CHECK_LARGESIZE( stsc->size );
+    CHECK_LARGESIZE( stsc );
     return stsc->size;
 }
 
@@ -5200,7 +4458,7 @@ static uint64_t isom_update_stco_size( isom_stco_t *stco )
     if( !stco || !stco->list )
         return 0;
     stco->size = ISOM_LIST_FULLBOX_COMMON_SIZE + (uint64_t)stco->list->entry_count * (stco->large_presentation ? 8 : 4);
-    CHECK_LARGESIZE( stco->size );
+    CHECK_LARGESIZE( stco );
     return stco->size;
 }
 
@@ -5209,7 +4467,7 @@ static uint64_t isom_update_sbgp_size( isom_sbgp_entry_t *sbgp )
     if( !sbgp || !sbgp->list )
         return 0;
     sbgp->size = ISOM_LIST_FULLBOX_COMMON_SIZE + 4 + (uint64_t)sbgp->list->entry_count * 8;
-    CHECK_LARGESIZE( sbgp->size );
+    CHECK_LARGESIZE( sbgp );
     return sbgp->size;
 }
 
@@ -5232,7 +4490,7 @@ static uint64_t isom_update_sgpd_size( isom_sgpd_entry_t *sgpd )
             break;
     }
     sgpd->size = size;
-    CHECK_LARGESIZE( sgpd->size );
+    CHECK_LARGESIZE( sgpd );
     return sgpd->size;
 }
 
@@ -5257,7 +4515,7 @@ static uint64_t isom_update_stbl_size( isom_stbl_t *stbl )
     if( stbl->sbgp_list )
         for( lsmash_entry_t *entry = stbl->sbgp_list->head; entry; entry = entry->next )
             stbl->size += isom_update_sbgp_size( (isom_sbgp_entry_t *)entry->data );
-    CHECK_LARGESIZE( stbl->size );
+    CHECK_LARGESIZE( stbl );
     return stbl->size;
 }
 
@@ -5274,7 +4532,7 @@ static uint64_t isom_update_minf_size( isom_minf_t *minf )
         + isom_update_hdlr_size( minf->hdlr )
         + isom_update_dinf_size( minf->dinf )
         + isom_update_stbl_size( minf->stbl );
-    CHECK_LARGESIZE( minf->size );
+    CHECK_LARGESIZE( minf );
     return minf->size;
 }
 
@@ -5286,7 +4544,7 @@ static uint64_t isom_update_mdia_size( isom_mdia_t *mdia )
         + isom_update_mdhd_size( mdia->mdhd )
         + isom_update_hdlr_size( mdia->hdlr )
         + isom_update_minf_size( mdia->minf );
-    CHECK_LARGESIZE( mdia->size );
+    CHECK_LARGESIZE( mdia );
     return mdia->size;
 }
 
@@ -5300,7 +4558,7 @@ static uint64_t isom_update_chpl_size( isom_chpl_t *chpl )
         isom_chpl_entry_t *data = (isom_chpl_entry_t *)entry->data;
         chpl->size += 9 + data->chapter_name_length;
     }
-    CHECK_LARGESIZE( chpl->size );
+    CHECK_LARGESIZE( chpl );
     return chpl->size;
 }
 
@@ -5309,7 +4567,7 @@ static uint64_t isom_update_mean_size( isom_mean_t *mean )
     if( !mean )
         return 0;
     mean->size = ISOM_FULLBOX_COMMON_SIZE + mean->meaning_string_length;
-    CHECK_LARGESIZE( mean->size );
+    CHECK_LARGESIZE( mean );
     return mean->size;
 }
 
@@ -5318,7 +4576,7 @@ static uint64_t isom_update_name_size( isom_name_t *name )
     if( !name )
         return 0;
     name->size = ISOM_FULLBOX_COMMON_SIZE + name->name_length;
-    CHECK_LARGESIZE( name->size );
+    CHECK_LARGESIZE( name );
     return name->size;
 }
 
@@ -5327,7 +4585,7 @@ static uint64_t isom_update_data_size( isom_data_t *data )
     if( !data )
         return 0;
     data->size = ISOM_BASEBOX_COMMON_SIZE + 8 + data->value_length;
-    CHECK_LARGESIZE( data->size );
+    CHECK_LARGESIZE( data );
     return data->size;
 }
 
@@ -5339,7 +4597,7 @@ static uint64_t isom_update_metaitem_size( isom_metaitem_t *metaitem )
         + isom_update_mean_size( metaitem->mean )
         + isom_update_name_size( metaitem->name )
         + isom_update_data_size( metaitem->data );
-    CHECK_LARGESIZE( metaitem->size );
+    CHECK_LARGESIZE( metaitem );
     return metaitem->size;
 }
 
@@ -5350,7 +4608,7 @@ static uint64_t isom_update_ilst_size( isom_ilst_t *ilst )
     ilst->size = ISOM_BASEBOX_COMMON_SIZE;
     for( lsmash_entry_t *entry = ilst->item_list->head; entry; entry = entry->next )
         ilst->size += isom_update_metaitem_size( (isom_metaitem_t *)entry->data );
-    CHECK_LARGESIZE( ilst->size );
+    CHECK_LARGESIZE( ilst );
     return ilst->size;
 }
 
@@ -5362,7 +4620,7 @@ static uint64_t isom_update_meta_size( isom_meta_t *meta )
         + isom_update_hdlr_size( meta->hdlr )
         + isom_update_dinf_size( meta->dinf )
         + isom_update_ilst_size( meta->ilst );
-    CHECK_LARGESIZE( meta->size );
+    CHECK_LARGESIZE( meta );
     return meta->size;
 }
 
@@ -5371,7 +4629,7 @@ static uint64_t isom_update_cprt_size( isom_cprt_t *cprt )
     if( !cprt )
         return 0;
     cprt->size = ISOM_FULLBOX_COMMON_SIZE + 2 + cprt->notice_length;
-    CHECK_LARGESIZE( cprt->size );
+    CHECK_LARGESIZE( cprt );
     return cprt->size;
 }
 
@@ -5386,7 +4644,7 @@ static uint64_t isom_update_udta_size( isom_udta_t *udta_moov, isom_udta_t *udta
     if( udta->cprt_list )
         for( lsmash_entry_t *entry = udta->cprt_list->head; entry; entry = entry->next )
             udta->size += isom_update_cprt_size( (isom_cprt_t *)entry->data );
-    CHECK_LARGESIZE( udta->size );
+    CHECK_LARGESIZE( udta );
     return udta->size;
 }
 
@@ -5402,7 +4660,7 @@ static uint64_t isom_update_trak_entry_size( isom_trak_entry_t *trak )
         + isom_update_mdia_size( trak->mdia )
         + isom_update_udta_size( NULL, trak->udta )
         + isom_update_meta_size( trak->meta );
-    CHECK_LARGESIZE( trak->size );
+    CHECK_LARGESIZE( trak );
     return trak->size;
 }
 
@@ -5413,7 +4671,7 @@ static uint64_t isom_update_mehd_size( isom_mehd_t *mehd )
     if( mehd->fragment_duration > UINT32_MAX )
         mehd->version = 1;
     mehd->size = ISOM_FULLBOX_COMMON_SIZE + 4 * (1 + (mehd->version == 1));
-    CHECK_LARGESIZE( mehd->size );
+    CHECK_LARGESIZE( mehd );
     return mehd->size;
 }
 
@@ -5422,7 +4680,7 @@ static uint64_t isom_update_trex_entry_size( isom_trex_entry_t *trex )
     if( !trex )
         return 0;
     trex->size = ISOM_FULLBOX_COMMON_SIZE + 20;
-    CHECK_LARGESIZE( trex->size );
+    CHECK_LARGESIZE( trex );
     return trex->size;
 }
 
@@ -5439,7 +4697,7 @@ static uint64_t isom_update_mvex_size( isom_mvex_t *mvex )
         }
     if( mvex->root->bs->stream != stdout )
         mvex->size += mvex->mehd ? isom_update_mehd_size( mvex->mehd ) : 20;    /* 20 bytes is of placeholder. */
-    CHECK_LARGESIZE( mvex->size );
+    CHECK_LARGESIZE( mvex );
     return mvex->size;
 }
 
@@ -5459,7 +4717,7 @@ static int isom_update_moov_size( isom_moov_t *moov )
             isom_trak_entry_t *trak = (isom_trak_entry_t *)entry->data;
             moov->size += isom_update_trak_entry_size( trak );
         }
-    CHECK_LARGESIZE( moov->size );
+    CHECK_LARGESIZE( moov );
     return 0;
 }
 
@@ -5468,7 +4726,7 @@ static uint64_t isom_update_mfhd_size( isom_mfhd_t *mfhd )
     if( !mfhd )
         return 0;
     mfhd->size = ISOM_FULLBOX_COMMON_SIZE + 4;
-    CHECK_LARGESIZE( mfhd->size );
+    CHECK_LARGESIZE( mfhd );
     return mfhd->size;
 }
 
@@ -5483,7 +4741,7 @@ static uint64_t isom_update_tfhd_size( isom_tfhd_t *tfhd )
                + 4 * !!( tfhd->flags & ISOM_TF_FLAGS_DEFAULT_SAMPLE_DURATION_PRESENT  )
                + 4 * !!( tfhd->flags & ISOM_TF_FLAGS_DEFAULT_SAMPLE_SIZE_PRESENT      )
                + 4 * !!( tfhd->flags & ISOM_TF_FLAGS_DEFAULT_SAMPLE_FLAGS_PRESENT     );
-    CHECK_LARGESIZE( tfhd->size );
+    CHECK_LARGESIZE( tfhd );
     return tfhd->size;
 }
 
@@ -5500,7 +4758,7 @@ static uint64_t isom_update_trun_entry_size( isom_trun_entry_t *trun )
                       + 4 * !!( trun->flags & ISOM_TR_FLAGS_SAMPLE_FLAGS_PRESENT                   )
                       + 4 * !!( trun->flags & ISOM_TR_FLAGS_SAMPLE_COMPOSITION_TIME_OFFSET_PRESENT );
     trun->size += row_size * trun->sample_count;
-    CHECK_LARGESIZE( trun->size );
+    CHECK_LARGESIZE( trun );
     return trun->size;
 }
 
@@ -5517,7 +4775,7 @@ static uint64_t isom_update_traf_entry_size( isom_traf_entry_t *traf )
             isom_trun_entry_t *trun = (isom_trun_entry_t *)entry->data;
             traf->size += isom_update_trun_entry_size( trun );
         }
-    CHECK_LARGESIZE( traf->size );
+    CHECK_LARGESIZE( traf );
     return traf->size;
 }
 
@@ -5532,7 +4790,7 @@ static int isom_update_moof_entry_size( isom_moof_entry_t *moof )
             isom_traf_entry_t *traf = (isom_traf_entry_t *)entry->data;
             moof->size += isom_update_traf_entry_size( traf );
         }
-    CHECK_LARGESIZE( moof->size );
+    CHECK_LARGESIZE( moof );
     return 0;
 }
 
@@ -5546,7 +4804,7 @@ static uint64_t isom_update_tfra_entry_size( isom_tfra_entry_t *tfra )
                         + tfra->length_size_of_trun_num   + 1
                         + tfra->length_size_of_sample_num + 1;
     tfra->size += entry_size * tfra->number_of_entry;
-    CHECK_LARGESIZE( tfra->size );
+    CHECK_LARGESIZE( tfra );
     return tfra->size;
 }
 
@@ -5555,7 +4813,7 @@ static uint64_t isom_update_mfro_size( isom_mfro_t *mfro )
     if( !mfro )
         return 0;
     mfro->size = ISOM_FULLBOX_COMMON_SIZE + 4;
-    CHECK_LARGESIZE( mfro->size );
+    CHECK_LARGESIZE( mfro );
     return mfro->size;
 }
 
@@ -5570,13 +4828,66 @@ static int isom_update_mfra_size( isom_mfra_t *mfra )
             isom_tfra_entry_t *tfra = (isom_tfra_entry_t *)entry->data;
             mfra->size += isom_update_tfra_entry_size( tfra );
         }
-    CHECK_LARGESIZE( mfra->size );
+    CHECK_LARGESIZE( mfra );
     if( mfra->mfro )
     {
         mfra->size += isom_update_mfro_size( mfra->mfro );
         mfra->mfro->length = mfra->size;
     }
     return 0;
+}
+
+static uint64_t isom_update_extension_boxes( void *box )
+{
+    assert( box );
+    uint64_t size = 0;
+    lsmash_entry_list_t *extensions = &((isom_box_t *)box)->extensions;
+    for( lsmash_entry_t *entry = extensions->head; entry; entry = entry->next )
+    {
+        isom_extension_box_t *ext = (isom_extension_box_t *)entry->data;
+        if( !ext )
+            continue;
+        if( ext->format == EXTENSION_FORMAT_BINARY )
+        {
+            size += ext->size;
+            continue;
+        }
+#define DEFINE_UPDATE_SIZE_MAP_ELEMENT( box_type, update_size_func ) { box_type, (uint64_t (*)( void * ))update_size_func }
+        static const struct
+        {
+            uint32_t box_type;
+            uint64_t (*update_size_func)( void * );
+        } update_size_func_table[] =
+            {
+                DEFINE_UPDATE_SIZE_MAP_ELEMENT( ISOM_BOX_TYPE_ESDS, isom_update_esds_size ),
+                DEFINE_UPDATE_SIZE_MAP_ELEMENT( ISOM_BOX_TYPE_BTRT, isom_update_btrt_size ),
+                DEFINE_UPDATE_SIZE_MAP_ELEMENT( ISOM_BOX_TYPE_CLAP, isom_update_clap_size ),
+                DEFINE_UPDATE_SIZE_MAP_ELEMENT( ISOM_BOX_TYPE_PASP, isom_update_pasp_size ),
+                DEFINE_UPDATE_SIZE_MAP_ELEMENT( ISOM_BOX_TYPE_STSL, isom_update_stsl_size ),
+                DEFINE_UPDATE_SIZE_MAP_ELEMENT( QT_BOX_TYPE_CHAN,   isom_update_chan_size ),
+                DEFINE_UPDATE_SIZE_MAP_ELEMENT( QT_BOX_TYPE_COLR,   isom_update_colr_size ),
+                DEFINE_UPDATE_SIZE_MAP_ELEMENT( QT_BOX_TYPE_CSPC,   isom_update_cspc_size ),
+                DEFINE_UPDATE_SIZE_MAP_ELEMENT( QT_BOX_TYPE_ENDA,   isom_update_enda_size ),
+                DEFINE_UPDATE_SIZE_MAP_ELEMENT( QT_BOX_TYPE_FIEL,   isom_update_fiel_size ),
+                DEFINE_UPDATE_SIZE_MAP_ELEMENT( QT_BOX_TYPE_FRMA,   isom_update_frma_size ),
+                DEFINE_UPDATE_SIZE_MAP_ELEMENT( QT_BOX_TYPE_GAMA,   isom_update_gama_size ),
+                DEFINE_UPDATE_SIZE_MAP_ELEMENT( QT_BOX_TYPE_GLBL,   isom_update_glbl_size ),
+                DEFINE_UPDATE_SIZE_MAP_ELEMENT( QT_BOX_TYPE_SGBT,   isom_update_sgbt_size ),
+                DEFINE_UPDATE_SIZE_MAP_ELEMENT( QT_BOX_TYPE_WAVE,   isom_update_wave_size ),
+                DEFINE_UPDATE_SIZE_MAP_ELEMENT( QT_BOX_TYPE_TERMINATOR, isom_update_terminator_size ),
+                { 0, NULL }
+            };
+#undef DEFINE_UPDATE_SIZE_MAP_ELEMENT
+        uint64_t (*update_size_func)( void * ) = (uint64_t (*)( void * ))isom_update_unknown_box_size;
+        for( int i = 0; update_size_func_table[i].update_size_func; i++ )
+            if( ext->type == update_size_func_table[i].box_type )
+            {
+                update_size_func = update_size_func_table[i].update_size_func;
+                break;
+            }
+        size += update_size_func( ext->form.box );
+    }
+    return size;
 }
 
 /*******************************

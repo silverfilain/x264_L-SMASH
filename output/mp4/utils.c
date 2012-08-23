@@ -383,8 +383,7 @@ static inline uint8_t lsmash_bits_mask_lsb8( uint32_t value, uint32_t width )
     return (uint8_t)( value & ~( ~0U << width ) );
 }
 
-/* We can change value's type to unsigned int for 64-bit operation if needed. */
-void lsmash_bits_put( lsmash_bits_t *bits, uint32_t width, uint32_t value )
+void lsmash_bits_put( lsmash_bits_t *bits, uint32_t width, uint64_t value )
 {
     debug_if( !bits || !width )
         return;
@@ -418,12 +417,11 @@ void lsmash_bits_put( lsmash_bits_t *bits, uint32_t width, uint32_t value )
     }
 }
 
-/* We can change value's type to unsigned int for 64-bit operation if needed. */
-uint32_t lsmash_bits_get( lsmash_bits_t *bits, uint32_t width )
+uint64_t lsmash_bits_get( lsmash_bits_t *bits, uint32_t width )
 {
     debug_if( !bits || !width )
         return 0;
-    uint32_t value = 0;
+    uint64_t value = 0;
     if( bits->store )
     {
         if( bits->store >= width )
@@ -798,6 +796,35 @@ uint32_t lsmash_count_bits( uint32_t bits )
     bits = (bits & 0x0f0f0f0f) + ((bits >>  4) & 0x0f0f0f0f);
     bits = (bits & 0x00ff00ff) + ((bits >>  8) & 0x00ff00ff);
     return (bits & 0x0000ffff) + ((bits >> 16) & 0x0000ffff);
+}
+
+void lsmash_ifprintf( FILE *fp, int indent, const char *format, ... )
+{
+    va_list args;
+    va_start( args, format );
+    if( indent <= 10 )
+    {
+        static const char *indent_string[] =
+            {
+                "",
+                "    ",
+                "        ",
+                "            ",
+                "                ",
+                "                    ",
+                "                        ",
+                "                            ",
+                "                                ",
+                "                                    ",
+                "                                        "
+            };
+        fprintf( fp, indent_string[indent] );
+    }
+    else
+        for( int i = 0; i < indent; i++ )
+            fprintf( fp, "    " );
+    vfprintf( fp, format, args );
+    va_end( args );
 }
 
 /* for qsort function */

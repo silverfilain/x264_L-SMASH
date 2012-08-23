@@ -132,7 +132,7 @@ typedef struct
     int b_no_pasp;
     int b_force_display_size;
     int b_fragments;
-    lsmash_scaling_method scaling_method;
+    lsmash_scale_method scale_method;
 #if HAVE_ANY_AUDIO
     mp4_audio_hnd_t *audio_hnd;
 #endif
@@ -170,7 +170,7 @@ static void set_recovery_param( mp4_hnd_t *p_mp4, x264_param_t *p_param )
 }
 
 #if HAVE_AUDIO
-static void set_channel_layout( mp4_audio_hnd_t *p_audio )
+static int set_channel_layout( mp4_audio_hnd_t *p_audio )
 {
 #define AV_CH_LAYOUT_MONO              (AV_CH_FRONT_CENTER)
 #define AV_CH_LAYOUT_STEREO            (AV_CH_FRONT_LEFT|AV_CH_FRONT_RIGHT)
@@ -188,14 +188,15 @@ static void set_channel_layout( mp4_audio_hnd_t *p_audio )
 #define AV_CH_LAYOUT_7POINT1_WIDE      (AV_CH_LAYOUT_5POINT1_BACK|AV_CH_FRONT_LEFT_OF_CENTER|AV_CH_FRONT_RIGHT_OF_CENTER)
 #define AV_CH_LAYOUT_STEREO_DOWNMIX    (AV_CH_STEREO_LEFT|AV_CH_STEREO_RIGHT)
 
-    lsmash_channel_layout_tag layout_tag = QT_CHANNEL_LAYOUT_UNKNOWN;
-    lsmash_channel_bitmap bitmap = 0;
+    lsmash_qt_audio_channel_layout_t temp;
+    temp.channelLayoutTag = QT_CHANNEL_LAYOUT_UNKNOWN;
+    temp.channelBitmap    = 0;
 
     /* Lavcodec always returns SMPTE/ITU-R channel order, but its copying doesn't do reordering. */
     if( !p_audio->b_copy )
     {
-        layout_tag = QT_CHANNEL_LAYOUT_USE_CHANNEL_BITMAP;
-        bitmap = p_audio->info->chanlayout;
+        temp.channelLayoutTag = QT_CHANNEL_LAYOUT_USE_CHANNEL_BITMAP;
+        temp.channelBitmap    = p_audio->info->chanlayout;
         /* Avisynth input doesn't return channel order, so we guess it from the number of channels. */
         if( !p_audio->info->chanlayout && p_audio->info->channels <= 8 )
         {
@@ -210,14 +211,13 @@ static void set_channel_layout( mp4_audio_hnd_t *p_audio )
                 QT_CHANNEL_LAYOUT_USE_CHANNEL_BITMAP,
                 QT_CHANNEL_LAYOUT_ITU_3_4_1
             };
-            layout_tag = channel_table[p_audio->info->channels];
+            temp.channelLayoutTag = channel_table[p_audio->info->channels];
         }
     }
     else if( p_audio->codec_type == ISOM_CODEC_TYPE_MP4A_AUDIO )
     {
         /* Channel order is unknown, so we guess it from ffmpeg's channel layout flags. */
-        typedef struct { lsmash_channel_bitmap bitmap; lsmash_channel_layout_tag layout_tag; } qt_channel_map;
-        static const qt_channel_map channel_table[] = {
+        static const lsmash_qt_audio_channel_layout_t channel_table[] = {
             { AV_CH_LAYOUT_MONO,           QT_CHANNEL_LAYOUT_MONO },
             { AV_CH_LAYOUT_STEREO,         QT_CHANNEL_LAYOUT_STEREO },
             { AV_CH_LAYOUT_STEREO_DOWNMIX, QT_CHANNEL_LAYOUT_STEREO },
@@ -234,16 +234,33 @@ static void set_channel_layout( mp4_audio_hnd_t *p_audio )
             { AV_CH_LAYOUT_7POINT1,        QT_CHANNEL_LAYOUT_AAC_7_1 },
             { AV_CH_LAYOUT_7POINT1_WIDE,   QT_CHANNEL_LAYOUT_AAC_7_1 }
         };
-        for( int i = 0; i < sizeof(channel_table)/sizeof(qt_channel_map); i++ )
-            if( p_audio->info->chanlayout == channel_table[i].bitmap )
+        for( int i = 0; i < sizeof(channel_table) / sizeof(lsmash_qt_audio_channel_layout_t); i++ )
+            if( p_audio->info->chanlayout == channel_table[i].channelBitmap )
             {
-                layout_tag = channel_table[i].layout_tag;
+                temp.channelLayoutTag = channel_table[i].channelLayoutTag;
                 break;
             }
     }
 
-    p_audio->summary->layout_tag = layout_tag;
-    p_audio->summary->bitmap = bitmap;
+    if( temp.channelLayoutTag != QT_CHANNEL_LAYOUT_UNKNOWN )
+    {
+        lsmash_codec_specific_t *specific = lsmash_create_codec_specific_data( LSMASH_CODEC_SPECIFIC_DATA_TYPE_QT_AUDIO_CHANNEL_LAYOUT,
+                                                                               LSMASH_CODEC_SPECIFIC_FORMAT_STRUCTURED );
+        if( !specific )
+        {
+            MP4_LOG_ERROR( "failed to allocate memory for channel layout info.\n" );
+            return -1;
+        }
+        *(lsmash_qt_audio_channel_layout_t *)specific->data.structured = temp;
+        if( lsmash_add_codec_specific_data( (lsmash_summary_t *)p_audio->summary, specific ) )
+        {
+            lsmash_destroy_codec_specific_data( specific );
+            return -1;
+        }
+        lsmash_destroy_codec_specific_data( specific );
+    }
+
+    return 0;
 }
 #endif
 
@@ -298,6 +315,135 @@ static void remove_mp4_hnd( hnd_t handle )
     free( p_mp4 );
 }
 
+static int aac_init( mp4_audio_hnd_t *p_audio )
+{
+    p_audio->codec_type = ISOM_CODEC_TYPE_MP4A_AUDIO;
+    audio_aac_info_t *aacinfo = p_audio->info->opaque;
+    if( aacinfo )
+        p_audio->has_sbr = aacinfo->has_sbr;
+    else
+        p_audio->has_sbr = 0; // SBR presence isn't specified, so assume implicit signaling
+    p_audio->b_mdct = 1;
+    if( p_audio->info->extradata && p_audio->info->extradata_size > 0 && p_audio->info->extradata_type == EXTRADATA_TYPE_LIBAVCODEC )
+    {
+        lsmash_codec_specific_t *specific = lsmash_create_codec_specific_data( LSMASH_CODEC_SPECIFIC_DATA_TYPE_MP4SYS_DECODER_CONFIG,
+                                                                               LSMASH_CODEC_SPECIFIC_FORMAT_STRUCTURED );
+        if( !specific )
+        {
+            MP4_LOG_ERROR( "failed to allocate memory for MPEG-4 audio specific info.\n" );
+            return -1;
+        }
+        lsmash_mp4sys_decoder_parameters_t *param = (lsmash_mp4sys_decoder_parameters_t *)specific->data.structured;
+        param->objectTypeIndication = MP4SYS_OBJECT_TYPE_Audio_ISO_14496_3;
+        param->streamType           = MP4SYS_STREAM_TYPE_AudioStream;
+        if( lsmash_set_mp4sys_decoder_specific_info( param, p_audio->info->extradata, p_audio->info->extradata_size ) )
+        {
+            lsmash_destroy_codec_specific_data( specific );
+            MP4_LOG_ERROR( "failed to set up decoder specific info for MPEG-4 audio.\n" );
+            return -1;
+        }
+        int err = lsmash_add_codec_specific_data( (lsmash_summary_t *)p_audio->summary, specific );
+        lsmash_destroy_codec_specific_data( specific );
+        if( err )
+        {
+            MP4_LOG_ERROR( "failed to add MPEG-4 audio specific info.\n" );
+            return -1;
+        }
+    }
+    return 0;
+}
+
+static int mpeg12_layer_init( mp4_audio_hnd_t *p_audio )
+{
+    p_audio->codec_type = ISOM_CODEC_TYPE_MP4A_AUDIO;
+    p_audio->b_mdct = !strcmp( p_audio->info->codec_name, "mp3" );
+    lsmash_codec_specific_t *specific = lsmash_create_codec_specific_data( LSMASH_CODEC_SPECIFIC_DATA_TYPE_MP4SYS_DECODER_CONFIG,
+                                                                           LSMASH_CODEC_SPECIFIC_FORMAT_STRUCTURED );
+    if( !specific )
+    {
+        MP4_LOG_ERROR( "failed to allocate memory for MPEG-1/2 layer audio specific info.\n" );
+        return -1;
+    }
+    lsmash_mp4sys_decoder_parameters_t *param = (lsmash_mp4sys_decoder_parameters_t *)specific->data.structured;
+    if( p_audio->info->samplerate >= 32000 )
+        param->objectTypeIndication = MP4SYS_OBJECT_TYPE_Audio_ISO_11172_3; /* Legacy Interface */
+    else
+        param->objectTypeIndication = MP4SYS_OBJECT_TYPE_Audio_ISO_13818_3; /* Legacy Interface */
+    param->streamType = MP4SYS_STREAM_TYPE_AudioStream;
+    if( lsmash_set_mp4sys_decoder_specific_info( param, p_audio->info->extradata, p_audio->info->extradata_size ) )
+    {
+        lsmash_destroy_codec_specific_data( specific );
+        MP4_LOG_ERROR( "failed to set up decoder specific info for MPEG-1/2 layer audio.\n" );
+        return -1;
+    }
+    int err = lsmash_add_codec_specific_data( (lsmash_summary_t *)p_audio->summary, specific );
+    lsmash_destroy_codec_specific_data( specific );
+    if( err )
+    {
+        MP4_LOG_ERROR( "failed to add MPEG-1/2 layer audio specific info.\n" );
+        return -1;
+    }
+    return 0;
+}
+
+static int als_init( mp4_audio_hnd_t *p_audio )
+{
+    p_audio->codec_type = ISOM_CODEC_TYPE_MP4A_AUDIO;
+    if( p_audio->info->extradata && p_audio->info->extradata_size > 0 && p_audio->info->extradata_type == EXTRADATA_TYPE_LIBAVCODEC )
+    {
+        lsmash_codec_specific_t *specific = lsmash_create_codec_specific_data( LSMASH_CODEC_SPECIFIC_DATA_TYPE_MP4SYS_DECODER_CONFIG,
+                                                                               LSMASH_CODEC_SPECIFIC_FORMAT_STRUCTURED );
+        if( !specific )
+        {
+            MP4_LOG_ERROR( "failed to allocate memory for Apple lossless audio specific info.\n" );
+            return -1;
+        }
+        lsmash_mp4sys_decoder_parameters_t *param = (lsmash_mp4sys_decoder_parameters_t *)specific->data.structured;
+        param->objectTypeIndication = MP4SYS_OBJECT_TYPE_Audio_ISO_14496_3;
+        param->streamType           = MP4SYS_STREAM_TYPE_AudioStream;
+        if( lsmash_set_mp4sys_decoder_specific_info( param, p_audio->info->extradata, p_audio->info->extradata_size ) )
+        {
+            lsmash_destroy_codec_specific_data( specific );
+            MP4_LOG_ERROR( "failed to set up decoder specific info for Apple lossless audio.\n" );
+            return -1;
+        }
+        int err = lsmash_add_codec_specific_data( (lsmash_summary_t *)p_audio->summary, specific );
+        lsmash_destroy_codec_specific_data( specific );
+        if( err )
+        {
+            MP4_LOG_ERROR( "failed to add Apple lossless audio specific info data.\n" );
+            return -1;
+        }
+    }
+    return 0;
+}
+
+static int alac_init( mp4_audio_hnd_t *p_audio )
+{
+    p_audio->codec_type = ISOM_CODEC_TYPE_ALAC_AUDIO;
+    if( p_audio->info->extradata && p_audio->info->extradata_size > 0 && p_audio->info->extradata_type == EXTRADATA_TYPE_LIBAVCODEC )
+    {
+        lsmash_codec_specific_t *specific = lsmash_create_codec_specific_data( LSMASH_CODEC_SPECIFIC_DATA_TYPE_UNKNOWN,
+                                                                               LSMASH_CODEC_SPECIFIC_FORMAT_UNSTRUCTURED );
+        if( !specific )
+        {
+            MP4_LOG_ERROR( "failed to allocate memory for Apple lossless audio specific info.\n" );
+            return -1;
+        }
+        specific->data.unstructured = p_audio->info->extradata;
+        specific->size              = p_audio->info->extradata_size;
+        int err = lsmash_add_codec_specific_data( (lsmash_summary_t *)p_audio->summary, specific );
+        specific->data.unstructured = NULL; /* Avoid double freeing extradata. */
+        lsmash_destroy_codec_specific_data( specific );
+        if( err )
+        {
+            MP4_LOG_ERROR( "failed to add Apple lossless audio specific info data.\n" );
+            return -1;
+        }
+    }
+    return 0;
+}
+
 #if HAVE_AUDIO
 static int audio_init( hnd_t handle, cli_output_opt_t *opt, hnd_t filters, char *audio_enc, char *audio_parameters )
 {
@@ -336,7 +482,7 @@ static int audio_init( hnd_t handle, cli_output_opt_t *opt, hnd_t filters, char 
     if( p_audio->b_copy )
         info->priming = opt->priming;
 
-    p_audio->summary = (lsmash_audio_summary_t *)lsmash_create_summary( MP4SYS_STREAM_TYPE_AudioStream );
+    p_audio->summary = (lsmash_audio_summary_t *)lsmash_create_summary( LSMASH_SUMMARY_TYPE_AUDIO );
     if( !p_audio->summary )
     {
         MP4_LOG_ERROR( "failed to allocate memory for summary information of audio.\n" );
@@ -354,76 +500,97 @@ static int audio_init( hnd_t handle, cli_output_opt_t *opt, hnd_t filters, char 
         case ISOM_BRAND_TYPE_MP42 :
             if( !strcmp( info->codec_name, "aac" ) )
             {
-                p_audio->codec_type = ISOM_CODEC_TYPE_MP4A_AUDIO;
-                audio_aac_info_t *aacinfo = info->opaque;
-                if( aacinfo )
-                    p_audio->has_sbr = aacinfo->has_sbr;
-                else
-                    p_audio->has_sbr = 0; // SBR presence isn't specified, so assume implicit signaling
+                if( aac_init( p_audio ) )
+                    goto error;
                 p_mp4->b_brand_m4a = 1;
-                p_audio->b_mdct = 1;
             }
             else if( !strcmp( info->codec_name, "als" ) )
-                p_audio->codec_type = ISOM_CODEC_TYPE_MP4A_AUDIO;
+            {
+                if( als_init( p_audio ) )
+                    goto error;
+                p_mp4->b_brand_m4a = 1;
+            }
             else if( ( !strcmp( info->codec_name, "mp3" ) || !strcmp( info->codec_name, "mp2" ) || !strcmp( info->codec_name, "mp1" ) )
                      && info->samplerate >= 16000 ) /* freq <16khz is MPEG-2.5. */
             {
-                p_audio->codec_type = ISOM_CODEC_TYPE_MP4A_AUDIO;
-                p_audio->b_mdct = !strcmp( info->codec_name, "mp3" );
+                if( mpeg12_layer_init( p_audio ) )
+                    goto error;
             }
             else if( !strcmp( info->codec_name, "ac3" ) )
             {
                 p_audio->codec_type = ISOM_CODEC_TYPE_AC_3_AUDIO;
                 p_audio->b_mdct = 1;
-                lsmash_ac3_specific_parameters_t param = { 0 };
                 if( !info->extradata || info->extradata_size == 0 )
                 {
                     MP4_LOG_ERROR( "no frame to create AC-3 specific info.\n" );
                     goto error;
                 }
-                else if( lsmash_setup_ac3_specific_parameters_from_syncframe( &param, info->extradata, info->extradata_size ) == 0 )
+                else if( info->extradata_type == EXTRADATA_TYPE_LIBAVCODEC )
                 {
                     /* from lavf input
                      * Create AC3SpecificBox from AC-3 syncframe by L-SMASH's AC-3 parser. */
-                    free( info->extradata );
-                    uint32_t extradata_size;
-                    info->extradata = lsmash_create_ac3_specific_info( &param, &extradata_size );
-                    if( !info->extradata )
+                    lsmash_codec_specific_t *specific = lsmash_create_codec_specific_data( LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_AUDIO_AC_3,
+                                                                                           LSMASH_CODEC_SPECIFIC_FORMAT_STRUCTURED );
+                    if( !specific )
                     {
-                        MP4_LOG_ERROR( "failed to create AC-3 specific info.\n" );
+                        MP4_LOG_ERROR( "failed to allocate memory for AC-3 specific info.\n" );
                         goto error;
                     }
-                    info->extradata_size = extradata_size;
+                    lsmash_ac3_specific_parameters_t *param = (lsmash_ac3_specific_parameters_t *)specific->data.structured;
+                    if( lsmash_setup_ac3_specific_parameters_from_syncframe( param, info->extradata, info->extradata_size ) )
+                    {
+                        MP4_LOG_ERROR( "failed to set up AC-3 specific info.\n" );
+                        goto error;
+                    }
+                    if( lsmash_add_codec_specific_data( (lsmash_summary_t *)p_audio->summary, specific ) )
+                    {
+                        lsmash_destroy_codec_specific_data( specific );
+                        MP4_LOG_ERROR( "failed to add AC-3 specific info data.\n" );
+                        goto error;
+                    }
+                    lsmash_destroy_codec_specific_data( specific );
                 }
             }
             else if( !strcmp( info->codec_name, "eac3" ) )
             {
                 p_audio->codec_type = ISOM_CODEC_TYPE_EC_3_AUDIO;
                 p_audio->b_mdct = 1;
-                lsmash_eac3_specific_parameters_t param = { 0 };
                 if( !info->extradata || info->extradata_size == 0 )
                 {
                     MP4_LOG_ERROR( "no frame to create Enhanced AC-3 specific info.\n" );
                     goto error;
                 }
-                else if( lsmash_setup_eac3_specific_parameters_from_frame( &param, info->extradata, info->extradata_size ) == 0 )
+                else if( info->extradata_type == EXTRADATA_TYPE_LIBAVCODEC )
                 {
                     /* from lavf input
                      * Create EC3SpecificBox from Enhanced AC-3 syncframes by L-SMASH's Enhanced AC-3 parser. */
-                    free( info->extradata );
-                    uint32_t extradata_size;
-                    info->extradata = lsmash_create_eac3_specific_info( &param, &extradata_size );
-                    if( !info->extradata )
+                    lsmash_codec_specific_t *specific = lsmash_create_codec_specific_data( LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_AUDIO_EC_3,
+                                                                                           LSMASH_CODEC_SPECIFIC_FORMAT_STRUCTURED );
+                    if( !specific )
                     {
-                        MP4_LOG_ERROR( "failed to create Enhanced AC-3 specific info.\n" );
+                        MP4_LOG_ERROR( "failed to allocate memory for Enhanced AC-3 specific info.\n" );
                         goto error;
                     }
-                    info->extradata_size = extradata_size;
+                    lsmash_eac3_specific_parameters_t *param = (lsmash_eac3_specific_parameters_t *)specific->data.structured;
+                    if( lsmash_setup_eac3_specific_parameters_from_frame( param, info->extradata, info->extradata_size ) )
+                    {
+                        lsmash_destroy_codec_specific_data( specific );
+                        MP4_LOG_ERROR( "failed to set up Enhanced AC-3 specific info.\n" );
+                        goto error;
+                    }
+                    if( lsmash_add_codec_specific_data( (lsmash_summary_t *)p_audio->summary, specific ) )
+                    {
+                        lsmash_destroy_codec_specific_data( specific );
+                        MP4_LOG_ERROR( "failed to add Enhanced AC-3 specific info data.\n" );
+                        goto error;
+                    }
+                    lsmash_destroy_codec_specific_data( specific );
                 }
             }
             else if( !strcmp( info->codec_name, "alac" ) )
             {
-                p_audio->codec_type = ISOM_CODEC_TYPE_ALAC_AUDIO;
+                if( alac_init( p_audio ) )
+                    goto error;
                 p_mp4->b_brand_m4a = 1;
             }
             else if( !strcmp( info->codec_name, "dca" ) )
@@ -432,26 +599,33 @@ static int audio_init( hnd_t handle, cli_output_opt_t *opt, hnd_t filters, char 
                 if( dts_info )
                     /* from L-SMASH importer */
                     p_audio->codec_type = dts_info->coding_name;
-                else if( info->extradata && info->extradata_size > 0 )
+                else if( info->extradata && info->extradata_size > 0 && info->extradata_type == EXTRADATA_TYPE_LIBAVCODEC )
                 {
                     /* from lavf input
                      * Create DTSSpecificBox from DTS audio frame by L-SMASH's DTS parser. */
-                    lsmash_dts_specific_parameters_t param = { 0 };
-                    if( lsmash_setup_dts_specific_parameters_from_frame( &param, info->extradata, info->extradata_size ) )
+                    lsmash_codec_specific_t *specific = lsmash_create_codec_specific_data( LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_AUDIO_DTS,
+                                                                                           LSMASH_CODEC_SPECIFIC_FORMAT_STRUCTURED );
+                    if( !specific )
+                    {
+                        MP4_LOG_ERROR( "failed to allocate memory for DTS specific info.\n" );
+                        goto error;
+                    }
+                    lsmash_dts_specific_parameters_t *param = (lsmash_dts_specific_parameters_t *)specific->data.structured;
+                    if( lsmash_setup_dts_specific_parameters_from_frame( param, info->extradata, info->extradata_size ) )
                     {
                         MP4_LOG_ERROR( "failed to parse DTS audio frame.\n" );
                         goto error;
                     }
-                    p_audio->codec_type = lsmash_dts_get_codingname( &param );
-                    free( info->extradata );
-                    uint32_t extradata_size;
-                    info->extradata = lsmash_create_dts_specific_info( &param, &extradata_size );
-                    if( !info->extradata )
+
+                    p_audio->codec_type = lsmash_dts_get_codingname( param );
+
+                    if( lsmash_add_codec_specific_data( (lsmash_summary_t *)p_audio->summary, specific ) )
                     {
-                        MP4_LOG_ERROR( "failed to create DTS specific info.\n" );
+                        lsmash_destroy_codec_specific_data( specific );
+                        MP4_LOG_ERROR( "failed to add DTS specific info data.\n" );
                         goto error;
                     }
-                    info->extradata_size = extradata_size;
+                    lsmash_destroy_codec_specific_data( specific );
                 }
                 else
                 {
@@ -464,54 +638,58 @@ static int audio_init( hnd_t handle, cli_output_opt_t *opt, hnd_t filters, char 
         case ISOM_BRAND_TYPE_QT :
             if( !strcmp( info->codec_name, "aac" ) )
             {
-                p_audio->codec_type = ISOM_CODEC_TYPE_MP4A_AUDIO;
-                audio_aac_info_t *aacinfo = info->opaque;
-                if( aacinfo )
-                    p_audio->has_sbr = aacinfo->has_sbr;
-                else
-                    p_audio->has_sbr = 0; // SBR presence isn't specified, so assume implicit signaling
-                p_audio->b_mdct = 1;
+                if( aac_init( p_audio ) )
+                    goto error;
             }
             else if( p_audio->b_copy )
                 break;      /* We haven't supported LPCM copying yet. */
             else
             {
                 typedef struct {
-                    const char* name;
+                    const char *name;
                     lsmash_codec_type codec_type;
-                    uint8_t sample_format;
-                    uint8_t endianness;
-                    uint8_t signedness;
-                    uint8_t dummy; /* for align */
+                    lsmash_qt_audio_format_specific_flags_t lpcm;
                 } qt_lpcm_detail;
 
                 static const qt_lpcm_detail qt_lpcm_table[] = {
 #ifdef WORDS_BIGENDIAN
-                    { "raw",        QT_CODEC_TYPE_TWOS_AUDIO, 0, 0, 1, 0 },
+                    { "raw",        QT_CODEC_TYPE_TWOS_AUDIO, { QT_AUDIO_FORMAT_FLAG_BIG_ENDIAN | QT_AUDIO_FORMAT_FLAG_SIGNED_INTEGER } },
 #else
-                    { "raw",        QT_CODEC_TYPE_SOWT_AUDIO, 0, 1, 1, 0 },
+                    { "raw",        QT_CODEC_TYPE_SOWT_AUDIO, { QT_AUDIO_FORMAT_FLAG_SIGNED_INTEGER } },
 #endif
-                    { "pcm_f32be",  QT_CODEC_TYPE_FL32_AUDIO, 1, 0, 0, 0 },
-                    { "pcm_f32le",  QT_CODEC_TYPE_FL32_AUDIO, 1, 1, 0, 0 },
-                    { "pcm_f64be",  QT_CODEC_TYPE_FL64_AUDIO, 1, 0, 0, 0 },
-                    { "pcm_f64le",  QT_CODEC_TYPE_FL64_AUDIO, 1, 1, 0, 0 },
-                    { "pcm_s16be",  QT_CODEC_TYPE_TWOS_AUDIO, 0, 0, 1, 0 },
-                    { "pcm_s16le",  QT_CODEC_TYPE_SOWT_AUDIO, 0, 1, 1, 0 },
-                    { "pcm_s24be",  QT_CODEC_TYPE_IN24_AUDIO, 0, 0, 1, 0 },
-                    { "pcm_s24le",  QT_CODEC_TYPE_IN24_AUDIO, 0, 1, 1, 0 },
-                    { "pcm_s32be",  QT_CODEC_TYPE_IN32_AUDIO, 0, 0, 1, 0 },
-                    { "pcm_s32le",  QT_CODEC_TYPE_IN32_AUDIO, 0, 1, 1, 0 },
-                    { "pcm_s8",     QT_CODEC_TYPE_TWOS_AUDIO, 0, 0, 1, 0 },
-                    { "pcm_u8",     QT_CODEC_TYPE_RAW_AUDIO,  0, 0, 0, 0 }
+                    { "pcm_f32be",  QT_CODEC_TYPE_FL32_AUDIO, { QT_AUDIO_FORMAT_FLAG_FLOAT | QT_AUDIO_FORMAT_FLAG_BIG_ENDIAN } },
+                    { "pcm_f32le",  QT_CODEC_TYPE_FL32_AUDIO, { QT_AUDIO_FORMAT_FLAG_FLOAT } },
+                    { "pcm_f64be",  QT_CODEC_TYPE_FL64_AUDIO, { QT_AUDIO_FORMAT_FLAG_FLOAT | QT_AUDIO_FORMAT_FLAG_BIG_ENDIAN } },
+                    { "pcm_f64le",  QT_CODEC_TYPE_FL64_AUDIO, { QT_AUDIO_FORMAT_FLAG_FLOAT } },
+                    { "pcm_s16be",  QT_CODEC_TYPE_TWOS_AUDIO, { QT_AUDIO_FORMAT_FLAG_BIG_ENDIAN | QT_AUDIO_FORMAT_FLAG_SIGNED_INTEGER } },
+                    { "pcm_s16le",  QT_CODEC_TYPE_SOWT_AUDIO, { QT_AUDIO_FORMAT_FLAG_SIGNED_INTEGER } },
+                    { "pcm_s24be",  QT_CODEC_TYPE_IN24_AUDIO, { QT_AUDIO_FORMAT_FLAG_BIG_ENDIAN | QT_AUDIO_FORMAT_FLAG_SIGNED_INTEGER } },
+                    { "pcm_s24le",  QT_CODEC_TYPE_IN24_AUDIO, { QT_AUDIO_FORMAT_FLAG_SIGNED_INTEGER } },
+                    { "pcm_s32be",  QT_CODEC_TYPE_IN32_AUDIO, { QT_AUDIO_FORMAT_FLAG_BIG_ENDIAN | QT_AUDIO_FORMAT_FLAG_SIGNED_INTEGER } },
+                    { "pcm_s32le",  QT_CODEC_TYPE_IN32_AUDIO, { QT_AUDIO_FORMAT_FLAG_SIGNED_INTEGER } },
+                    { "pcm_s8",     QT_CODEC_TYPE_TWOS_AUDIO, { QT_AUDIO_FORMAT_FLAG_SIGNED_INTEGER } },
+                    { "pcm_u8",     QT_CODEC_TYPE_RAW_AUDIO,  { 0 } }
                 };
 
                 for( int i = 0; i < sizeof(qt_lpcm_table)/sizeof(qt_lpcm_detail); i++ )
                     if( !strcmp( info->codec_name, qt_lpcm_table[i].name ) )
                     {
-                        p_audio->codec_type             = qt_lpcm_table[i].codec_type;
-                        p_audio->summary->sample_format = qt_lpcm_table[i].sample_format;
-                        p_audio->summary->endianness    = qt_lpcm_table[i].endianness;
-                        p_audio->summary->signedness    = qt_lpcm_table[i].signedness;
+                        p_audio->codec_type = qt_lpcm_table[i].codec_type;
+                        lsmash_codec_specific_t *specific = lsmash_create_codec_specific_data( LSMASH_CODEC_SPECIFIC_DATA_TYPE_QT_AUDIO_FORMAT_SPECIFIC_FLAGS,
+                                                                                               LSMASH_CODEC_SPECIFIC_FORMAT_STRUCTURED );
+                        if( !specific )
+                        {
+                            MP4_LOG_ERROR( "failed to allocate memory for LPCM format specific flags.\n" );
+                            goto error;
+                        }
+                        *(lsmash_qt_audio_format_specific_flags_t *)specific->data.structured = qt_lpcm_table[i].lpcm;
+                        if( lsmash_add_codec_specific_data( (lsmash_summary_t *)p_audio->summary, specific ) )
+                        {
+                            lsmash_destroy_codec_specific_data( specific );
+                            MP4_LOG_ERROR( "failed to add LPCM specific data.\n" );
+                            goto error;
+                        }
+                        lsmash_destroy_codec_specific_data( specific );
                         break;
                     }
             }
@@ -524,6 +702,20 @@ static int audio_init( hnd_t handle, cli_output_opt_t *opt, hnd_t filters, char 
     {
         MP4_LOG_ERROR( "unsupported audio codec '%s'.\n", info->codec_name );
         goto error;
+    }
+
+    if( info->extradata_type == EXTRADATA_TYPE_LSMASH )
+    {
+        uint32_t num_extensions = info->extradata_size / sizeof(lsmash_codec_specific_t *);
+        for( uint32_t i = 0; i < num_extensions; i++ )
+        {
+            lsmash_codec_specific_t **extradata = (lsmash_codec_specific_t **)info->extradata;
+            if( lsmash_add_codec_specific_data( (lsmash_summary_t *)p_audio->summary, extradata[i] ) )
+            {
+                MP4_LOG_ERROR( "failed to add CODEC specific info extension.\n" );
+                goto error;
+            }
+        }
     }
 
     p_audio->encoder = henc;
@@ -550,66 +742,28 @@ static int set_param_audio( mp4_hnd_t* p_mp4, uint64_t i_media_timescale, lsmash
 
 #if HAVE_AUDIO
     if( p_mp4->major_brand == ISOM_BRAND_TYPE_QT )
-        set_channel_layout( p_audio );
+        MP4_FAIL_IF_ERR( set_channel_layout( p_audio ), "failed to set up channel layout.\n" );
+    p_audio->summary->sample_type      = p_audio->codec_type;
     p_audio->summary->max_au_length    = ( 1 << 13 ) - 1;
     p_audio->summary->frequency        = p_audio->info->samplerate;
     p_audio->summary->channels         = p_audio->info->channels;
-    p_audio->summary->bit_depth        = p_audio->info->depth;
+    p_audio->summary->sample_size      = p_audio->info->depth;
     p_audio->summary->samples_in_frame = p_audio->info->framelen;
-    p_audio->summary->packed           = 1;
-    p_audio->summary->interleaved      = 1;
     switch( p_audio->codec_type )
     {
         case ISOM_CODEC_TYPE_MP4A_AUDIO :
-            p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_Audio_ISO_14496_3;
-            if( !strcmp( p_audio->info->codec_name, "mp3" ) || !strcmp( p_audio->info->codec_name, "mp2" ) || !strcmp( p_audio->info->codec_name, "mp1" ) )
-            {
-                if( p_audio->info->samplerate >= 32000 )
-                    p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_Audio_ISO_11172_3; /* Legacy Interface */
-                else
-                    p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_Audio_ISO_13818_3; /* Legacy Interface */
-            }
             if( !strcmp( p_audio->info->codec_name, "als" ) )
                 p_audio->summary->aot = MP4A_AUDIO_OBJECT_TYPE_ALS;
             else
                 p_audio->summary->aot = MP4A_AUDIO_OBJECT_TYPE_AAC_LC;
             p_audio->summary->sbr_mode = p_audio->has_sbr ? MP4A_AAC_SBR_BACKWARD_COMPATIBLE : MP4A_AAC_SBR_NOT_SPECIFIED;
-            MP4_FAIL_IF_ERR( lsmash_summary_add_exdata( (lsmash_summary_t *)p_audio->summary, p_audio->info->extradata, p_audio->info->extradata_size ),
-                             "failed to create mp4a specific info.\n" );
-            break;
-        case ISOM_CODEC_TYPE_AC_3_AUDIO :
-            p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_NONE;     /* MP4SYS_OBJECT_TYPE_AC_3_AUDIO is forbidden to use for ISO Base Media. */
-            MP4_FAIL_IF_ERR( !p_audio->info->extradata || p_audio->info->extradata_size != 11,
-                             "AC-3 specific info is absent.\n" );
-            MP4_FAIL_IF_ERR( lsmash_summary_add_exdata( (lsmash_summary_t *)p_audio->summary, p_audio->info->extradata, p_audio->info->extradata_size ),
-                             "failed to create AC-3 specific info.\n" );
-            break;
-        case ISOM_CODEC_TYPE_EC_3_AUDIO :
-            p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_NONE;     /* MP4SYS_OBJECT_TYPE_EC_3_AUDIO is forbidden to use for ISO Base Media. */
-            MP4_FAIL_IF_ERR( !p_audio->info->extradata || p_audio->info->extradata_size > 42,
-                             "EAC-3 specific info is absent.\n" );
-            MP4_FAIL_IF_ERR( lsmash_summary_add_exdata( (lsmash_summary_t *)p_audio->summary, p_audio->info->extradata, p_audio->info->extradata_size ),
-                             "failed to create EAC-3 specific info.\n" );
             break;
         case ISOM_CODEC_TYPE_SAMR_AUDIO :
         case ISOM_CODEC_TYPE_SAWB_AUDIO :
-            p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_NONE;
             MP4_FAIL_IF_ERR( mp4sys_amr_create_damr( p_audio->summary ),
                              "failed to create AMR specific info.\n" );
             break;
-        case ISOM_CODEC_TYPE_DTSC_AUDIO :
-        case ISOM_CODEC_TYPE_DTSE_AUDIO :
-        case ISOM_CODEC_TYPE_DTSH_AUDIO :
-        case ISOM_CODEC_TYPE_DTSL_AUDIO :
-            p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_NONE;
-            MP4_FAIL_IF_ERR( p_audio->info->extradata_size != 28, "DTS specific info is absent.\n" );
-            MP4_FAIL_IF_ERR( lsmash_summary_add_exdata( (lsmash_summary_t *)p_audio->summary, p_audio->info->extradata, p_audio->info->extradata_size ),
-                             "failed to create DTS specific info.\n" );
-            break;
         default :
-            p_audio->summary->object_type_indication = MP4SYS_OBJECT_TYPE_NONE;
-            MP4_FAIL_IF_ERR( lsmash_summary_add_exdata( (lsmash_summary_t *)p_audio->summary, p_audio->info->extradata, p_audio->info->extradata_size ),
-                             "failed to create unknown specific info.\n" );
             break;
     }
 #else
@@ -651,12 +805,9 @@ static int set_param_audio( mp4_hnd_t* p_mp4, uint64_t i_media_timescale, lsmash
     MP4_FAIL_IF_ERR( lsmash_set_media_parameters( p_mp4->p_root, p_audio->i_track, &media_param ),
                      "failed to set media parameters for audio.\n" );
 
-    p_audio->i_sample_entry = lsmash_add_sample_entry( p_mp4->p_root, p_audio->i_track, p_audio->codec_type, p_audio->summary );
+    p_audio->i_sample_entry = lsmash_add_sample_entry( p_mp4->p_root, p_audio->i_track, p_audio->summary );
     MP4_FAIL_IF_ERR( !p_audio->i_sample_entry,
                      "failed to add sample_entry for audio.\n" );
-    /* MP4AudioSampleEntry does not have btrt */
-//    MP4_FAIL_IF_ERR( lsmash_add_btrt( p_mp4->p_root, p_audio->i_track, p_audio->i_sample_entry ),
-//                     "failed to add btrt for audio.\n" );
 
     return 0;
 }
@@ -933,22 +1084,23 @@ static int open_file( char *psz_filename, hnd_t *p_handle, cli_output_opt_t *opt
         MP4_FAIL_IF_ERR_EX( !fh, "can't open `%s'\n", p_mp4->psz_chapter );
         fclose( fh );
     }
-    p_mp4->psz_language = opt->language;
-    p_mp4->b_no_pasp = opt->no_sar;
-    p_mp4->b_no_remux = opt->no_remux;
-    p_mp4->i_display_width = opt->display_width * (1<<16);
-    p_mp4->i_display_height = opt->display_height * (1<<16);
+    p_mp4->psz_language         = opt->language;
+    p_mp4->b_no_pasp            = opt->no_sar;
+    p_mp4->b_no_remux           = opt->no_remux;
+    p_mp4->i_display_width      = opt->display_width * (1<<16);
+    p_mp4->i_display_height     = opt->display_height * (1<<16);
     p_mp4->b_force_display_size = p_mp4->i_display_height || p_mp4->i_display_height;
-    p_mp4->scaling_method = p_mp4->b_force_display_size ? ISOM_SCALING_METHOD_FILL : ISOM_SCALING_METHOD_MEET;
-    p_mp4->b_fragments = !b_regular || opt->fragments;
-    p_mp4->b_stdout = !strcmp( psz_filename, "-" );
+    p_mp4->scale_method         = p_mp4->b_force_display_size ? ISOM_SCALE_METHOD_FILL : ISOM_SCALE_METHOD_MEET;
+    p_mp4->b_fragments          = !b_regular || opt->fragments;
+    p_mp4->b_stdout             = !strcmp( psz_filename, "-" );
 
     p_mp4->p_root = lsmash_open_movie( psz_filename, p_mp4->b_fragments ? LSMASH_FILE_MODE_WRITE_FRAGMENTED : LSMASH_FILE_MODE_WRITE );
     MP4_FAIL_IF_ERR_EX( !p_mp4->p_root, "failed to create root.\n" );
 
-    p_mp4->summary = calloc( 1, sizeof(lsmash_video_summary_t) );
+    p_mp4->summary = (lsmash_video_summary_t *)lsmash_create_summary( LSMASH_SUMMARY_TYPE_VIDEO );
     MP4_FAIL_IF_ERR_EX( !p_mp4->summary,
                         "failed to allocate memory for summary information of video.\n" );
+    p_mp4->summary->sample_type = ISOM_CODEC_TYPE_AVC1_VIDEO;
 
 #if HAVE_ANY_AUDIO
 #if HAVE_AUDIO
@@ -1045,10 +1197,17 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
                      "failed to set movie parameters.\n" );
     p_mp4->i_movie_timescale = lsmash_get_movie_timescale( p_mp4->p_root );
     MP4_FAIL_IF_ERR( !p_mp4->i_movie_timescale, "movie timescale is broken.\n" );
+
     if( p_mp4->b_brand_m4a )
-        MP4_FAIL_IF_ERR( lsmash_set_itunes_metadata( p_mp4->p_root, ITUNES_METADATA_ITEM_ENCODING_TOOL, ITUNES_METADATA_TYPE_NONE,
-                                                     (lsmash_itunes_metadata_t){ .string = "x264 "X264_POINTVER }, NULL, NULL ),
-                         "failed to set metadata\n" );
+    {
+        lsmash_itunes_metadata_t itunes_metadata;
+        itunes_metadata.item         = ITUNES_METADATA_ITEM_ENCODING_TOOL;
+        itunes_metadata.type         = ITUNES_METADATA_TYPE_NONE;
+        itunes_metadata.value.string = "x264 "X264_POINTVER;
+        itunes_metadata.meaning      = NULL;
+        itunes_metadata.name         = NULL;
+        MP4_FAIL_IF_ERR( lsmash_set_itunes_metadata( p_mp4->p_root, itunes_metadata ), "failed to set metadata\n" );
+    }
 
     /* Create a video track. */
     p_mp4->i_track = lsmash_create_track( p_mp4->p_root, ISOM_MEDIA_HANDLER_TYPE_VIDEO_TRACK );
@@ -1076,14 +1235,24 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
             p_mp4->summary->par_h = p_param->vui.i_sar_width;
             p_mp4->summary->par_v = p_param->vui.i_sar_height;
             if( p_mp4->major_brand != ISOM_BRAND_TYPE_QT )
-                p_mp4->summary->scaling_method = p_mp4->scaling_method;
+            {
+                lsmash_codec_specific_t *specific = lsmash_create_codec_specific_data( LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_VIDEO_SAMPLE_SCALE,
+                                                                                       LSMASH_CODEC_SPECIFIC_FORMAT_STRUCTURED );
+                MP4_FAIL_IF_ERR( !specific, "failed to allocate memory for sample scale info.\n" );
+                lsmash_isom_sample_scale_t *data = (lsmash_isom_sample_scale_t *)specific->data.structured;
+                data->scale_method    = p_mp4->scale_method;
+                data->constraint_flag = 1;
+                int err = lsmash_add_codec_specific_data( (lsmash_summary_t *)p_mp4->summary, specific );
+                lsmash_destroy_codec_specific_data( specific );
+                MP4_FAIL_IF_ERR( err, "failed to add sample scale info.\n" );
+            }
         }
     }
     if( p_mp4->b_brand_qt )
     {
-        p_mp4->summary->primaries = p_param->vui.i_colorprim;
-        p_mp4->summary->transfer = p_param->vui.i_transfer;
-        p_mp4->summary->matrix = p_param->vui.i_colmatrix;
+        p_mp4->summary->color.primaries_index = p_param->vui.i_colorprim;
+        p_mp4->summary->color.transfer_index  = p_param->vui.i_transfer;
+        p_mp4->summary->color.matrix_index    = p_param->vui.i_colmatrix >= 0 ? p_param->vui.i_colmatrix : QT_MATRIX_INDEX_UNSPECIFIED;
     }
 
     /* Set video track parameters. */
@@ -1137,41 +1306,52 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
     uint8_t *pps = p_nal[1].p_payload + 4;
     uint8_t *sei = p_nal[2].p_payload;
 
-    lsmash_h264_specific_parameters_t param = { 0 };
-    param.AVCProfileIndication    = sps[1];
-    param.profile_compatibility   = sps[2];
-    param.AVCLevelIndication      = sps[3];
-    param.lengthSizeMinusOne      = 3;
-    param.chroma_format           = p_mp4->i_chroma_format_idc;
-    param.bit_depth_luma_minus8   = BIT_DEPTH - 8;
-    param.bit_depth_chroma_minus8 = BIT_DEPTH - 8;
+    lsmash_codec_specific_t *h264_specific = lsmash_create_codec_specific_data( LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_VIDEO_H264,
+                                                                                LSMASH_CODEC_SPECIFIC_FORMAT_STRUCTURED );
+
+    lsmash_h264_specific_parameters_t *param = (lsmash_h264_specific_parameters_t *)h264_specific->data.structured;
+    param->AVCProfileIndication    = sps[1];
+    param->profile_compatibility   = sps[2];
+    param->AVCLevelIndication      = sps[3];
+    param->lengthSizeMinusOne      = 3;
+    param->chroma_format           = p_mp4->i_chroma_format_idc;
+    param->bit_depth_luma_minus8   = BIT_DEPTH - 8;
+    param->bit_depth_chroma_minus8 = BIT_DEPTH - 8;
 
     /* SPS */
-    MP4_FAIL_IF_ERR( lsmash_append_h264_parameter_set( &param, H264_PARAMETER_SET_TYPE_SPS, sps, sps_size ),
-                     "failed to append SPS.\n" )
+    if( lsmash_append_h264_parameter_set( param, H264_PARAMETER_SET_TYPE_SPS, sps, sps_size ) )
+    {
+        MP4_LOG_ERROR( "failed to append SPS.\n" );
+        return -1;
+    }
+
     /* PPS */
-    MP4_FAIL_IF_ERR( lsmash_append_h264_parameter_set( &param, H264_PARAMETER_SET_TYPE_PPS, pps, pps_size ),
-                     "failed to append PPS.\n" )
+    if( lsmash_append_h264_parameter_set( param, H264_PARAMETER_SET_TYPE_PPS, pps, pps_size ) )
+    {
+        MP4_LOG_ERROR( "failed to append PPS.\n" );
+        return -1;
+    }
 
-    uint32_t avc_config_size;
-    uint8_t *avc_config = lsmash_create_h264_specific_info( &param, &avc_config_size );
-    MP4_FAIL_IF_ERR( !avc_config || avc_config_size == 0,
-                     "failed to create AVC specific info.\n" );
+    if( lsmash_add_codec_specific_data( (lsmash_summary_t *)p_mp4->summary, h264_specific ) )
+    {
+        MP4_LOG_ERROR( "failed to add H.264 specific info.\n" );
+        return -1;
+    }
 
-    lsmash_destroy_h264_parameter_sets( &param );
+    lsmash_destroy_codec_specific_data( h264_specific );
 
-    MP4_FAIL_IF_ERR( lsmash_summary_add_exdata( (lsmash_summary_t *)p_mp4->summary, avc_config, avc_config_size ),
-                     "failed to append AVC specific info.\n" );
-
-    free( avc_config );
-
-    p_mp4->i_sample_entry = lsmash_add_sample_entry( p_mp4->p_root, p_mp4->i_track, ISOM_CODEC_TYPE_AVC1_VIDEO, p_mp4->summary );
+    p_mp4->i_sample_entry = lsmash_add_sample_entry( p_mp4->p_root, p_mp4->i_track, p_mp4->summary );
     MP4_FAIL_IF_ERR( !p_mp4->i_sample_entry,
                      "failed to add sample entry for video.\n" );
 
     if( p_mp4->major_brand != ISOM_BRAND_TYPE_QT )
-        MP4_FAIL_IF_ERR( lsmash_add_btrt( p_mp4->p_root, p_mp4->i_track, p_mp4->i_sample_entry ),
-                         "failed to add btrt.\n" );
+    {
+        lsmash_codec_specific_t *bitrate = lsmash_create_codec_specific_data( LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_VIDEO_H264_BITRATE,
+                                                                              LSMASH_CODEC_SPECIFIC_FORMAT_STRUCTURED );
+        if( bitrate )
+            lsmash_add_codec_specific_data( (lsmash_summary_t *)p_mp4->summary, bitrate );
+        lsmash_destroy_codec_specific_data( bitrate );
+    }
 
     /* SEI */
     p_mp4->p_sei_buffer = malloc( sei_size );

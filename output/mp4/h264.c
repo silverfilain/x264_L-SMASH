@@ -57,11 +57,21 @@ typedef enum
 
 void lsmash_destroy_h264_parameter_sets( lsmash_h264_specific_parameters_t *param )
 {
-    if( !param )
+    if( !param || !param->parameter_sets )
         return;
-    lsmash_remove_list( (lsmash_entry_list_t *)param->sequenceParameterSets,   isom_remove_avcC_ps );
-    lsmash_remove_list( (lsmash_entry_list_t *)param->pictureParameterSets,    isom_remove_avcC_ps );
-    lsmash_remove_list( (lsmash_entry_list_t *)param->sequenceParameterSetExt, isom_remove_avcC_ps );
+    lsmash_remove_entries( param->parameter_sets->sps_list,    isom_remove_avcC_ps );
+    lsmash_remove_entries( param->parameter_sets->pps_list,    isom_remove_avcC_ps );
+    lsmash_remove_entries( param->parameter_sets->spsext_list, isom_remove_avcC_ps );
+    free( param->parameter_sets );
+    param->parameter_sets = NULL;
+}
+
+void h264_destruct_specific_data( void *data )
+{
+    if( !data )
+        return;
+    lsmash_destroy_h264_parameter_sets( data );
+    free( data );
 }
 
 void h264_cleanup_parser( h264_info_t *info )
@@ -1383,16 +1393,16 @@ static void h264_bs_put_parameter_sets( lsmash_bs_t *bs, lsmash_entry_list_t *ps
 
 uint8_t *lsmash_create_h264_specific_info( lsmash_h264_specific_parameters_t *param, uint32_t *data_length )
 {
-    if( !param || !data_length )
+    if( !param || !param->parameter_sets || !data_length )
         return NULL;
     if( param->lengthSizeMinusOne != 0 && param->lengthSizeMinusOne != 1 && param->lengthSizeMinusOne != 3 )
         return NULL;
     static const uint32_t max_ps_count[3] = { 31, 255, 255 };
     lsmash_entry_list_t *ps_list[3] =
         {
-            (lsmash_entry_list_t *)param->sequenceParameterSets,    /* SPS */
-            (lsmash_entry_list_t *)param->pictureParameterSets,     /* PPS */
-            (lsmash_entry_list_t *)param->sequenceParameterSetExt   /* SPSExt */
+            param->parameter_sets->sps_list,        /* SPS */
+            param->parameter_sets->pps_list,        /* PPS */
+            param->parameter_sets->spsext_list      /* SPSExt */
         };
     /* SPS and PPS are mandatory. */
     if( !ps_list[0] || !ps_list[0]->head || ps_list[0]->entry_count == 0
@@ -1513,9 +1523,11 @@ static inline int h264_get_ps_id( uint8_t *ps_ebsp, uint32_t ps_ebsp_length,
 static inline lsmash_entry_list_t *h264_get_parameter_set_list( lsmash_h264_specific_parameters_t *param,
                                                                 lsmash_h264_parameter_set_type ps_type )
 {
-    return ps_type == H264_PARAMETER_SET_TYPE_SPS    ? (lsmash_entry_list_t *)param->sequenceParameterSets
-         : ps_type == H264_PARAMETER_SET_TYPE_PPS    ? (lsmash_entry_list_t *)param->pictureParameterSets
-         : ps_type == H264_PARAMETER_SET_TYPE_SPSEXT ? (lsmash_entry_list_t *)param->sequenceParameterSetExt
+    if( !param->parameter_sets )
+        return NULL;
+    return ps_type == H264_PARAMETER_SET_TYPE_SPS    ? param->parameter_sets->sps_list
+         : ps_type == H264_PARAMETER_SET_TYPE_PPS    ? param->parameter_sets->pps_list
+         : ps_type == H264_PARAMETER_SET_TYPE_SPSEXT ? param->parameter_sets->spsext_list
          : NULL;
 }
 
@@ -1620,8 +1632,8 @@ int lsmash_check_h264_parameter_set_appendable( lsmash_h264_specific_parameters_
         return 0;
     /* Check whether the same parameter set already exsits or not. */
     lsmash_entry_list_t *ps_list = h264_get_parameter_set_list( param, ps_type );
-    if( !ps_list )
-        return 1;   /* No parameter set list */
+    if( !ps_list || !ps_list->head )
+        return 1;   /* No parameter set */
     switch( h264_check_same_ps_existence( ps_list, ps_data, ps_length ) )
     {
         case 0  : break;
@@ -1713,51 +1725,32 @@ int lsmash_append_h264_parameter_set( lsmash_h264_specific_parameters_t *param,
 {
     if( !param || !ps_data || ps_length < 2 )
         return -1;
-    lsmash_entry_list_t *ps_list = h264_get_parameter_set_list( param, ps_type );
-    switch( ps_type )
+    if( !param->parameter_sets )
     {
-        case H264_PARAMETER_SET_TYPE_SPS :
-            if( !ps_list )
-            {
-                /* Crate a SPS list. */
-                param->sequenceParameterSets = lsmash_create_entry_list();
-                if( !param->sequenceParameterSets )
-                    return -1;
-                ps_list = (lsmash_entry_list_t *)param->sequenceParameterSets;
-            }
-            break;
-        case H264_PARAMETER_SET_TYPE_PPS :
-            if( !ps_list )
-            {
-                /* Crate a PPS list. */
-                param->pictureParameterSets = lsmash_create_entry_list();
-                if( !param->pictureParameterSets )
-                    return -1;
-                ps_list = (lsmash_entry_list_t *)param->pictureParameterSets;
-            }
-            break;
-        case H264_PARAMETER_SET_TYPE_SPSEXT :
-            if( !ISOM_REQUIRES_AVCC_EXTENSION( param->AVCProfileIndication ) )
-                return 0;
-            if( !ps_list )
-            {
-                /* Crate a SPS extension list. */
-                param->sequenceParameterSetExt = lsmash_create_entry_list();
-                if( !param->sequenceParameterSetExt )
-                    return -1;
-                ps_list = (lsmash_entry_list_t *)param->sequenceParameterSetExt;
-            }
-            isom_avcC_ps_entry_t *ps = isom_create_ps_entry( ps_data, ps_length );
-            if( !ps )
-                return -1;
-            if( lsmash_add_entry( ps_list, ps ) )
-            {
-                isom_remove_avcC_ps( ps );
-                return -1;
-            }
-            return 0;
-        default :
+        param->parameter_sets = lsmash_malloc_zero( sizeof(lsmash_h264_parameter_sets_t) );
+        if( !param->parameter_sets )
             return -1;
+    }
+    lsmash_entry_list_t *ps_list = h264_get_parameter_set_list( param, ps_type );
+    if( !ps_list )
+        return -1;
+    if( ps_type != H264_PARAMETER_SET_TYPE_SPS
+     && ps_type != H264_PARAMETER_SET_TYPE_PPS
+     && ps_type != H264_PARAMETER_SET_TYPE_SPSEXT )
+        return -1;
+    if( ps_type == H264_PARAMETER_SET_TYPE_SPSEXT )
+    {
+        if( !ISOM_REQUIRES_AVCC_EXTENSION( param->AVCProfileIndication ) )
+            return 0;
+        isom_avcC_ps_entry_t *ps = isom_create_ps_entry( ps_data, ps_length );
+        if( !ps )
+            return -1;
+        if( lsmash_add_entry( ps_list, ps ) )
+        {
+            isom_remove_avcC_ps( ps );
+            return -1;
+        }
+        return 0;
     }
     /* Check if the same parameter set identifier already exists. */
     uint8_t ps_id;
@@ -1884,9 +1877,7 @@ static int h264_parse_succeeded( h264_info_t *info, lsmash_h264_specific_paramet
     {
         *param = info->avcC_param;
         /* Avoid freeing parameter sets. */
-        info->avcC_param.sequenceParameterSets   = NULL;
-        info->avcC_param.pictureParameterSets    = NULL;
-        info->avcC_param.sequenceParameterSetExt = NULL;
+        info->avcC_param.parameter_sets = NULL;
         ret = 0;
     }
     else
@@ -2045,4 +2036,202 @@ int lsmash_setup_h264_specific_parameters_from_access_unit( lsmash_h264_specific
             return h264_parse_succeeded( info, param );
         consecutive_zero_byte_count = 0;
     }
+}
+
+static int isom_get_avcC_ps( lsmash_bs_t *bs, lsmash_entry_list_t *list, uint8_t entry_count )
+{
+    for( uint8_t i = 0; i < entry_count; i++ )
+    {
+        isom_avcC_ps_entry_t *data = malloc( sizeof(isom_avcC_ps_entry_t) );
+        if( !data )
+            return -1;
+        if( lsmash_add_entry( list, data ) )
+        {
+            free( data );
+            return -1;
+        }
+        data->parameterSetLength  = lsmash_bs_get_be16( bs );
+        data->parameterSetNALUnit = lsmash_bs_get_bytes( bs, data->parameterSetLength );
+        if( !data->parameterSetNALUnit )
+        {
+            lsmash_remove_entries( list, isom_remove_avcC_ps );
+            return -1;
+        }
+    }
+    return 0;
+}
+
+int h264_construct_specific_parameters( lsmash_codec_specific_t *dst, lsmash_codec_specific_t *src )
+{
+    assert( dst && dst->data.structured && src && src->data.unstructured );
+    if( src->size < ISOM_BASEBOX_COMMON_SIZE + 7 )
+        return -1;
+    lsmash_h264_specific_parameters_t *param = (lsmash_h264_specific_parameters_t *)dst->data.structured;
+    uint8_t *data = src->data.unstructured;
+    uint64_t size = (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3];
+    data += ISOM_BASEBOX_COMMON_SIZE;
+    if( size == 1 )
+    {
+        size = ((uint64_t)data[0] << 56) | ((uint64_t)data[1] << 48) | ((uint64_t)data[2] << 40) | ((uint64_t)data[3] << 32)
+             | ((uint64_t)data[4] << 24) | ((uint64_t)data[5] << 16) | ((uint64_t)data[6] <<  8) |  (uint64_t)data[7];
+        data += 8;
+    }
+    if( size != src->size )
+        return -1;
+    if( !param->parameter_sets )
+    {
+        param->parameter_sets = lsmash_malloc_zero( sizeof(lsmash_h264_parameter_sets_t) );
+        if( !param->parameter_sets )
+            return -1;
+    }
+    lsmash_bs_t *bs = lsmash_bs_create( NULL );
+    if( !bs )
+        return -1;
+    if( lsmash_bs_import_data( bs, data, src->size - (src->data.unstructured - data) ) )
+        goto fail;
+    if( lsmash_bs_get_byte( bs ) != 1 )
+        goto fail;  /* We don't support configurationVersion other than 1. */
+    param->AVCProfileIndication  = lsmash_bs_get_byte( bs );
+    param->profile_compatibility = lsmash_bs_get_byte( bs );
+    param->AVCLevelIndication    = lsmash_bs_get_byte( bs );
+    param->lengthSizeMinusOne    = lsmash_bs_get_byte( bs ) & 0x03;
+    uint8_t numOfSequenceParameterSets = lsmash_bs_get_byte( bs ) & 0x1F;
+    if( numOfSequenceParameterSets
+     && isom_get_avcC_ps( bs, param->parameter_sets->sps_list, numOfSequenceParameterSets ) )
+        goto fail;
+    uint8_t numOfPictureParameterSets = lsmash_bs_get_byte( bs );
+    if( numOfPictureParameterSets
+     && isom_get_avcC_ps( bs, param->parameter_sets->pps_list, numOfPictureParameterSets ) )
+        goto fail;
+    if( ISOM_REQUIRES_AVCC_EXTENSION( param->AVCProfileIndication ) )
+    {
+        param->chroma_format           = lsmash_bs_get_byte( bs ) & 0x03;
+        param->bit_depth_luma_minus8   = lsmash_bs_get_byte( bs ) & 0x07;
+        param->bit_depth_chroma_minus8 = lsmash_bs_get_byte( bs ) & 0x07;
+        uint8_t numOfSequenceParameterSetExt = lsmash_bs_get_byte( bs );
+        if( numOfSequenceParameterSetExt
+         && isom_get_avcC_ps( bs, param->parameter_sets->spsext_list, numOfSequenceParameterSetExt ) )
+            goto fail;
+    }
+    lsmash_bs_cleanup( bs );
+    return 0;
+fail:
+    lsmash_bs_cleanup( bs );
+    return -1;
+}
+
+int h264_print_codec_specific( FILE *fp, lsmash_root_t *root, isom_box_t *box, int level )
+{
+    assert( fp && root && box );
+    int indent = level;
+    lsmash_ifprintf( fp, indent++, "[%s: AVC Configuration Box]\n", isom_4cc2str( box->type ) );
+    lsmash_ifprintf( fp, indent, "position = %"PRIu64"\n", box->pos );
+    lsmash_ifprintf( fp, indent, "size = %"PRIu64"\n", box->size );
+    isom_extension_box_t *ext = (isom_extension_box_t *)box;
+    assert( ext->format == EXTENSION_FORMAT_BINARY );
+    uint8_t *data = ext->form.binary;
+    uint32_t offset = isom_skip_box_common( &data );
+    lsmash_bs_t *bs = lsmash_bs_create( NULL );
+    if( !bs )
+        return -1;
+    if( lsmash_bs_import_data( bs, data, ext->size - offset ) )
+    {
+        lsmash_bs_cleanup( bs );
+        return -1;
+    }
+    lsmash_ifprintf( fp, indent, "configurationVersion = %"PRIu8"\n", lsmash_bs_get_byte( bs ) );
+    uint8_t AVCProfileIndication = lsmash_bs_get_byte( bs );
+    lsmash_ifprintf( fp, indent, "AVCProfileIndication = %"PRIu8"\n", AVCProfileIndication );
+    lsmash_ifprintf( fp, indent, "profile_compatibility = 0x%02"PRIx8"\n", lsmash_bs_get_byte( bs ) );
+    lsmash_ifprintf( fp, indent, "AVCLevelIndication = %"PRIu8"\n", lsmash_bs_get_byte( bs ) );
+    uint8_t temp8 = lsmash_bs_get_byte( bs );
+    lsmash_ifprintf( fp, indent, "reserved = 0x%02"PRIx8"\n", (temp8 >> 2) & 0x3F );
+    lsmash_ifprintf( fp, indent, "lengthSizeMinusOne = %"PRIu8"\n", temp8 & 0x03 );
+    temp8 = lsmash_bs_get_byte( bs );
+    lsmash_ifprintf( fp, indent, "reserved = 0x%02"PRIx8"\n", (temp8 >> 5) & 0x07 );
+    uint8_t numOfSequenceParameterSets = temp8 & 0x1f;
+    lsmash_ifprintf( fp, indent, "numOfSequenceParameterSets = %"PRIu8"\n", numOfSequenceParameterSets );
+    for( uint8_t i = 0; i < numOfSequenceParameterSets; i++ )
+    {
+        uint16_t parameterSetLength = lsmash_bs_get_be16( bs );
+        lsmash_bs_get_bytes( bs, parameterSetLength );
+    }
+    uint8_t numOfPictureParameterSets = lsmash_bs_get_byte( bs );
+    lsmash_ifprintf( fp, indent, "numOfPictureParameterSets = %"PRIu8"\n", numOfPictureParameterSets );
+    for( uint8_t i = 0; i < numOfPictureParameterSets; i++ )
+    {
+        uint16_t parameterSetLength = lsmash_bs_get_be16( bs );
+        lsmash_bs_get_bytes( bs, parameterSetLength );
+    }
+    /* Note: there are too many files, in the world, that don't contain the following fields. */
+    if( ISOM_REQUIRES_AVCC_EXTENSION( AVCProfileIndication )
+     && (lsmash_bs_get_pos( bs ) < (ext->size - offset)) )
+    {
+        temp8 = lsmash_bs_get_byte( bs );
+        lsmash_ifprintf( fp, indent, "reserved = 0x%02"PRIx8"\n", (temp8 >> 2) & 0x3F );
+        lsmash_ifprintf( fp, indent, "chroma_format = %"PRIu8"\n", temp8 & 0x03 );
+        temp8 = lsmash_bs_get_byte( bs );
+        lsmash_ifprintf( fp, indent, "reserved = 0x%02"PRIx8"\n", (temp8 >> 3) & 0x1F );
+        lsmash_ifprintf( fp, indent, "bit_depth_luma_minus8 = %"PRIu8"\n", temp8 & 0x7 );
+        temp8 = lsmash_bs_get_byte( bs );
+        lsmash_ifprintf( fp, indent, "reserved = 0x%02"PRIx8"\n", (temp8 >> 3) & 0x1F );
+        lsmash_ifprintf( fp, indent, "bit_depth_chroma_minus8 = %"PRIu8"\n", temp8 & 0x7 );
+        lsmash_ifprintf( fp, indent, "numOfSequenceParameterSetExt = %"PRIu8"\n", lsmash_bs_get_byte( bs ) );
+    }
+    lsmash_bs_cleanup( bs );
+    return 0;
+}
+
+int h264_copy_codec_specific( lsmash_codec_specific_t *dst, lsmash_codec_specific_t *src )
+{
+    assert( src && src->format == LSMASH_CODEC_SPECIFIC_FORMAT_STRUCTURED && src->data.structured );
+    assert( dst && dst->format == LSMASH_CODEC_SPECIFIC_FORMAT_STRUCTURED && dst->data.structured );
+    lsmash_h264_specific_parameters_t *src_data = (lsmash_h264_specific_parameters_t *)src->data.structured;
+    lsmash_h264_specific_parameters_t *dst_data = (lsmash_h264_specific_parameters_t *)dst->data.structured;
+    lsmash_destroy_h264_parameter_sets( dst_data );
+    *dst_data = *src_data;
+    if( !src_data->parameter_sets )
+        return 0;
+    dst_data->parameter_sets = lsmash_malloc_zero( sizeof(lsmash_h264_parameter_sets_t) );
+    if( !dst_data->parameter_sets )
+        return -1;
+    for( int i = 0; i < 3; i++ )
+    {
+        lsmash_entry_list_t *src_ps_list = h264_get_parameter_set_list( src_data, i );
+        lsmash_entry_list_t *dst_ps_list = h264_get_parameter_set_list( dst_data, i );
+        assert( src_ps_list && dst_ps_list );
+        for( lsmash_entry_t *entry = src_ps_list->head; entry; entry = entry->next )
+        {
+            isom_avcC_ps_entry_t *src_ps = (isom_avcC_ps_entry_t *)entry->data;
+            if( !src_ps )
+                continue;
+            isom_avcC_ps_entry_t *dst_ps = isom_create_ps_entry( src_ps->parameterSetNALUnit, src_ps->parameterSetLength );
+            if( !dst_ps )
+            {
+                lsmash_destroy_h264_parameter_sets( dst_data );
+                return -1;
+            }
+            if( lsmash_add_entry( dst_ps_list, dst_ps ) )
+            {
+                lsmash_destroy_h264_parameter_sets( dst_data );
+                isom_remove_avcC_ps( dst_ps );
+                return -1;
+            }
+        }
+    }
+    return 0;
+}
+
+int h264_print_bitrate( FILE *fp, lsmash_root_t *root, isom_box_t *box, int level )
+{
+    assert( fp && root && box );
+    int indent = level;
+    lsmash_ifprintf( fp, indent++, "[%s: MPEG-4 Bit Rate Box]\n", isom_4cc2str( box->type ) );
+    lsmash_ifprintf( fp, indent, "position = %"PRIu64"\n", box->pos );
+    lsmash_ifprintf( fp, indent, "size = %"PRIu64"\n", box->size );
+    isom_btrt_t *btrt = (isom_btrt_t *)box;
+    lsmash_ifprintf( fp, indent, "bufferSizeDB = %"PRIu32"\n", btrt->bufferSizeDB );
+    lsmash_ifprintf( fp, indent, "maxBitrate = %"PRIu32"\n", btrt->maxBitrate );
+    lsmash_ifprintf( fp, indent, "avgBitrate = %"PRIu32"\n", btrt->avgBitrate );
+    return 0;
 }

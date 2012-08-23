@@ -27,6 +27,7 @@
 #include "matroska_ebml.h"
 #if HAVE_AUDIO
 #include "audio/encoders.h"
+#include "mp4/lsmash.h"
 #endif
 
 #if HAVE_AUDIO
@@ -226,8 +227,58 @@ static int set_audio_track( mkv_hnd_t *p_mkv, x264_param_t *p_param )
         return -1;
     }
 
-    a->samplerate            = info->samplerate;
-    a->channels              = info->channels;
+    if( codec_private_required( atrack->codec_id ) )
+    {
+        if( !info->extradata_size || !info->extradata )
+        {
+            x264_cli_log( "mkv", X264_LOG_ERROR, "no extradata found!\n" );
+            return -1;
+        }
+
+        uint8_t *extradata;
+        uint32_t extradata_size;
+        if( info->extradata_type == EXTRADATA_TYPE_LIBAVCODEC )
+        {
+            extradata = info->extradata;
+            extradata_size = info->extradata_size;
+        }
+        else if( info->extradata_type == EXTRADATA_TYPE_LSMASH && !strcmp( atrack->codec_id, MK_AUDIO_TAG_AAC ) )
+        {
+            lsmash_codec_specific_t *orig = NULL;
+            uint32_t num_extensions = info->extradata_size / sizeof(lsmash_codec_specific_t *);
+            for( uint32_t i = 0; i < num_extensions; i++ )
+            {
+                orig = ((lsmash_codec_specific_t **)info->extradata)[i];
+                if( orig && orig->type == LSMASH_CODEC_SPECIFIC_DATA_TYPE_MP4SYS_DECODER_CONFIG )
+                    break;
+            }
+            FAIL_IF_ERR( !orig, "mkv", "no extradata for AAC found!\n" );
+            assert( orig->format == LSMASH_CODEC_SPECIFIC_FORMAT_UNSTRUCTURED );
+
+            lsmash_codec_specific_t *conv = lsmash_convert_codec_specific_format( orig, LSMASH_CODEC_SPECIFIC_FORMAT_STRUCTURED );
+            FAIL_IF_ERR( !conv, "mkv", "failed to convert format of AAC specific info.\n" );
+
+            lsmash_mp4sys_decoder_parameters_t *param = (lsmash_mp4sys_decoder_parameters_t *)conv->data.structured;
+            assert( param->objectTypeIndication == MP4SYS_OBJECT_TYPE_Audio_ISO_14496_3 );
+
+            int err = lsmash_get_mp4sys_decoder_specific_info( param, &extradata, &extradata_size );
+            lsmash_destroy_codec_specific_data( conv );
+            FAIL_IF_ERR( err, "mkv", "failed to get AAC specific info.\n" );
+        }
+        else
+        {
+            x264_cli_log( "mkv", X264_LOG_ERROR, "unknown extradata type.\n" );
+            return -1;
+        }
+        atrack->codec_private_size = extradata_size;
+        atrack->codec_private = malloc( extradata_size );
+        if( !atrack->codec_private )
+            return -1;
+        memcpy( atrack->codec_private, extradata, extradata_size );
+    }
+
+    a->samplerate = info->samplerate;
+    a->channels   = info->channels;
 
     if( !strcmp( atrack->codec_id, MK_AUDIO_TAG_AAC ) )
     {
@@ -251,20 +302,6 @@ static int set_audio_track( mkv_hnd_t *p_mkv, x264_param_t *p_param )
     }
 
     atrack->default_frame_duration = x264_from_timebase( info->framelen, info->timebase, 1000000000 );
-
-    if( codec_private_required( atrack->codec_id ) )
-    {
-        if( !info->extradata_size || !info->extradata )
-        {
-            x264_cli_log( "mkv", X264_LOG_ERROR, "no extradata found!\n" );
-            return -1;
-        }
-        atrack->codec_private_size = info->extradata_size;
-        atrack->codec_private = malloc( info->extradata_size );
-        if( !atrack->codec_private )
-            return -1;
-        memcpy( atrack->codec_private, info->extradata, info->extradata_size );
-    }
 
     return 0;
 }
