@@ -186,6 +186,25 @@ static int codec_private_required( const char *codec )
     return 0;
 }
 
+static lsmash_codec_specific_t *get_structured_codec_specific_data( audio_info_t *info, const char *codec_name, lsmash_codec_specific_data_type type )
+{
+    lsmash_codec_specific_t *orig = NULL;
+    uint32_t num_extensions = info->extradata_size / sizeof(lsmash_codec_specific_t *);
+    for( uint32_t i = 0; i < num_extensions; i++ )
+    {
+        orig = ((lsmash_codec_specific_t **)info->extradata)[i];
+        if( orig && orig->type == type )
+            break;
+    }
+    RETURN_IF_ERR( !orig, "mkv", NULL, "no extradata for %s found!\n", codec_name );
+    assert( orig->format == LSMASH_CODEC_SPECIFIC_FORMAT_UNSTRUCTURED );
+
+    lsmash_codec_specific_t *conv = lsmash_convert_codec_specific_format( orig, LSMASH_CODEC_SPECIFIC_FORMAT_STRUCTURED );
+    RETURN_IF_ERR( !conv, "mkv", NULL, "failed to convert format of %s specific info.\n", codec_name );
+
+    return conv;
+}
+
 static int set_audio_track( mkv_hnd_t *p_mkv, x264_param_t *p_param )
 {
     mkv_audio_hnd_t *a_mkv = p_mkv->a_mkv;
@@ -244,25 +263,15 @@ static int set_audio_track( mkv_hnd_t *p_mkv, x264_param_t *p_param )
         }
         else if( info->extradata_type == EXTRADATA_TYPE_LSMASH && !strcmp( atrack->codec_id, MK_AUDIO_TAG_AAC ) )
         {
-            lsmash_codec_specific_t *orig = NULL;
-            uint32_t num_extensions = info->extradata_size / sizeof(lsmash_codec_specific_t *);
-            for( uint32_t i = 0; i < num_extensions; i++ )
-            {
-                orig = ((lsmash_codec_specific_t **)info->extradata)[i];
-                if( orig && orig->type == LSMASH_CODEC_SPECIFIC_DATA_TYPE_MP4SYS_DECODER_CONFIG )
-                    break;
-            }
-            FAIL_IF_ERR( !orig, "mkv", "no extradata for AAC found!\n" );
-            assert( orig->format == LSMASH_CODEC_SPECIFIC_FORMAT_UNSTRUCTURED );
+            lsmash_codec_specific_t *specific = get_structured_codec_specific_data( info, "AAC", LSMASH_CODEC_SPECIFIC_DATA_TYPE_MP4SYS_DECODER_CONFIG );
+            if( !specific )
+                return -1;
 
-            lsmash_codec_specific_t *conv = lsmash_convert_codec_specific_format( orig, LSMASH_CODEC_SPECIFIC_FORMAT_STRUCTURED );
-            FAIL_IF_ERR( !conv, "mkv", "failed to convert format of AAC specific info.\n" );
-
-            lsmash_mp4sys_decoder_parameters_t *param = (lsmash_mp4sys_decoder_parameters_t *)conv->data.structured;
+            lsmash_mp4sys_decoder_parameters_t *param = (lsmash_mp4sys_decoder_parameters_t *)specific->data.structured;
             assert( param->objectTypeIndication == MP4SYS_OBJECT_TYPE_Audio_ISO_14496_3 );
 
             int err = lsmash_get_mp4sys_decoder_specific_info( param, &extradata, &extradata_size );
-            lsmash_destroy_codec_specific_data( conv );
+            lsmash_destroy_codec_specific_data( specific );
             FAIL_IF_ERR( err, "mkv", "failed to get AAC specific info.\n" );
         }
         else
@@ -280,6 +289,7 @@ static int set_audio_track( mkv_hnd_t *p_mkv, x264_param_t *p_param )
     a->samplerate = info->samplerate;
     a->channels   = info->channels;
 
+    /* Set up OutputSamplingFrequency. */
     if( !strcmp( atrack->codec_id, MK_AUDIO_TAG_AAC ) )
     {
         audio_aac_info_t *aacinfo = info->opaque;
@@ -289,10 +299,44 @@ static int set_audio_track( mkv_hnd_t *p_mkv, x264_param_t *p_param )
             a->samplerate       /= 2;
         }
     }
+    else if( !strcmp( atrack->codec_id, MK_AUDIO_TAG_DTS ) )
+    {
+        lsmash_codec_specific_t          *specific = NULL;
+        lsmash_dts_specific_parameters_t *param    = NULL;
+
+        if( info->extradata_type == EXTRADATA_TYPE_LSMASH )
+        {
+            /* from L-SMASH importer */
+            specific = get_structured_codec_specific_data( info, "DTS", LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_AUDIO_DTS );
+            if( !specific )
+                return -1;
+
+            param = (lsmash_dts_specific_parameters_t *)specific->data.structured;
+        }
+        else if( info->extradata_type == EXTRADATA_TYPE_LIBAVCODEC && info->extradata && info->extradata_size > 0 )
+        {
+            /* from lavf input
+             * Create DTSSpecificBox from DTS audio frame by L-SMASH's DTS parser. */
+            specific = lsmash_create_codec_specific_data( LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_AUDIO_DTS,
+                                                          LSMASH_CODEC_SPECIFIC_FORMAT_STRUCTURED );
+            FAIL_IF_ERR( !specific, "mkv", "failed to allocate memory for DTS specific info.\n" );
+
+            param = (lsmash_dts_specific_parameters_t *)specific->data.structured;
+            if( lsmash_setup_dts_specific_parameters_from_frame( param, info->extradata, info->extradata_size ) )
+            {
+                lsmash_destroy_codec_specific_data( specific );
+                x264_cli_log( "mkv", X264_LOG_ERROR, "failed to parse DTS audio frame.\n" );
+                return -1;
+            }
+        }
+
+        a->output_samplerate = param->DTSSamplingFrequency;
+        lsmash_destroy_codec_specific_data( specific );
+    }
 
     if( !strcmp( atrack->codec_id, MK_AUDIO_TAG_PCM_LE ) )
     {
-        a->bit_depth         = info->chansize * 8;
+        a->bit_depth = info->chansize * 8;
 
         // this is slightly inaccurate for some fps and samplerate conbinations
         if( !p_param->b_vfr_input )
