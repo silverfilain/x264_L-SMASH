@@ -189,6 +189,49 @@ uint32_t isom_skip_box_common( uint8_t **p_data )
     return data - orig;
 }
 
+void isom_bs_put_basebox_common( lsmash_bs_t *bs, isom_box_t *box )
+{
+    if( box->size > UINT32_MAX )
+    {
+        lsmash_bs_put_be32( bs, 1 );
+        lsmash_bs_put_be32( bs, box->type );
+        lsmash_bs_put_be64( bs, box->size );    /* largesize */
+    }
+    else
+    {
+        lsmash_bs_put_be32( bs, (uint32_t)box->size );
+        lsmash_bs_put_be32( bs, box->type );
+    }
+    if( box->type == ISOM_BOX_TYPE_UUID )
+        lsmash_bs_put_bytes( bs, 16, box->usertype );
+}
+
+void isom_bs_put_fullbox_common( lsmash_bs_t *bs, isom_box_t *box )
+{
+    isom_bs_put_basebox_common( bs, box );
+    lsmash_bs_put_byte( bs, box->version );
+    lsmash_bs_put_be24( bs, box->flags );
+}
+
+void isom_bs_put_box_common( lsmash_bs_t *bs, void *box )
+{
+    if( !box )
+    {
+        bs->error = 1;
+        return;
+    }
+    isom_box_t *parent = ((isom_box_t *)box)->parent;
+    if( parent && parent->type == ISOM_BOX_TYPE_STSD )
+    {
+        isom_bs_put_basebox_common( bs, (isom_box_t *)box );
+        return;
+    }
+    if( isom_is_fullbox( box ) )
+        isom_bs_put_fullbox_common( bs, (isom_box_t *)box );
+    else
+        isom_bs_put_basebox_common( bs, (isom_box_t *)box );
+}
+
 isom_trak_entry_t *isom_get_trak( lsmash_root_t *root, uint32_t track_ID )
 {
     if( !track_ID || !root || !root->moov || !root->moov->trak_list )
@@ -271,7 +314,7 @@ isom_tref_type_t *isom_add_track_reference_type( isom_tref_t *tref, isom_track_r
 {
     if( !tref || !tref->ref_list )
         return NULL;
-    isom_tref_type_t *ref = malloc( sizeof(isom_tref_type_t) );
+    isom_tref_type_t *ref = lsmash_malloc_zero( sizeof(isom_tref_type_t) );
     if( !ref )
         return NULL;
     isom_init_basebox_common( (isom_box_t *)ref, (isom_box_t *)tref, type );
@@ -4907,17 +4950,7 @@ void lsmash_delete_track( lsmash_root_t *root, uint32_t track_ID )
             return;
         if( trak->tkhd->track_ID == track_ID )
         {
-            lsmash_entry_t *next = entry->next;
-            lsmash_entry_t *prev = entry->prev;
-            isom_remove_trak( trak );
-            free( entry );
-            entry = next;
-            if( entry )
-            {
-                if( prev )
-                    prev->next = entry;
-                entry->prev = prev;
-            }
+            lsmash_remove_entry_direct( root->moov->trak_list, entry, isom_remove_trak );
             return;
         }
     }

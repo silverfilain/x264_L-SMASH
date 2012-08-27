@@ -193,7 +193,22 @@ static int set_channel_layout( mp4_audio_hnd_t *p_audio )
     temp.channelBitmap    = 0;
 
     /* Lavcodec always returns SMPTE/ITU-R channel order, but its copying doesn't do reordering. */
-    if( !p_audio->b_copy )
+    if( p_audio->codec_type == ISOM_CODEC_TYPE_ALAC_AUDIO && p_audio->info->channels <= 8 )
+    {
+        static const lsmash_channel_layout_tag channel_table[] = {
+            QT_CHANNEL_LAYOUT_USE_CHANNEL_BITMAP,
+            QT_CHANNEL_LAYOUT_ALAC_MONO,
+            QT_CHANNEL_LAYOUT_ALAC_STEREO,
+            QT_CHANNEL_LAYOUT_ALAC_3_0,
+            QT_CHANNEL_LAYOUT_ALAC_4_0,
+            QT_CHANNEL_LAYOUT_ALAC_5_0,
+            QT_CHANNEL_LAYOUT_ALAC_5_1,
+            QT_CHANNEL_LAYOUT_ALAC_6_1,
+            QT_CHANNEL_LAYOUT_ALAC_7_1
+        };
+        temp.channelLayoutTag = channel_table[p_audio->info->channels];
+    }
+    else if( !p_audio->b_copy )
     {
         temp.channelLayoutTag = QT_CHANNEL_LAYOUT_USE_CHANNEL_BITMAP;
         temp.channelBitmap    = p_audio->info->chanlayout;
@@ -423,7 +438,7 @@ static int alac_init( mp4_audio_hnd_t *p_audio )
     p_audio->codec_type = ISOM_CODEC_TYPE_ALAC_AUDIO;
     if( p_audio->info->extradata && p_audio->info->extradata_size > 0 && p_audio->info->extradata_type == EXTRADATA_TYPE_LIBAVCODEC )
     {
-        lsmash_codec_specific_t *specific = lsmash_create_codec_specific_data( LSMASH_CODEC_SPECIFIC_DATA_TYPE_UNKNOWN,
+        lsmash_codec_specific_t *specific = lsmash_create_codec_specific_data( LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_AUDIO_ALAC,
                                                                                LSMASH_CODEC_SPECIFIC_FORMAT_UNSTRUCTURED );
         if( !specific )
         {
@@ -641,6 +656,11 @@ static int audio_init( hnd_t handle, cli_output_opt_t *opt, hnd_t filters, char 
                 if( aac_init( p_audio ) )
                     goto error;
             }
+            else if( !strcmp( info->codec_name, "alac" ) )
+            {
+                if( alac_init( p_audio ) )
+                    goto error;
+            }
             else if( p_audio->b_copy )
                 break;      /* We haven't supported LPCM copying yet. */
             else
@@ -741,7 +761,7 @@ static int set_param_audio( mp4_hnd_t* p_mp4, uint64_t i_media_timescale, lsmash
     MP4_FAIL_IF_ERR( !p_audio->i_track, "failed to create a audio track.\n" );
 
 #if HAVE_AUDIO
-    if( p_mp4->major_brand == ISOM_BRAND_TYPE_QT )
+    if( p_mp4->major_brand == ISOM_BRAND_TYPE_QT || p_audio->codec_type == ISOM_CODEC_TYPE_ALAC_AUDIO )
         MP4_FAIL_IF_ERR( set_channel_layout( p_audio ), "failed to set up channel layout.\n" );
     p_audio->summary->sample_type      = p_audio->codec_type;
     p_audio->summary->max_au_length    = ( 1 << 13 ) - 1;
