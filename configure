@@ -263,6 +263,7 @@ shared="no"
 static="no"
 avs="auto"
 lavf="auto"
+lavr="auto"
 ffms="auto"
 gpac="auto"
 gpl="yes"
@@ -874,6 +875,28 @@ if [ "$lavf" = "auto" ] ; then
     fi
 fi
 
+if [ "$lavr" = "auto" ] ; then
+    lavr="no"
+    if ${cross_prefix}pkg-config --exists libavresample 2>/dev/null; then
+        LAVR_LIBS="$LAVR_LIBS $(${cross_prefix}pkg-config --libs libavresample)"
+        LAVR_CFLAGS="LAVR_CFLAGS $(${cross_prefix}pkg-config --cflags libavresample)"
+    fi
+    if [ -z "$LAVR_LIBS" -a -z "$LAVR_CFLAGS" ]; then
+        LAVR_LIBS="-lavresample"
+        for lib in -lpostproc -lavformat -lavcodec -lavcore -lswscale -lavutil -lm -lz -lbz2 $libpthread -lavifil32; do
+            cc_check "" $lib && LAVR_LIBS="$LAVR_LIBS $lib"
+        done
+    fi
+    if cc_check libavresample/avresample.h "$LAVR_CFLAGS $LAVR_LIBS" "avresample_open(0);" ; then
+        lavr="yes"
+        LAVF_LIBS="-lavresample $LAVF_LIBS"
+    fi
+    if [ "$lavr" = "yes" -a "$lavf" = "no" ]; then
+        echo "Warning: libavresample is not supported without libavformat/libavcodec support"
+        lavr="no"
+    fi
+fi
+
 if [ "$ffms" = "auto" ] ; then
     ffms_major="2"; ffms_minor="16"; ffms_micro="2"; ffms_bump="0"
     ffms="no"
@@ -981,7 +1004,7 @@ if [ "$audio" = "auto" ]; then
             audio_amrwb="no"
         fi
     fi
-    if [ "$audio_lavc" = "auto" -a "$lavf" = "yes" ]; then
+    if [ "$audio_lavc" = "auto" -a "$lavf" = "yes" -a "$lavr" = "yes" ]; then
         audio_lavc="yes"
         audio_encs="$audio_encs, lavc"
     else

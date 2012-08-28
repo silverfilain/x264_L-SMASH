@@ -2,6 +2,8 @@
 #include "filters/audio/internal.h"
 #undef DECLARE_ALIGNED
 #include "libavcodec/avcodec.h"
+#include "libavutil/opt.h"
+#include "libavresample/avresample.h"
 
 #include <assert.h>
 
@@ -15,9 +17,10 @@ typedef struct enc_lavc_t
     int          buf_size;
     int64_t      last_dts;
 
-    AVCodecContext     *ctx;
-    enum AVSampleFormat smpfmt;
-    AVFrame            *frame;
+    AVCodecContext         *ctx;
+    enum AVSampleFormat     smpfmt;
+    AVFrame                *frame;
+    AVAudioResampleContext *avr;
 } enc_lavc_t;
 
 static int is_encoder_available( const char *name, void **priv )
@@ -73,6 +76,29 @@ static const struct {
     { CODEC_ID_PCM_U8,    "pcm_u8",    MODE_IGNORED,      0 },
     { CODEC_ID_NONE,      NULL, },
 };
+
+static int get_linesize( int nb_channels, int nb_samples, enum AVSampleFormat sample_fmt )
+{
+    int linesize;
+    av_samples_get_buffer_size( &linesize, nb_channels, nb_samples, sample_fmt, 0 );
+    return linesize;
+}
+
+static int resample_audio( AVAudioResampleContext *avr, AVFrame *frame, audio_packet_t *pkt )
+{
+    int channels = av_get_channel_layout_nb_channels( frame->channel_layout );
+    int out_linesize = get_linesize( channels, frame->nb_samples, frame->format );
+    int in_linesize  = get_linesize( pkt->channels, pkt->samplecount, AV_SAMPLE_FMT_FLTP );
+    if( avresample_convert( avr, (void **)frame->data, out_linesize, frame->nb_samples,
+                                 (void **)pkt->samples, in_linesize, pkt->samplecount ) < 0 )
+        return -1;
+
+    int planes = av_sample_fmt_is_planar( frame->format ) ? channels : 1;
+    for( int i = 0; i < planes; i++ )
+        frame->linesize[i] = out_linesize;
+
+    return 0;
+}
 
 static int encode_audio( AVCodecContext *ctx, audio_packet_t *out, AVFrame *frame )
 {
@@ -197,6 +223,7 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
 
     RETURN_IF_ERR( avcodec_open2( h->ctx, codec, &avopts ), "lavc", NULL, "could not open the %s encoder\n", codec->name );
 
+    /* Set up frame buffer. */
     h->frame = avcodec_alloc_frame();
     if( !h->frame )
     {
@@ -204,16 +231,40 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
         goto error;
     }
 
+    if( h->ctx->frame_size == 0 )
+        /* frame_size == 0 indicates the actual frame size is based on the buf_size passed to avcodec_encode_audio2(). */
+        h->ctx->frame_size = 1; /* arbitrary */
+
     h->frame->format         = h->ctx->sample_fmt;
     h->frame->channel_layout = h->ctx->channel_layout;
-    h->frame->nb_samples     = h->ctx->frame_size > 0
-                             ? h->ctx->frame_size
-                             : 1; /* frame_size == 0 indicates the actual frame size is based on the buf_size passed to avcodec_encode_audio2().
-                                   * So, we can set an arbitrary value. */
+    h->frame->nb_samples     = h->ctx->frame_size;
 
     if( avcodec_default_get_buffer( h->ctx, h->frame ) < 0 )
     {
         x264_cli_log( "lavc", X264_LOG_ERROR, "could not get frame buffer\n" );
+        goto error;
+    }
+
+    /* Set up resampler. */
+    h->avr = avresample_alloc_context();
+    if( !h->avr )
+    {
+        x264_cli_log( "lavc", X264_LOG_ERROR, "avresample_alloc_context failed!\n" );
+        goto error;
+    }
+
+    av_opt_set_int( h->avr, "in_channel_layout",  h->info.chanlayout,       0 );
+    av_opt_set_int( h->avr, "in_sample_fmt",      AV_SAMPLE_FMT_FLTP,       0 );
+    av_opt_set_int( h->avr, "in_sample_rate",     h->info.samplerate,       0 );
+    av_opt_set_int( h->avr, "out_channel_layout", h->frame->channel_layout, 0 );
+    av_opt_set_int( h->avr, "out_sample_fmt",     h->frame->format,         0 );
+    av_opt_set_int( h->avr, "out_sample_rate",    h->frame->sample_rate,    0 );
+
+    av_opt_set_int( h->avr, "internal_sample_fmt", AV_SAMPLE_FMT_FLTP, 0 );
+
+    if( avresample_open( h->avr ) < 0 )
+    {
+        x264_cli_log( "lavc", X264_LOG_ERROR, "could not open resampler\n" );
         goto error;
     }
 
@@ -227,64 +278,11 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
     h->info.samplesize      = h->info.chansize * h->info.channels;
     h->info.framesize       = h->info.framelen * h->info.samplesize;
 
-    if( ISCODEC( ac3 ) )
-    {
-        audio_packet_t *pkt = x264_af_get_samples( h->filter_chain, 0, h->ctx->frame_size );
-        if( !pkt )
-        {
-            x264_cli_log( "lavc", X264_LOG_ERROR, "could not get a audio frame\n" );
-            goto error;
-        }
-
-        pkt->data = malloc( FF_MIN_BUFFER_SIZE * 3 / 2 );
-        if( !pkt->data )
-        {
-            x264_cli_log( "lavc", X264_LOG_ERROR, "malloc failed!\n" );
-            x264_af_free_packet( pkt );
-            goto error;
-        }
-
-        h->frame->nb_samples  = pkt->samplecount;
-        h->frame->linesize[0] = pkt->samplecount * h->info.samplesize;
-
-        uint8_t *interleaved = x264_af_interleave2( h->smpfmt, pkt->samples, pkt->channels, pkt->samplecount );
-        memcpy( h->frame->data[0], interleaved, h->frame->linesize[0] );
-
-        if( encode_audio( h->ctx, pkt, h->frame ) < 0 )
-        {
-            x264_cli_log( "lavc", X264_LOG_ERROR, "error encoding audio! (%s)\n", strerror( -pkt->size ) );
-            x264_af_free_packet( pkt );
-            goto error;
-        }
-
-        h->ctx->frame_number   = 0;
-        h->ctx->extradata_size = pkt->size;
-        h->ctx->extradata      = av_malloc( h->ctx->extradata_size );
-        RETURN_IF_ERR( !h->ctx->extradata, "lavc", NULL, "malloc failed!\n" );
-        memcpy( h->ctx->extradata, pkt->data, h->ctx->extradata_size );
-
-        x264_af_free_packet( pkt );
-    }
+    h->buf_size = av_samples_get_buffer_size( NULL, h->ctx->channels, h->ctx->frame_size, h->ctx->sample_fmt, 0 ) * 3 / 2;
+    h->last_dts = INVALID_DTS;
 
     h->info.extradata       = h->ctx->extradata;
     h->info.extradata_size  = h->ctx->extradata_size;
-
-#if 0
-    if( ISCODEC( alac ) )
-        h->buf_size = 2 * (8 + h->info.framesize);
-    else if( h->info.framelen == 0 )
-    {
-        /* framelen == 0 indicates the actual frame size is based on the buf_size passed to avcodec_encode_audio2(). */
-        h->info.framelen = 1;   /* arbitrary */
-        h->buf_size = h->info.framesize = h->info.framelen * h->info.samplesize;
-    }
-    else
-        h->buf_size = FF_MIN_BUFFER_SIZE * 3 / 2;
-#else
-    h->buf_size = av_samples_get_buffer_size( NULL, h->ctx->channels, h->ctx->frame_size, h->ctx->sample_fmt, 0 ) * 3 / 2;
-#endif
-
-    h->last_dts = INVALID_DTS;
 
     x264_cli_log( "audio", X264_LOG_INFO, "opened libavcodec's %s encoder (%s%.1f%s, %dbits, %dch, %dhz)\n", codec->name,
                   is_vbr ? "V" : "", brval, is_vbr ? "" : "kbps", h->info.chansize * 8, h->info.channels, h->info.samplerate );
@@ -298,6 +296,8 @@ error:
     }
     if( h->frame )
         av_free( h->frame );
+    if( h->avr )
+        avresample_free( &h->avr );
     free( h );
     return NULL;
 }
@@ -363,25 +363,10 @@ static audio_packet_t *get_next_packet( hnd_t handle )
 
         h->frame->nb_samples  = smp->samplecount;
 
-#if 0
-        if( av_sample_fmt_is_planar( h->frame->format ) )
+        if( resample_audio( h->avr, h->frame, smp ) < 0 )
         {
-            uint8_t *interleaved = x264_af_interleave2( h->smpfmt, smp->samples, smp->channels, smp->samplecount );
-            int linesize = smp->samplecount * h->info.chansize;
-
-            for( int i = 0; i < h->info.channels; i++ )
-            {
-                h->frame->linesize[i] = linesize;
-                memcpy( h->frame->data[i], interleaved + linesize * i, linesize );
-            }
-        }
-        else
-#endif
-        {
-            h->frame->linesize[0] = smp->samplecount * h->info.samplesize;
-
-            uint8_t *interleaved = x264_af_interleave2( h->smpfmt, smp->samples, smp->channels, smp->samplecount );
-            memcpy( h->frame->data[0], interleaved, h->frame->linesize[0] );
+            x264_cli_log( "lavc", X264_LOG_ERROR, "error resampling audio!\n" );
+            goto error;
         }
 
         if( encode_audio( h->ctx, out, h->frame ) < 0 )
@@ -455,6 +440,7 @@ static void lavc_close( hnd_t handle )
     avcodec_close( h->ctx );
     av_free( h->ctx );
     av_free( h->frame );
+    avresample_free( &h->avr );
     free( h );
 }
 
