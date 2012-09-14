@@ -1268,12 +1268,10 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
             }
         }
     }
-    if( p_mp4->b_brand_qt )
-    {
-        p_mp4->summary->color.primaries_index = p_param->vui.i_colorprim;
-        p_mp4->summary->color.transfer_index  = p_param->vui.i_transfer;
-        p_mp4->summary->color.matrix_index    = p_param->vui.i_colmatrix >= 0 ? p_param->vui.i_colmatrix : QT_MATRIX_INDEX_UNSPECIFIED;
-    }
+    p_mp4->summary->color.primaries_index = p_param->vui.i_colorprim;
+    p_mp4->summary->color.transfer_index  = p_param->vui.i_transfer;
+    p_mp4->summary->color.matrix_index    = p_param->vui.i_colmatrix >= 0 ? p_param->vui.i_colmatrix : ISOM_MATRIX_INDEX_UNSPECIFIED;
+    p_mp4->summary->color.full_range      = p_param->vui.b_fullrange >= 0 ? p_param->vui.b_fullrange : 0;
 
     /* Set video track parameters. */
     lsmash_track_parameters_t track_param;
