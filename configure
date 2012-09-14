@@ -875,8 +875,8 @@ fi
 if [ "$lavr" = "auto" ] ; then
     lavr="no"
     if ${cross_prefix}pkg-config --exists libavresample 2>/dev/null; then
-        LAVR_LIBS="$LAVR_LIBS $(${cross_prefix}pkg-config --libs libavresample)"
-        LAVR_CFLAGS="LAVR_CFLAGS $(${cross_prefix}pkg-config --cflags libavresample)"
+        LAVR_LIBS="$LAVR_LIBS $(${cross_prefix}pkg-config --libs libavresample libavutil)"
+        LAVR_CFLAGS="$LAVR_CFLAGS $(${cross_prefix}pkg-config --cflags libavresample libavutil)"
     fi
     if [ -z "$LAVR_LIBS" -a -z "$LAVR_CFLAGS" ]; then
         LAVR_LIBS="-lavresample"
