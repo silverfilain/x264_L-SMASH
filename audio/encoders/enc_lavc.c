@@ -43,39 +43,39 @@ static int is_encoder_available( const char *name, void **priv )
 #define MODE_IGNORED MODE_VBR|MODE_BITRATE
 
 static const struct {
-    enum CodecID id;
+    enum AVCodecID id;
     const char *name;
     uint8_t mode;
     float default_brval;
 } ffcodecs[] = {
-   /* CODEC_ID,           name,        allowed mode,  default quality/bitrate */
-    { CODEC_ID_MP2,       "mp2",       MODE_BITRATE,    112 },
-    { CODEC_ID_VORBIS,    "vorbis",    MODE_VBR,        5.0 },
-    { CODEC_ID_AAC,       "aac",       MODE_BITRATE,     96 },
-    { CODEC_ID_AC3,       "ac3",       MODE_BITRATE,     96 },
-    { CODEC_ID_EAC3,      "eac3",      MODE_BITRATE,     96 },
-    { CODEC_ID_ALAC,      "alac",      MODE_IGNORED,     64 },
-    { CODEC_ID_AMR_NB,    "amrnb",     MODE_BITRATE,   12.2 },
-    { CODEC_ID_AMR_WB,    "amrwb",     MODE_BITRATE,  12.65 },
-    { CODEC_ID_PCM_F32BE, "pcm_f32be", MODE_IGNORED,      0 },
-    { CODEC_ID_PCM_F32LE, "pcm_f32le", MODE_IGNORED,      0 },
-    { CODEC_ID_PCM_F64BE, "pcm_f64be", MODE_IGNORED,      0 },
-    { CODEC_ID_PCM_F64LE, "pcm_f64le", MODE_IGNORED,      0 },
-    { CODEC_ID_PCM_S16BE, "pcm_s16be", MODE_IGNORED,      0 },
-    { CODEC_ID_PCM_S16LE, "pcm_s16le", MODE_IGNORED,      0 },
-    { CODEC_ID_PCM_S24BE, "pcm_s24be", MODE_IGNORED,      0 },
-    { CODEC_ID_PCM_S24LE, "pcm_s24le", MODE_IGNORED,      0 },
-    { CODEC_ID_PCM_S32BE, "pcm_s32be", MODE_IGNORED,      0 },
-    { CODEC_ID_PCM_S32LE, "pcm_s32le", MODE_IGNORED,      0 },
-    { CODEC_ID_PCM_S8,    "pcm_s8",    MODE_IGNORED,      0 },
-    { CODEC_ID_PCM_U16BE, "pcm_u16be", MODE_IGNORED,      0 },
-    { CODEC_ID_PCM_U16LE, "pcm_u16le", MODE_IGNORED,      0 },
-    { CODEC_ID_PCM_U24BE, "pcm_u24be", MODE_IGNORED,      0 },
-    { CODEC_ID_PCM_U24LE, "pcm_u24le", MODE_IGNORED,      0 },
-    { CODEC_ID_PCM_U32BE, "pcm_u32be", MODE_IGNORED,      0 },
-    { CODEC_ID_PCM_U32LE, "pcm_u32le", MODE_IGNORED,      0 },
-    { CODEC_ID_PCM_U8,    "pcm_u8",    MODE_IGNORED,      0 },
-    { CODEC_ID_NONE,      NULL, },
+   /* AV_CODEC_ID,           name,        allowed mode,  default quality/bitrate */
+    { AV_CODEC_ID_MP2,       "mp2",       MODE_BITRATE,    112 },
+    { AV_CODEC_ID_VORBIS,    "vorbis",    MODE_VBR,        5.0 },
+    { AV_CODEC_ID_AAC,       "aac",       MODE_BITRATE,     96 },
+    { AV_CODEC_ID_AC3,       "ac3",       MODE_BITRATE,     96 },
+    { AV_CODEC_ID_EAC3,      "eac3",      MODE_BITRATE,     96 },
+    { AV_CODEC_ID_ALAC,      "alac",      MODE_IGNORED,     64 },
+    { AV_CODEC_ID_AMR_NB,    "amrnb",     MODE_BITRATE,   12.2 },
+    { AV_CODEC_ID_AMR_WB,    "amrwb",     MODE_BITRATE,  12.65 },
+    { AV_CODEC_ID_PCM_F32BE, "pcm_f32be", MODE_IGNORED,      0 },
+    { AV_CODEC_ID_PCM_F32LE, "pcm_f32le", MODE_IGNORED,      0 },
+    { AV_CODEC_ID_PCM_F64BE, "pcm_f64be", MODE_IGNORED,      0 },
+    { AV_CODEC_ID_PCM_F64LE, "pcm_f64le", MODE_IGNORED,      0 },
+    { AV_CODEC_ID_PCM_S16BE, "pcm_s16be", MODE_IGNORED,      0 },
+    { AV_CODEC_ID_PCM_S16LE, "pcm_s16le", MODE_IGNORED,      0 },
+    { AV_CODEC_ID_PCM_S24BE, "pcm_s24be", MODE_IGNORED,      0 },
+    { AV_CODEC_ID_PCM_S24LE, "pcm_s24le", MODE_IGNORED,      0 },
+    { AV_CODEC_ID_PCM_S32BE, "pcm_s32be", MODE_IGNORED,      0 },
+    { AV_CODEC_ID_PCM_S32LE, "pcm_s32le", MODE_IGNORED,      0 },
+    { AV_CODEC_ID_PCM_S8,    "pcm_s8",    MODE_IGNORED,      0 },
+    { AV_CODEC_ID_PCM_U16BE, "pcm_u16be", MODE_IGNORED,      0 },
+    { AV_CODEC_ID_PCM_U16LE, "pcm_u16le", MODE_IGNORED,      0 },
+    { AV_CODEC_ID_PCM_U24BE, "pcm_u24be", MODE_IGNORED,      0 },
+    { AV_CODEC_ID_PCM_U24LE, "pcm_u24le", MODE_IGNORED,      0 },
+    { AV_CODEC_ID_PCM_U32BE, "pcm_u32be", MODE_IGNORED,      0 },
+    { AV_CODEC_ID_PCM_U32LE, "pcm_u32le", MODE_IGNORED,      0 },
+    { AV_CODEC_ID_PCM_U8,    "pcm_u8",    MODE_IGNORED,      0 },
+    { AV_CODEC_ID_NONE,      NULL, },
 };
 
 static int get_linesize( int nb_channels, int nb_samples, enum AVSampleFormat sample_fmt )
@@ -151,7 +151,7 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
 
     int i, j;
     h->info.codec_name = NULL;
-    for( i = 0; ffcodecs[i].id != CODEC_ID_NONE; i++ )
+    for( i = 0; ffcodecs[i].id != AV_CODEC_ID_NONE; i++ )
     {
         if( codec->id == ffcodecs[i].id )
         {

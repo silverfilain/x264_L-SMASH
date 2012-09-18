@@ -216,7 +216,7 @@ static hnd_t copy_init( hnd_t filter_chain, const char *opts )
             return NULL;
         }
 
-        if( ( h->ctx->codec->id == CODEC_ID_AAC ) && !h->ctx->extradata )
+        if( ( h->ctx->codec->id == AV_CODEC_ID_AAC ) && !h->ctx->extradata )
         {
             if( !( h->bsfs = av_bitstream_filter_init( "aac_adtstoasc" ) ) )
             {
@@ -228,14 +228,14 @@ static hnd_t copy_init( hnd_t filter_chain, const char *opts )
             h->info.extradata_size = h->ctx->extradata_size;
             h->info.codec_name = "aac";
         }
-        else if( ( h->ctx->codec->id == CODEC_ID_MP4ALS ) && !h->ctx->extradata )
+        else if( ( h->ctx->codec->id == AV_CODEC_ID_MP4ALS ) && !h->ctx->extradata )
         {
             h->out = convert_to_audio_packet( h, h->pkt );
             h->info.extradata = h->ctx->extradata;
             h->info.extradata_size = h->ctx->extradata_size;
             h->info.codec_name = "als";
         }
-        else if( ( h->ctx->codec->id == CODEC_ID_AC3 || h->ctx->codec->id == CODEC_ID_DTS ) && !h->ctx->extradata )
+        else if( ( h->ctx->codec->id == AV_CODEC_ID_AC3 || h->ctx->codec->id == AV_CODEC_ID_DTS ) && !h->ctx->extradata )
         {
             h->ctx->extradata_size = h->pkt->size;
             h->ctx->extradata = av_malloc( h->ctx->extradata_size );
@@ -248,14 +248,14 @@ static hnd_t copy_init( hnd_t filter_chain, const char *opts )
             h->out = convert_to_audio_packet( h, h->pkt );
             h->info.extradata = h->ctx->extradata;
             h->info.extradata_size = h->ctx->extradata_size;
-            h->info.codec_name = h->ctx->codec->id == CODEC_ID_AC3 ? "ac3" : "dca";
+            h->info.codec_name = h->ctx->codec->id == AV_CODEC_ID_AC3 ? "ac3" : "dca";
         }
-        else if( ( h->ctx->codec->id == CODEC_ID_AMR_NB ) )
+        else if( ( h->ctx->codec->id == AV_CODEC_ID_AMR_NB ) )
         {
             h->info.codec_name = "amrnb";
             h->out = convert_to_audio_packet( h, h->pkt );
         }
-        else if( ( h->ctx->codec->id == CODEC_ID_AMR_WB ) )
+        else if( ( h->ctx->codec->id == AV_CODEC_ID_AMR_WB ) )
         {
             h->info.codec_name = "amrwb";
             h->out = convert_to_audio_packet( h, h->pkt );
