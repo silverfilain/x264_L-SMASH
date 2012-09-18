@@ -216,7 +216,7 @@ static hnd_t copy_init( hnd_t filter_chain, const char *opts )
             return NULL;
         }
 
-        if( ( h->ctx->codec->id == CODEC_ID_AAC ) && !h->ctx->extradata )
+        if( ( h->ctx->codec->id == AV_CODEC_ID_AAC ) && !h->ctx->extradata )
         {
             if( !( h->bsfs = av_bitstream_filter_init( "aac_adtstoasc" ) ) )
             {
@@ -228,7 +228,7 @@ static hnd_t copy_init( hnd_t filter_chain, const char *opts )
             h->info.extradata_size = h->ctx->extradata_size;
             h->info.codec_name = "aac";
         }
-        else if( ( h->ctx->codec->id == CODEC_ID_AC3 ) && !h->ctx->extradata )
+        else if( ( h->ctx->codec->id == AV_CODEC_ID_AC3 ) && !h->ctx->extradata )
         {
             h->ctx->extradata_size = h->pkt->size;
             h->ctx->extradata = av_malloc( h->ctx->extradata_size );
