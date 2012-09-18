@@ -196,10 +196,14 @@ static int set_audio_track( mkv_hnd_t *p_mkv, x264_param_t *p_param )
     atrack->type = MK_TRACK_AUDIO;
     atrack->lacing = MK_LACING_NONE;
 
-    if ( !strcmp( info->codec_name, "ac3" ) )
-        atrack->codec_id = MK_AUDIO_TAG_AC3;
-    else if( !strcmp( info->codec_name, "aac" ) )
+    if( !strcmp( info->codec_name, "aac" ) )
         atrack->codec_id = MK_AUDIO_TAG_AAC;
+    else if( !strcmp( info->codec_name, "ac3" ) )
+        atrack->codec_id = MK_AUDIO_TAG_AC3;
+    else if( !strcmp( info->codec_name, "eac3" ) )
+        atrack->codec_id = MK_AUDIO_TAG_EAC3;
+    else if( !strcmp( info->codec_name, "dca" ) )
+        atrack->codec_id = MK_AUDIO_TAG_DTS;
     else if( !strcmp( info->codec_name, "vorbis" ) )
         atrack->codec_id = MK_AUDIO_TAG_VORBIS;
     else if( !strcmp( info->codec_name, "mp3" ) )
@@ -208,6 +212,12 @@ static int set_audio_track( mkv_hnd_t *p_mkv, x264_param_t *p_param )
         atrack->codec_id = MK_AUDIO_TAG_MP2;
     else if( !strcmp( info->codec_name, "mp1" ) )
         atrack->codec_id = MK_AUDIO_TAG_MP1;
+    else if( !strcmp( info->codec_name, "mlp" ) )
+        atrack->codec_id = MK_AUDIO_TAG_MLP;
+    else if( !strcmp( info->codec_name, "truehd" ) )
+        atrack->codec_id = MK_AUDIO_TAG_TRUEHD;
+    else if( !strcmp( info->codec_name, "tta" ) )
+        atrack->codec_id = MK_AUDIO_TAG_TTA;
     else if( !strcmp( info->codec_name, "raw" ) )
         atrack->codec_id = MK_AUDIO_TAG_PCM_LE;
     else
