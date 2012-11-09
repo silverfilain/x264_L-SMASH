@@ -1199,11 +1199,7 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
             if( p_mp4->audio_hnd )
                 brands[brand_count++] = ISOM_BRAND_TYPE_ISO2;   /* audio roll recovery grouping */
             if( p_param->b_open_gop )
-            {
                 brands[brand_count++] = ISOM_BRAND_TYPE_ISO6;   /* cslg and visual random access grouping */
-                brands[brand_count++] = ISOM_BRAND_TYPE_QT;     /* tapt, cslg, stps and sdtp */
-                p_mp4->b_brand_qt = 1;
-            }
         }
     }
 
