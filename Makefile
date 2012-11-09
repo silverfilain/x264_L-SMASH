@@ -28,7 +28,7 @@ SRCCLI = x264.c input/input.c input/timecode.c input/raw.c input/y4m.c \
          filters/video/select_every.c filters/video/crop.c filters/video/depth.c \
          output/mp4.c audio/audio.c audio/encoders.c filters/audio/audio_filters.c filters/audio/internal.c
 
-SRCCLI += $(addprefix output/mp4/, isom.c utils.c write.c importer.c mp4sys.c mp4a.c summary.c chapter.c dts.c a52.c h264.c vc1.c alac.c meta.c description.c)
+SRCCLI += $(addprefix output/mp4/, isom.c utils.c write.c importer.c mp4sys.c mp4a.c summary.c chapter.c dts.c a52.c h264.c vc1.c alac.c meta.c description.c box.c)
 
 SRCSO =
 OBJS =

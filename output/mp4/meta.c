@@ -241,7 +241,7 @@ int lsmash_set_itunes_metadata( lsmash_root_t *root, lsmash_itunes_metadata_t me
             { ITUNES_METADATA_ITEM_RELEASE_DATE,               isom_set_itunes_metadata_string },
             { ITUNES_METADATA_ITEM_ENCODED_BY,                 isom_set_itunes_metadata_string },
             { ITUNES_METADATA_ITEM_USER_GENRE,                 isom_set_itunes_metadata_string },
-            { ITUNES_METADATA_ITEM_0XA9_GROUPING,              isom_set_itunes_metadata_string },
+            { ITUNES_METADATA_ITEM_GROUPING,                   isom_set_itunes_metadata_string },
             { ITUNES_METADATA_ITEM_LYRICS,                     isom_set_itunes_metadata_string },
             { ITUNES_METADATA_ITEM_TITLE,                      isom_set_itunes_metadata_string },
             { ITUNES_METADATA_ITEM_TRACK_SUBTITLE,             isom_set_itunes_metadata_string },
@@ -251,7 +251,7 @@ int lsmash_set_itunes_metadata( lsmash_root_t *root, lsmash_itunes_metadata_t me
             { ITUNES_METADATA_ITEM_PODCAST_CATEGORY,           isom_set_itunes_metadata_string },
             { ITUNES_METADATA_ITEM_COPYRIGHT,                  isom_set_itunes_metadata_string },
             { ITUNES_METADATA_ITEM_DESCRIPTION,                isom_set_itunes_metadata_string },
-            { ITUNES_METADATA_ITEM_GROUPING,                   isom_set_itunes_metadata_string },
+            { ITUNES_METADATA_ITEM_GROUPING_DRAFT,             isom_set_itunes_metadata_string },
             { ITUNES_METADATA_ITEM_PODCAST_KEYWORD,            isom_set_itunes_metadata_string },
             { ITUNES_METADATA_ITEM_LONG_DESCRIPTION,           isom_set_itunes_metadata_string },
             { ITUNES_METADATA_ITEM_PURCHASE_DATE,              isom_set_itunes_metadata_string },
@@ -322,7 +322,7 @@ static lsmash_itunes_metadata_type isom_get_itunes_metadata_type( lsmash_itunes_
             { ITUNES_METADATA_ITEM_RELEASE_DATE,               ITUNES_METADATA_TYPE_STRING },
             { ITUNES_METADATA_ITEM_ENCODED_BY,                 ITUNES_METADATA_TYPE_STRING },
             { ITUNES_METADATA_ITEM_USER_GENRE,                 ITUNES_METADATA_TYPE_STRING },
-            { ITUNES_METADATA_ITEM_0XA9_GROUPING,              ITUNES_METADATA_TYPE_STRING },
+            { ITUNES_METADATA_ITEM_GROUPING,                   ITUNES_METADATA_TYPE_STRING },
             { ITUNES_METADATA_ITEM_LYRICS,                     ITUNES_METADATA_TYPE_STRING },
             { ITUNES_METADATA_ITEM_TITLE,                      ITUNES_METADATA_TYPE_STRING },
             { ITUNES_METADATA_ITEM_TRACK_SUBTITLE,             ITUNES_METADATA_TYPE_STRING },
@@ -332,7 +332,7 @@ static lsmash_itunes_metadata_type isom_get_itunes_metadata_type( lsmash_itunes_
             { ITUNES_METADATA_ITEM_PODCAST_CATEGORY,           ITUNES_METADATA_TYPE_STRING },
             { ITUNES_METADATA_ITEM_COPYRIGHT,                  ITUNES_METADATA_TYPE_STRING },
             { ITUNES_METADATA_ITEM_DESCRIPTION,                ITUNES_METADATA_TYPE_STRING },
-            { ITUNES_METADATA_ITEM_GROUPING,                   ITUNES_METADATA_TYPE_STRING },
+            { ITUNES_METADATA_ITEM_GROUPING_DRAFT,             ITUNES_METADATA_TYPE_STRING },
             { ITUNES_METADATA_ITEM_PODCAST_KEYWORD,            ITUNES_METADATA_TYPE_STRING },
             { ITUNES_METADATA_ITEM_LONG_DESCRIPTION,           ITUNES_METADATA_TYPE_STRING },
             { ITUNES_METADATA_ITEM_PURCHASE_DATE,              ITUNES_METADATA_TYPE_STRING },
@@ -384,7 +384,7 @@ int lsmash_get_itunes_metadata( lsmash_root_t *root, uint32_t metadata_number, l
     if( !metaitem || !metaitem->data || !metaitem->data->value || metaitem->data->value_length == 0 )
         return -1;
     /* Get 'item'. */
-    metadata->item = metaitem->type;
+    metadata->item = metaitem->type.fourcc;
     /* Get 'type'. */
     metadata->type = isom_get_itunes_metadata_type( metadata->item );
     /* Get 'meaning'. */

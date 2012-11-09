@@ -58,63 +58,57 @@ static int lsmash_init( hnd_t *handle, const char *opt_str )
 
     memset( &h->info, 0, sizeof(audio_info_t) );
 
-    switch( h->summary->sample_type )
+    if( lsmash_check_codec_type_identical( h->summary->sample_type, ISOM_CODEC_TYPE_MP4A_AUDIO ) )
     {
-        case ISOM_CODEC_TYPE_MP4A_AUDIO :
+        /* Investigate what CODEC is used. */
+        lsmash_mp4sys_object_type_indication objectTypeIndication = lsmash_mp4sys_get_object_type_indication( (lsmash_summary_t *)h->summary );
+        switch( objectTypeIndication )
         {
-            /* Investigate what CODEC is used. */
-            lsmash_mp4sys_object_type_indication objectTypeIndication = lsmash_mp4sys_get_object_type_indication( (lsmash_summary_t *)h->summary );
-            switch( objectTypeIndication )
-            {
-                case MP4SYS_OBJECT_TYPE_Audio_ISO_14496_3:
-                    if( h->summary->aot == MP4A_AUDIO_OBJECT_TYPE_ALS )
-                        h->info.codec_name = "als";
-                    else
-                        h->info.codec_name = "aac";
-                    break;
-                case MP4SYS_OBJECT_TYPE_Audio_ISO_11172_3:
-                case MP4SYS_OBJECT_TYPE_Audio_ISO_13818_3:
-                    if( h->summary->aot == MP4A_AUDIO_OBJECT_TYPE_Layer_3 )
-                        h->info.codec_name = "mp3";
-                    else if( h->summary->aot == MP4A_AUDIO_OBJECT_TYPE_Layer_2 )
-                        h->info.codec_name = "mp2";
-                    else
-                        h->info.codec_name = "mp1";
-                    break;
-                default :
-                    AF_LOG_ERR( h, "unknown audio stream type.\n" );
-                    goto error;
-                    break;
-            }
-            break;
-        }
-        case ISOM_CODEC_TYPE_SAMR_AUDIO :
-            h->info.codec_name = "amrnb";
-            break;
-        case ISOM_CODEC_TYPE_SAWB_AUDIO :
-            h->info.codec_name = "amrwb";
-            break;
-        case ISOM_CODEC_TYPE_AC_3_AUDIO :
-            h->info.codec_name = "ac3";
-            break;
-        case ISOM_CODEC_TYPE_EC_3_AUDIO :
-            h->info.codec_name = "eac3";
-            break;
-        case ISOM_CODEC_TYPE_DTSC_AUDIO :
-        case ISOM_CODEC_TYPE_DTSE_AUDIO :
-        case ISOM_CODEC_TYPE_DTSH_AUDIO :
-        case ISOM_CODEC_TYPE_DTSL_AUDIO :
-            h->info.codec_name = "dca";
-            audio_dts_info_t *dts_info = malloc( sizeof( audio_dts_info_t ) );
-            if( !dts_info )
+            case MP4SYS_OBJECT_TYPE_Audio_ISO_14496_3:
+                if( h->summary->aot == MP4A_AUDIO_OBJECT_TYPE_ALS )
+                    h->info.codec_name = "als";
+                else
+                    h->info.codec_name = "aac";
+                break;
+            case MP4SYS_OBJECT_TYPE_Audio_ISO_11172_3:
+            case MP4SYS_OBJECT_TYPE_Audio_ISO_13818_3:
+                if( h->summary->aot == MP4A_AUDIO_OBJECT_TYPE_Layer_3 )
+                    h->info.codec_name = "mp3";
+                else if( h->summary->aot == MP4A_AUDIO_OBJECT_TYPE_Layer_2 )
+                    h->info.codec_name = "mp2";
+                else
+                    h->info.codec_name = "mp1";
+                break;
+            default :
+                AF_LOG_ERR( h, "unknown audio stream type.\n" );
                 goto error;
-            dts_info->coding_name = h->summary->sample_type;
-            h->info.opaque = dts_info;
-            break;
-        default :
-            AF_LOG_ERR( h, "unknown audio stream type.\n" );
+                break;
+        }
+    }
+    else if( lsmash_check_codec_type_identical( h->summary->sample_type, ISOM_CODEC_TYPE_SAMR_AUDIO ) )
+        h->info.codec_name = "amrnb";
+    else if( lsmash_check_codec_type_identical( h->summary->sample_type, ISOM_CODEC_TYPE_SAWB_AUDIO ) )
+        h->info.codec_name = "amrwb";
+    else if( lsmash_check_codec_type_identical( h->summary->sample_type, ISOM_CODEC_TYPE_AC_3_AUDIO ) )
+        h->info.codec_name = "ac3";
+    else if( lsmash_check_codec_type_identical( h->summary->sample_type, ISOM_CODEC_TYPE_EC_3_AUDIO ) )
+        h->info.codec_name = "eac3";
+    else if( lsmash_check_codec_type_identical( h->summary->sample_type, ISOM_CODEC_TYPE_DTSC_AUDIO )
+          || lsmash_check_codec_type_identical( h->summary->sample_type, ISOM_CODEC_TYPE_DTSE_AUDIO )
+          || lsmash_check_codec_type_identical( h->summary->sample_type, ISOM_CODEC_TYPE_DTSH_AUDIO )
+          || lsmash_check_codec_type_identical( h->summary->sample_type, ISOM_CODEC_TYPE_DTSL_AUDIO ) )
+    {
+        h->info.codec_name = "dca";
+        audio_dts_info_t *dts_info = malloc( sizeof( audio_dts_info_t ) );
+        if( !dts_info )
             goto error;
-            break;
+        dts_info->coding_name = h->summary->sample_type;
+        h->info.opaque = dts_info;
+    }
+    else
+    {
+        AF_LOG_ERR( h, "unknown audio stream type.\n" );
+        goto error;
     }
 
     h->info.samplerate     = h->summary->frequency;

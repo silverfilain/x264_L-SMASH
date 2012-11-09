@@ -81,7 +81,7 @@ typedef struct
     uint32_t i_sample_entry;
     uint64_t i_video_timescale;    /* For interleaving. */
     lsmash_audio_summary_t *summary;
-    lsmash_codec_type codec_type;
+    lsmash_codec_type_t codec_type;
 #if HAVE_AUDIO
     audio_info_t *info;
     hnd_t encoder;
@@ -193,7 +193,7 @@ static int set_channel_layout( mp4_audio_hnd_t *p_audio )
     temp.channelBitmap    = 0;
 
     /* Lavcodec always returns SMPTE/ITU-R channel order, but its copying doesn't do reordering. */
-    if( p_audio->codec_type == ISOM_CODEC_TYPE_ALAC_AUDIO && p_audio->info->channels <= 8 )
+    if( lsmash_check_codec_type_identical( p_audio->codec_type, ISOM_CODEC_TYPE_ALAC_AUDIO ) && p_audio->info->channels <= 8 )
     {
         static const lsmash_channel_layout_tag channel_table[] = {
             QT_CHANNEL_LAYOUT_USE_CHANNEL_BITMAP,
@@ -229,7 +229,7 @@ static int set_channel_layout( mp4_audio_hnd_t *p_audio )
             temp.channelLayoutTag = channel_table[p_audio->info->channels];
         }
     }
-    else if( p_audio->codec_type == ISOM_CODEC_TYPE_MP4A_AUDIO )
+    else if( lsmash_check_codec_type_identical( p_audio->codec_type, ISOM_CODEC_TYPE_MP4A_AUDIO ) )
     {
         /* Channel order is unknown, so we guess it from ffmpeg's channel layout flags. */
         static const lsmash_qt_audio_channel_layout_t channel_table[] = {
@@ -647,7 +647,7 @@ static int audio_init( hnd_t handle, cli_output_opt_t *opt, hnd_t filters, char 
                     MP4_LOG_ERROR( "no frame to create DTS specific info.\n" );
                     goto error;
                 }
-                p_audio->b_mdct = (p_audio->codec_type == ISOM_CODEC_TYPE_DTSE_AUDIO);
+                p_audio->b_mdct = !!lsmash_check_codec_type_identical( p_audio->codec_type, ISOM_CODEC_TYPE_DTSE_AUDIO );
             }
             break;
         case ISOM_BRAND_TYPE_QT :
@@ -667,11 +667,11 @@ static int audio_init( hnd_t handle, cli_output_opt_t *opt, hnd_t filters, char 
             {
                 typedef struct {
                     const char *name;
-                    lsmash_codec_type codec_type;
+                    lsmash_codec_type_t codec_type;
                     lsmash_qt_audio_format_specific_flags_t lpcm;
                 } qt_lpcm_detail;
 
-                static const qt_lpcm_detail qt_lpcm_table[] = {
+                const qt_lpcm_detail qt_lpcm_table[] = {
 #ifdef WORDS_BIGENDIAN
                     { "raw",        QT_CODEC_TYPE_TWOS_AUDIO, { QT_AUDIO_FORMAT_FLAG_BIG_ENDIAN | QT_AUDIO_FORMAT_FLAG_SIGNED_INTEGER } },
 #else
@@ -718,7 +718,7 @@ static int audio_init( hnd_t handle, cli_output_opt_t *opt, hnd_t filters, char 
             break;
     }
 
-    if( !p_audio->codec_type )
+    if( lsmash_check_codec_type_identical( p_audio->codec_type, LSMASH_CODEC_TYPE_UNSPECIFIED ) )
     {
         MP4_LOG_ERROR( "unsupported audio codec '%s'.\n", info->codec_name );
         goto error;
@@ -761,7 +761,8 @@ static int set_param_audio( mp4_hnd_t* p_mp4, uint64_t i_media_timescale, lsmash
     MP4_FAIL_IF_ERR( !p_audio->i_track, "failed to create a audio track.\n" );
 
 #if HAVE_AUDIO
-    if( p_mp4->major_brand == ISOM_BRAND_TYPE_QT || p_audio->codec_type == ISOM_CODEC_TYPE_ALAC_AUDIO )
+    if( p_mp4->major_brand == ISOM_BRAND_TYPE_QT
+     || lsmash_check_codec_type_identical( p_audio->codec_type, ISOM_CODEC_TYPE_ALAC_AUDIO ) )
         MP4_FAIL_IF_ERR( set_channel_layout( p_audio ), "failed to set up channel layout.\n" );
     p_audio->summary->sample_type      = p_audio->codec_type;
     p_audio->summary->max_au_length    = ( 1 << 13 ) - 1;
@@ -769,22 +770,19 @@ static int set_param_audio( mp4_hnd_t* p_mp4, uint64_t i_media_timescale, lsmash
     p_audio->summary->channels         = p_audio->info->channels;
     p_audio->summary->sample_size      = p_audio->info->depth;
     p_audio->summary->samples_in_frame = p_audio->info->framelen;
-    switch( p_audio->codec_type )
+    if( lsmash_check_codec_type_identical( p_audio->codec_type, ISOM_CODEC_TYPE_MP4A_AUDIO ) )
     {
-        case ISOM_CODEC_TYPE_MP4A_AUDIO :
-            if( !strcmp( p_audio->info->codec_name, "als" ) )
-                p_audio->summary->aot = MP4A_AUDIO_OBJECT_TYPE_ALS;
-            else
-                p_audio->summary->aot = MP4A_AUDIO_OBJECT_TYPE_AAC_LC;
-            p_audio->summary->sbr_mode = p_audio->has_sbr ? MP4A_AAC_SBR_BACKWARD_COMPATIBLE : MP4A_AAC_SBR_NOT_SPECIFIED;
-            break;
-        case ISOM_CODEC_TYPE_SAMR_AUDIO :
-        case ISOM_CODEC_TYPE_SAWB_AUDIO :
+        if( !strcmp( p_audio->info->codec_name, "als" ) )
+            p_audio->summary->aot = MP4A_AUDIO_OBJECT_TYPE_ALS;
+        else
+            p_audio->summary->aot = MP4A_AUDIO_OBJECT_TYPE_AAC_LC;
+        p_audio->summary->sbr_mode = p_audio->has_sbr ? MP4A_AAC_SBR_BACKWARD_COMPATIBLE : MP4A_AAC_SBR_NOT_SPECIFIED;
+    }
+    else if( lsmash_check_codec_type_identical( p_audio->codec_type, ISOM_CODEC_TYPE_SAMR_AUDIO )
+          || lsmash_check_codec_type_identical( p_audio->codec_type, ISOM_CODEC_TYPE_SAWB_AUDIO ) )
+    {
             MP4_FAIL_IF_ERR( mp4sys_amr_create_damr( p_audio->summary ),
                              "failed to create AMR specific info.\n" );
-            break;
-        default :
-            break;
     }
 #else
     /*
@@ -918,10 +916,13 @@ static int close_file_audio( mp4_hnd_t* p_mp4, double actual_duration )
                       write_audio_frames( p_mp4, 0, 1 ) ),
                     "failed to flush audio frame(s).\n" );
     uint32_t last_delta;
-    if( p_audio->codec_type == QT_CODEC_TYPE_RAW_AUDIO
-     || p_audio->codec_type == QT_CODEC_TYPE_SOWT_AUDIO || p_audio->codec_type == QT_CODEC_TYPE_TWOS_AUDIO
-     || p_audio->codec_type == QT_CODEC_TYPE_FL64_AUDIO || p_audio->codec_type == QT_CODEC_TYPE_FL32_AUDIO
-     || p_audio->codec_type == QT_CODEC_TYPE_IN24_AUDIO || p_audio->codec_type == QT_CODEC_TYPE_IN32_AUDIO )
+    if( lsmash_check_codec_type_identical( p_audio->codec_type, QT_CODEC_TYPE_RAW_AUDIO )
+     || lsmash_check_codec_type_identical( p_audio->codec_type, QT_CODEC_TYPE_SOWT_AUDIO )
+     || lsmash_check_codec_type_identical( p_audio->codec_type, QT_CODEC_TYPE_TWOS_AUDIO )
+     || lsmash_check_codec_type_identical( p_audio->codec_type, QT_CODEC_TYPE_FL64_AUDIO )
+     || lsmash_check_codec_type_identical( p_audio->codec_type, QT_CODEC_TYPE_FL32_AUDIO )
+     || lsmash_check_codec_type_identical( p_audio->codec_type, QT_CODEC_TYPE_IN24_AUDIO )
+     || lsmash_check_codec_type_identical( p_audio->codec_type, QT_CODEC_TYPE_IN32_AUDIO ) )
         last_delta = 1;     /* Actual sample duration of each LPCMFrame is one. */
     else
 #if HAVE_AUDIO

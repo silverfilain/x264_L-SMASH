@@ -5,6 +5,7 @@
 #include <inttypes.h>
 #include "x264cli.h"
 #include "filters/filters.h"
+#include "output/mp4/lsmash.h"
 
 // Ripped from ffmpeg's audioconvert.h
 #ifndef AV_CH_FRONT_LEFT
@@ -76,7 +77,7 @@ typedef struct audio_aac_info_t
 
 typedef struct audio_dts_info_t
 {
-    uint32_t coding_name;
+    lsmash_codec_type_t coding_name;
 } audio_dts_info_t;
 
 typedef struct audio_packet_t {
