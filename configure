@@ -479,6 +479,7 @@ else
     fi
 fi
 
+libm=""
 case $host_os in
     beos*)
         SYS="BEOS"
@@ -487,37 +488,37 @@ case $host_os in
     darwin*)
         SYS="MACOSX"
         CFLAGS="$CFLAGS -falign-loops=16"
-        LDFLAGS="$LDFLAGS -lm"
+        libm="-lm"
         if [ "$pic" = "no" ]; then
             cc_check "" -mdynamic-no-pic && CFLAGS="$CFLAGS -mdynamic-no-pic"
         fi
         ;;
     freebsd*)
         SYS="FREEBSD"
-        LDFLAGS="$LDFLAGS -lm"
+        libm="-lm"
         ;;
     kfreebsd*-gnu)
         SYS="FREEBSD"
         define HAVE_MALLOC_H
-        LDFLAGS="$LDFLAGS -lm"
+        libm="-lm"
         ;;
     netbsd*)
         SYS="NETBSD"
-        LDFLAGS="$LDFLAGS -lm"
+        libm="-lm"
         ;;
     openbsd*)
         SYS="OPENBSD"
-        LDFLAGS="$LDFLAGS -lm"
+        libm="-lm"
         ;;
     *linux*)
         SYS="LINUX"
         define HAVE_MALLOC_H
-        LDFLAGS="$LDFLAGS -lm"
+        libm="-lm"
         ;;
     gnu*)
         SYS="HURD"
         define HAVE_MALLOC_H
-        LDFLAGS="$LDFLAGS -lm"
+        libm="-lm"
         ;;
     cygwin*)
         EXE=".exe"
@@ -543,7 +544,7 @@ case $host_os in
     sunos*|solaris*)
         SYS="SunOS"
         define HAVE_MALLOC_H
-        LDFLAGS="$LDFLAGS -lm"
+        libm="-lm"
         if cc_check "" /usr/lib/64/values-xpg6.o; then
             LDFLAGS="$LDFLAGS /usr/lib/64/values-xpg6.o"
         else
@@ -555,6 +556,8 @@ case $host_os in
         die "Unknown system $host, edit the configure"
         ;;
 esac
+
+LDFLAGS="$LDFLAGS $libm"
 
 case $host_cpu in
     i*86)
@@ -863,7 +866,7 @@ if [ "$lavf" = "auto" ] ; then
         done
     fi
     LAVF_LIBS="-L. $LAVF_LIBS"
-    if cc_check libavformat/avformat.h "$LAVF_CFLAGS $LAVF_LIBS" "avformat_find_stream_info(0,0); avcodec_open2(0,0,0);" ; then
+    if cc_check libavformat/avformat.h "$LAVF_CFLAGS $LAVF_LIBS" "avformat_close_input(0);" ; then
         if [ "$swscale" = "yes" ]; then
             lavf="yes"
         else
@@ -1280,8 +1283,6 @@ echo "CLI_LIBX264 = $CLI_LIBX264" >> config.mak
 
 ${SRCPATH}/version.sh "${SRCPATH}" >> x264_config.h
 
-pclibs="-L$libdir -lx264 $libpthread"
-
 cat > x264.pc << EOF
 prefix=$prefix
 exec_prefix=$exec_prefix
@@ -1291,7 +1292,8 @@ includedir=$includedir
 Name: x264
 Description: H.264 (MPEG4 AVC) encoder library
 Version: $(grep POINTVER < x264_config.h | sed -e 's/.* "//; s/".*//')
-Libs: $pclibs
+Libs: -L$libdir -lx264
+Libs.private: $libpthread $libm
 Cflags: -I$includedir
 EOF
 
