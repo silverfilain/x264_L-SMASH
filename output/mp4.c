@@ -1248,18 +1248,6 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
         {
             p_mp4->summary->par_h = p_param->vui.i_sar_width;
             p_mp4->summary->par_v = p_param->vui.i_sar_height;
-            if( p_mp4->major_brand != ISOM_BRAND_TYPE_QT )
-            {
-                lsmash_codec_specific_t *specific = lsmash_create_codec_specific_data( LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_VIDEO_SAMPLE_SCALE,
-                                                                                       LSMASH_CODEC_SPECIFIC_FORMAT_STRUCTURED );
-                MP4_FAIL_IF_ERR( !specific, "failed to allocate memory for sample scale info.\n" );
-                lsmash_isom_sample_scale_t *data = (lsmash_isom_sample_scale_t *)specific->data.structured;
-                data->scale_method    = p_mp4->scale_method;
-                data->constraint_flag = 1;
-                int err = lsmash_add_codec_specific_data( (lsmash_summary_t *)p_mp4->summary, specific );
-                lsmash_destroy_codec_specific_data( specific );
-                MP4_FAIL_IF_ERR( err, "failed to add sample scale info.\n" );
-            }
         }
     }
     p_mp4->summary->color.primaries_index = p_param->vui.i_colorprim;
@@ -1347,18 +1335,35 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
 
     lsmash_destroy_codec_specific_data( cs );
 
-    p_mp4->i_sample_entry = lsmash_add_sample_entry( p_mp4->p_root, p_mp4->i_track, p_mp4->summary );
-    MP4_FAIL_IF_ERR( !p_mp4->i_sample_entry,
-                     "failed to add sample entry for video.\n" );
-
+    /* Additional extensions */
     if( p_mp4->major_brand != ISOM_BRAND_TYPE_QT )
     {
+        /* Bitrate info */
         cs = lsmash_create_codec_specific_data( LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_VIDEO_H264_BITRATE,
                                                 LSMASH_CODEC_SPECIFIC_FORMAT_STRUCTURED );
         if( cs )
             lsmash_add_codec_specific_data( (lsmash_summary_t *)p_mp4->summary, cs );
         lsmash_destroy_codec_specific_data( cs );
+
+        if( !p_mp4->b_no_pasp )
+        {
+            /* Sample scale method */
+            cs = lsmash_create_codec_specific_data( LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_VIDEO_SAMPLE_SCALE,
+                                                    LSMASH_CODEC_SPECIFIC_FORMAT_STRUCTURED );
+            if( cs )
+            {
+                lsmash_isom_sample_scale_t *data = (lsmash_isom_sample_scale_t *)cs->data.structured;
+                data->scale_method    = p_mp4->scale_method;
+                data->constraint_flag = 1;
+                lsmash_add_codec_specific_data( (lsmash_summary_t *)p_mp4->summary, cs );
+            }
+            lsmash_destroy_codec_specific_data( cs );
+        }
     }
+
+    p_mp4->i_sample_entry = lsmash_add_sample_entry( p_mp4->p_root, p_mp4->i_track, p_mp4->summary );
+    MP4_FAIL_IF_ERR( !p_mp4->i_sample_entry,
+                     "failed to add sample entry for video.\n" );
 
     /* SEI */
     p_mp4->p_sei_buffer = malloc( sei_size );
