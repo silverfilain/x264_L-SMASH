@@ -898,7 +898,7 @@ static int write_audio_frames( mp4_hnd_t *p_mp4, double video_dts, int finish )
             p_audio->last_delta = p_audio->summary->samples_in_frame;
 #endif
         p_sample->dts = p_sample->cts = audio_timestamp;
-        p_sample->prop.random_access_type = ISOM_SAMPLE_RANDOM_ACCESS_TYPE_SYNC;
+        p_sample->prop.ra_flags = ISOM_SAMPLE_RANDOM_ACCESS_FLAG_SYNC;
         p_sample->index = p_audio->i_sample_entry;
         MP4_FAIL_IF_ERR( lsmash_append_sample( p_mp4->p_root, p_audio->i_track, p_sample ),
                          "failed to append a audio sample.\n" );
@@ -1433,7 +1433,7 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
     p_sample->dts = dts;
     p_sample->cts = cts;
     p_sample->index = p_mp4->i_sample_entry;
-    p_sample->prop.random_access_type = p_picture->i_type == X264_TYPE_IDR ? ISOM_SAMPLE_RANDOM_ACCESS_TYPE_CLOSED_RAP : ISOM_SAMPLE_RANDOM_ACCESS_TYPE_NONE;
+    p_sample->prop.ra_flags = p_picture->i_type == X264_TYPE_IDR ? ISOM_SAMPLE_RANDOM_ACCESS_FLAG_SYNC : ISOM_SAMPLE_RANDOM_ACCESS_FLAG_NONE;
     if( p_mp4->b_use_recovery || p_mp4->b_brand_qt )
     {
         p_sample->prop.independent = IS_X264_TYPE_I( p_picture->i_type ) ? ISOM_SAMPLE_IS_INDEPENDENT : ISOM_SAMPLE_IS_NOT_INDEPENDENT;
@@ -1449,14 +1449,14 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
             if( p_picture->b_keyframe && p_picture->i_type != X264_TYPE_IDR )
             {
                 /* A picture with Recovery Point SEI */
-                p_sample->prop.random_access_type = ISOM_SAMPLE_RANDOM_ACCESS_TYPE_POST_ROLL;
+                p_sample->prop.ra_flags = ISOM_SAMPLE_RANDOM_ACCESS_FLAG_POST_ROLL_START;
                 p_sample->prop.post_roll.complete = (p_sample->prop.post_roll.identifier + p_mp4->i_recovery_frame_cnt) % p_mp4->i_max_frame_num;
             }
         }
         else if( p_picture->i_type == X264_TYPE_I || p_picture->i_type == X264_TYPE_P || p_picture->i_type == X264_TYPE_BREF )
             p_sample->prop.allow_earlier = QT_SAMPLE_EARLIER_PTS_ALLOWED;
         if( p_picture->i_type == X264_TYPE_I && p_picture->b_keyframe && p_mp4->i_recovery_frame_cnt == 0 )
-            p_sample->prop.random_access_type = ISOM_SAMPLE_RANDOM_ACCESS_TYPE_OPEN_RAP;
+            p_sample->prop.ra_flags = ISOM_SAMPLE_RANDOM_ACCESS_FLAG_OPEN_RAP;
     }
 
     x264_cli_log( "mp4", X264_LOG_DEBUG, "coded: %d, frame_num: %d, key: %s, type: %s, independ: %s, dispose: %s, lead: %s\n",
@@ -1475,7 +1475,7 @@ static int write_frame( hnd_t handle, uint8_t *p_nalu, int i_size, x264_picture_
             return -1;
 #endif
 
-    if( p_mp4->b_fragments && p_mp4->i_numframe && p_sample->prop.random_access_type )
+    if( p_mp4->b_fragments && p_mp4->i_numframe && p_sample->prop.ra_flags != ISOM_SAMPLE_RANDOM_ACCESS_FLAG_NONE )
     {
         MP4_FAIL_IF_ERR( lsmash_flush_pooled_samples( p_mp4->p_root, p_mp4->i_track, p_sample->dts - p_mp4->i_prev_dts ),
                          "failed to flush the rest of samples.\n" );
