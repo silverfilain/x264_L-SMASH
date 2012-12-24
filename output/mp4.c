@@ -32,6 +32,8 @@
 #include "mp4/lsmash.h"
 #include "mp4/importer.h"
 
+#define H264_NALU_LENGTH_SIZE 4
+
 /*******************/
 
 #define USE_LSMASH_IMPORTER 0
@@ -124,7 +126,6 @@ typedef struct
     int b_use_recovery;
     int i_recovery_frame_cnt;
     int i_max_frame_num;
-    int i_chroma_format_idc;
     uint64_t i_last_intra_cts;
     uint32_t i_display_width;
     uint32_t i_display_height;
@@ -1161,10 +1162,6 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
     p_mp4->i_time_inc = (uint64_t)p_param->i_timebase_num * p_mp4->i_dts_compress_multiplier;
     FAIL_IF_ERR( i_media_timescale > UINT32_MAX, "mp4", "MP4 media timescale %"PRIu64" exceeds maximum\n", i_media_timescale );
 
-    int csp = p_param->i_csp & X264_CSP_MASK;
-    p_mp4->i_chroma_format_idc = csp >= X264_CSP_I444 ? CHROMA_444 :
-                                 csp >= X264_CSP_I422 ? CHROMA_422 : CHROMA_420;
-
     /* Select brands. */
     lsmash_brand_type brands[11] = { 0 };
     uint32_t minor_version = 0;
@@ -1313,27 +1310,22 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
 {
     mp4_hnd_t *p_mp4 = handle;
 
-    uint32_t sps_size = p_nal[0].i_payload - 4;
-    uint32_t pps_size = p_nal[1].i_payload - 4;
+    uint32_t sps_size = p_nal[0].i_payload - H264_NALU_LENGTH_SIZE;
+    uint32_t pps_size = p_nal[1].i_payload - H264_NALU_LENGTH_SIZE;
     uint32_t sei_size = p_nal[2].i_payload;
 
-    uint8_t *sps = p_nal[0].p_payload + 4;
-    uint8_t *pps = p_nal[1].p_payload + 4;
+    uint8_t *sps = p_nal[0].p_payload + H264_NALU_LENGTH_SIZE;
+    uint8_t *pps = p_nal[1].p_payload + H264_NALU_LENGTH_SIZE;
     uint8_t *sei = p_nal[2].p_payload;
 
-    lsmash_codec_specific_t *h264_specific = lsmash_create_codec_specific_data( LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_VIDEO_H264,
-                                                                                LSMASH_CODEC_SPECIFIC_FORMAT_STRUCTURED );
+    lsmash_codec_specific_t *cs = lsmash_create_codec_specific_data( LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_VIDEO_H264,
+                                                                     LSMASH_CODEC_SPECIFIC_FORMAT_STRUCTURED );
 
-    lsmash_h264_specific_parameters_t *param = (lsmash_h264_specific_parameters_t *)h264_specific->data.structured;
-    param->AVCProfileIndication    = sps[1];
-    param->profile_compatibility   = sps[2];
-    param->AVCLevelIndication      = sps[3];
-    param->lengthSizeMinusOne      = 3;
-    param->chroma_format           = p_mp4->i_chroma_format_idc;
-    param->bit_depth_luma_minus8   = BIT_DEPTH - 8;
-    param->bit_depth_chroma_minus8 = BIT_DEPTH - 8;
+    lsmash_h264_specific_parameters_t *param = (lsmash_h264_specific_parameters_t *)cs->data.structured;
+    param->lengthSizeMinusOne = H264_NALU_LENGTH_SIZE - 1;
 
-    /* SPS */
+    /* SPS
+     * The remaining parameters are automatically set by SPS. */
     if( lsmash_append_h264_parameter_set( param, H264_PARAMETER_SET_TYPE_SPS, sps, sps_size ) )
     {
         MP4_LOG_ERROR( "failed to append SPS.\n" );
@@ -1347,13 +1339,13 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
         return -1;
     }
 
-    if( lsmash_add_codec_specific_data( (lsmash_summary_t *)p_mp4->summary, h264_specific ) )
+    if( lsmash_add_codec_specific_data( (lsmash_summary_t *)p_mp4->summary, cs ) )
     {
         MP4_LOG_ERROR( "failed to add H.264 specific info.\n" );
         return -1;
     }
 
-    lsmash_destroy_codec_specific_data( h264_specific );
+    lsmash_destroy_codec_specific_data( cs );
 
     p_mp4->i_sample_entry = lsmash_add_sample_entry( p_mp4->p_root, p_mp4->i_track, p_mp4->summary );
     MP4_FAIL_IF_ERR( !p_mp4->i_sample_entry,
@@ -1361,11 +1353,11 @@ static int write_headers( hnd_t handle, x264_nal_t *p_nal )
 
     if( p_mp4->major_brand != ISOM_BRAND_TYPE_QT )
     {
-        lsmash_codec_specific_t *bitrate = lsmash_create_codec_specific_data( LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_VIDEO_H264_BITRATE,
-                                                                              LSMASH_CODEC_SPECIFIC_FORMAT_STRUCTURED );
-        if( bitrate )
-            lsmash_add_codec_specific_data( (lsmash_summary_t *)p_mp4->summary, bitrate );
-        lsmash_destroy_codec_specific_data( bitrate );
+        cs = lsmash_create_codec_specific_data( LSMASH_CODEC_SPECIFIC_DATA_TYPE_ISOM_VIDEO_H264_BITRATE,
+                                                LSMASH_CODEC_SPECIFIC_FORMAT_STRUCTURED );
+        if( cs )
+            lsmash_add_codec_specific_data( (lsmash_summary_t *)p_mp4->summary, cs );
+        lsmash_destroy_codec_specific_data( cs );
     }
 
     /* SEI */
