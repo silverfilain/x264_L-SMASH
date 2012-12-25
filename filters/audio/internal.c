@@ -58,6 +58,18 @@ int x264_af_cat_buffer( float **buf, unsigned bufsamples, float **in, unsigned i
     return 0;
 }
 
+static inline int x264_is_interleaved_format(int fmt)
+{
+    return fmt <= SMPFMT_DBL;
+}
+
+static inline int x264_interleaved_format(int fmt)
+{
+    if (fmt >= SMPFMT_U8P && fmt <= SMPFMT_DBLP)
+        fmt -= (SMPFMT_U8P - SMPFMT_U8);
+    return fmt;
+}
+
 float **x264_af_deinterleave ( float *samples, unsigned channels, unsigned samplecount )
 {
     float **deint = x264_af_get_buffer( channels, samplecount );
@@ -79,7 +91,19 @@ float *x264_af_interleave ( float **in, unsigned channels, unsigned samplecount 
 float **x264_af_deinterleave2( uint8_t *samples, enum SampleFmt fmt, unsigned channels, unsigned samplecount )
 {
     float  *in  = (float*) x264_af_convert( SMPFMT_FLT, samples, fmt, channels, samplecount );
-    float **out = x264_af_deinterleave( in, channels, samplecount );
+    float **out;
+
+    if (x264_is_interleaved_format(fmt))
+        out = x264_af_deinterleave( in, channels, samplecount );
+    else {
+        unsigned i, j;
+        out = x264_af_get_buffer( channels, samplecount );
+        for (i = 0; i < channels; ++i) {
+            float *base = &in[i * samplecount];
+            for (j = 0; j < samplecount; ++j)
+                out[i][j] = base[j];
+        }
+    }
     free( in );
     return out;
 }
@@ -110,13 +134,18 @@ static inline int samplesize( enum SampleFmt fmt )
     switch( fmt )
     {
     case SMPFMT_U8:
+    case SMPFMT_U8P:
         return 1;
     case SMPFMT_S16:
+    case SMPFMT_S16P:
         return 2;
     case SMPFMT_S32:
+    case SMPFMT_S32P:
     case SMPFMT_FLT:
+    case SMPFMT_FLTP:
         return 4;
     case SMPFMT_DBL:
+    case SMPFMT_DBLP:
         return 8;
     default:
         return 0;
@@ -139,6 +168,9 @@ uint8_t *x264_af_convert( enum SampleFmt outfmt, uint8_t *in, enum SampleFmt fmt
     uint8_t *out = malloc( sz );
     if( !out )
         return NULL;
+
+    fmt = x264_interleaved_format(fmt);
+    outfmt = x264_interleaved_format(outfmt);
 
     if( fmt == outfmt )
     {
