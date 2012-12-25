@@ -41,7 +41,13 @@ enum SampleFmt {
     SMPFMT_S16,
     SMPFMT_S32,
     SMPFMT_FLT,
-    SMPFMT_DBL
+    SMPFMT_DBL,
+
+    SMPFMT_U8P,
+    SMPFMT_S16P,
+    SMPFMT_S32P,
+    SMPFMT_FLTP,
+    SMPFMT_DBLP
 };
 
 float  **x264_af_get_buffer   ( unsigned channels, unsigned samplecount );
