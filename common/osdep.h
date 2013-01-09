@@ -1,7 +1,7 @@
 /*****************************************************************************
  * osdep.h: platform-specific code
  *****************************************************************************
- * Copyright (C) 2007-2012 x264 project
+ * Copyright (C) 2007-2013 x264 project
  *
  * Authors: Loren Merritt <lorenm@u.washington.edu>
  *          Laurent Aimar <fenrir@via.ecp.fr>
@@ -149,7 +149,7 @@ static inline int x264_pthread_create( x264_pthread_t *t, void *a, void *(*f)(vo
      return 0;
 }
 #define x264_pthread_join(t,s)       { long tmp; \
-                                       wait_for_thread(t,(s)?(long*)(*(s)):&tmp); }
+                                       wait_for_thread(t,(s)?(long*)(s):&tmp); }
 
 #elif HAVE_POSIXTHREAD
 #include <pthread.h>
