@@ -1,7 +1,7 @@
 /*****************************************************************************
  * cpu.c: cpu detection
  *****************************************************************************
- * Copyright (C) 2003-2012 x264 project
+ * Copyright (C) 2003-2013 x264 project
  *
  * Authors: Loren Merritt <lorenm@u.washington.edu>
  *          Laurent Aimar <fenrir@via.ecp.fr>
@@ -402,7 +402,7 @@ int x264_cpu_num_processors( void )
 #elif SYS_WINDOWS
     return x264_pthread_num_processors_np();
 
-#elif SYS_CYGWIN
+#elif SYS_CYGWIN || SYS_SunOS
     return sysconf( _SC_NPROCESSORS_ONLN );
 
 #elif SYS_LINUX
