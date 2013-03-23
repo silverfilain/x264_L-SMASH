@@ -26,11 +26,12 @@ typedef struct lavf_source_t
     timebase_t origtb;
     AVPacket *pkt;
     audio_packet_t *out;
+    int audio_frame_size;
     int copy;
     int eof;
 } lavf_source_t;
 
-#define DEFAULT_BUFSIZE AVCODEC_MAX_AUDIO_FRAME_SIZE * 2
+#define DEFAULT_BUFSIZE h->audio_frame_size * 2
 
 static int buffer_next_frame( lavf_source_t *h );
 static audio_packet_t *convert_to_audio_packet( hnd_t handle, AVPacket *pkt );
@@ -377,7 +378,7 @@ static int low_decode_audio( lavf_source_t *h, uint8_t *buf, intptr_t buflen )
 static struct AVPacket *decode_next_frame( lavf_source_t *h )
 {
     AVPacket *dst = calloc( 1, sizeof( AVPacket ) );
-    assert( !av_new_packet( dst, AVCODEC_MAX_AUDIO_FRAME_SIZE ) );
+    assert( !av_new_packet( dst, h->audio_frame_size ) );
 
     int len = 0;
     while( ( len = low_decode_audio( h, dst->data, dst->size ) ) == 0 )
