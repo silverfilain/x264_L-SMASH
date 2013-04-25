@@ -29,8 +29,8 @@
 
 #include "common/common.h"
 #include "output.h"
-#include "mp4/lsmash.h"
-#include "mp4/importer.h"
+#include <lsmash.h>
+#include <lsmash_importer.h>
 
 #define H264_NALU_LENGTH_SIZE 4
 
