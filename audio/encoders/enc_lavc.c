@@ -182,7 +182,8 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
 
     AVDictionary *avopts = NULL;
     av_dict_set( &avopts, "flags", "global_header", 0 ); // aac
-    av_dict_set( &avopts, "reservoir", "1", 0 ); // mp3
+    av_dict_set( &avopts, "strict", "-2", 0 );           // aac
+    av_dict_set( &avopts, "reservoir", "1", 0 );         // mp3
 
     char *acutoff = x264_otos( x264_get_option( "cutoff", opts ), NULL );
     if( acutoff )
