@@ -41,6 +41,7 @@ typedef struct
     int mux_3gp;
     int mux_3g2;
     char *chapter;
+    int add_bom;
     char *language;
     uint32_t priming;
     int no_progress;

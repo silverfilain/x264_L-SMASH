@@ -973,6 +973,8 @@ static void help( x264_param_t *defaults, int longhelp )
     H2( "      --dts-compress          Eliminate initial delay with container DTS hack\n" );
     H2( " [mp4/3gp/3g2/mov]\n" );
     H2( "      --chapter <string>      Set the chapter list from chapter format file\n" );
+    H2( "      --chpl-with-bom         Add UTF-8 BOM to the chapter strings\n"
+        "                              in the chapter list. (experimental)\n" );
     H2( "      --language <string>     Set the language by ISO639-2/T language codes\n" );
     H2( "      --no-container-sar      Disable sample aspect ratio within the container\n" );
     H2( "      --no-remux              Inhibit auto-remuxing for progressive download\n" );
@@ -1036,6 +1038,7 @@ typedef enum
     OPT_AUDIOCODECQUALITY,
     OPT_AUDIOEXTRAOPT,
     OPT_CHAPTER,
+    OPT_CHPL_WITH_BOM,
     OPT_LANGUAGE,
     OPT_NO_CONTAINER_SAR,
     OPT_NO_REMUX,
@@ -1220,6 +1223,7 @@ static struct option long_options[] =
     { "acodec-quality",    required_argument, NULL, OPT_AUDIOCODECQUALITY },
     { "aextraopt",   required_argument, NULL, OPT_AUDIOEXTRAOPT },
     { "chapter",     required_argument, NULL, OPT_CHAPTER },
+    { "chpl-with-bom",     no_argument, NULL, OPT_CHPL_WITH_BOM },
     { "language",    required_argument, NULL, OPT_LANGUAGE },
     { "no-container-sar",  no_argument, NULL, OPT_NO_CONTAINER_SAR },
     { "no-remux",    no_argument, NULL, OPT_NO_REMUX },
@@ -1723,6 +1727,9 @@ static int parse( int argc, char **argv, x264_param_t *param, cli_opt_t *opt )
                 break;
             case OPT_CHAPTER:
                 output_opt.chapter = optarg;
+                break;
+            case OPT_CHPL_WITH_BOM:
+                output_opt.add_bom = 1;
                 break;
             case OPT_LANGUAGE:
                 output_opt.language = optarg;

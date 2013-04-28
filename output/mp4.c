@@ -107,6 +107,7 @@ typedef struct
     int b_brand_qt;
     int b_stdout;
     char *psz_chapter;
+    int b_add_bom;
     char *psz_language;
     uint32_t i_movie_timescale;
     uint32_t i_video_timescale;
@@ -1040,7 +1041,7 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
 #endif
 
         if( p_mp4->psz_chapter && (p_mp4->major_brand != ISOM_BRAND_TYPE_QT) )
-            MP4_LOG_IF_ERR( lsmash_set_tyrant_chapter( p_mp4->p_root, p_mp4->psz_chapter, 0 ), "failed to set chapter list.\n" );
+            MP4_LOG_IF_ERR( lsmash_set_tyrant_chapter( p_mp4->p_root, p_mp4->psz_chapter, p_mp4->b_add_bom ), "failed to set chapter list.\n" );
 
         if( !p_mp4->b_no_remux )
         {
@@ -1106,6 +1107,7 @@ static int open_file( char *psz_filename, hnd_t *p_handle, cli_output_opt_t *opt
     if( opt->chapter )
     {
         p_mp4->psz_chapter = opt->chapter;
+        p_mp4->b_add_bom   = opt->add_bom;
         fh = fopen( p_mp4->psz_chapter, "rb" );
         MP4_FAIL_IF_ERR_EX( !fh, "can't open `%s'\n", p_mp4->psz_chapter );
         fclose( fh );
