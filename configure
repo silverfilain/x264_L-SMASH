@@ -54,6 +54,7 @@ External library support:
   --disable-lavf           disable libavformat support
   --disable-ffms           disable ffmpegsource support
   --disable-audio          disable audio support
+  --disable-mp3            disable lame support
   --disable-lsmash         disables L-SMASH importer
   --qtsdk=QTSDKROOT        root of QuickTime SDK for QuickTime AAC support
                            (x86 windows only and requires --enable-nonfree)
@@ -363,6 +364,9 @@ for opt do
             ;;
         --disable-audio)
             audio="no"
+            ;;
+        --disable-mp3)
+            audio_mp3="no"
             ;;
         --extra-asflags=*)
             ASFLAGS="$ASFLAGS $optarg"
