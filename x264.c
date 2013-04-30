@@ -419,7 +419,11 @@ static void print_version_info( void )
 #else
     printf( "using an unknown compiler\n" );
 #endif
-    printf( "configuration: --bit-depth=%d --chroma-format=%s\n", x264_bit_depth, X264_CHROMA_FORMAT ? (output_csp_names[0]+1) : "all" );
+#if HAVE_OPENCL
+    printf( "configuration: --bit-depth=%d --chroma-format=%s --enable-opencl\n", x264_bit_depth, X264_CHROMA_FORMAT ? (output_csp_names[0]+1) : "all" );
+#else
+    printf( "configuration: --bit-depth=%d --chroma-format=%s --disable-opencl\n", x264_bit_depth, X264_CHROMA_FORMAT ? (output_csp_names[0]+1) : "all" );
+#endif
     printf( "x264 license: " );
 #if HAVE_NONFREE
     printf( "Non-Free\n" );
