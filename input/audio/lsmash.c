@@ -11,7 +11,7 @@ typedef struct lsmash_source_t
 {
     AUDIO_FILTER_COMMON
 
-    mp4sys_importer_t* importer;
+    importer_t* importer;
     lsmash_audio_summary_t* summary;
 
     int64_t frame_count;
@@ -44,11 +44,11 @@ static int lsmash_init( hnd_t *handle, const char *opt_str )
 
     INIT_FILTER_STRUCT( audio_filter_lsmash, lsmash_source_t );
 
-    h->importer = mp4sys_importer_open( filename, "auto" );
+    h->importer = lsmash_importer_open( filename, "auto" );
     if( !h->importer )
         goto error;
 
-    h->summary = (lsmash_audio_summary_t *)mp4sys_duplicate_summary( h->importer, 1 );
+    h->summary = (lsmash_audio_summary_t *)lsmash_duplicate_summary( h->importer, 1 );
 
     if( h->summary->summary_type != LSMASH_SUMMARY_TYPE_AUDIO )
     {
@@ -158,7 +158,7 @@ fail:
     }
     if( h->importer )
     {
-        mp4sys_importer_close( h->importer );
+        lsmash_importer_close( h->importer );
         h->importer = NULL;
     }
     if( h )
@@ -183,7 +183,7 @@ static void lsmash_close( hnd_t handle )
     if( h->summary )
         lsmash_cleanup_summary( (lsmash_summary_t *)h->summary );
     if( h->importer )
-        mp4sys_importer_close( h->importer );
+        lsmash_importer_close( h->importer );
     if( h->info.opaque )
         free( h->info.opaque );
     if( h )
@@ -205,7 +205,7 @@ static audio_packet_t *get_next_au( hnd_t handle )
     lsmash_sample_t sample = { 0 };
     lsmash_sample_alloc( &sample, h->summary->max_au_length );
 
-    int ret = mp4sys_importer_get_access_unit( h->importer, 1, &sample );
+    int ret = lsmash_importer_get_access_unit( h->importer, 1, &sample );
 
     out->size = sample.length;
     out->data = sample.data;
@@ -213,7 +213,7 @@ static audio_packet_t *get_next_au( hnd_t handle )
     if( ret || !out->size )
     {
         if( !out->size )
-            h->info.last_delta = mp4sys_importer_get_last_delta( h->importer, 1 );
+            h->info.last_delta = lsmash_importer_get_last_delta( h->importer, 1 );
         x264_af_free_packet( out );
         return NULL;
     }
