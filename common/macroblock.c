@@ -122,8 +122,8 @@ static NOINLINE void x264_mb_mc_01xywh( x264_t *h, int x, int y, int width, int 
     int mvy1   = x264_clip3( h->mb.cache.mv[1][i8][1], h->mb.mv_min[1], h->mb.mv_max[1] ) + 4*4*y;
     int i_mode = x264_size2pixel[height][width];
     intptr_t i_stride0 = 16, i_stride1 = 16;
-    ALIGNED_ARRAY_16( pixel, tmp0,[16*16] );
-    ALIGNED_ARRAY_16( pixel, tmp1,[16*16] );
+    ALIGNED_ARRAY_N( pixel, tmp0,[16*16] );
+    ALIGNED_ARRAY_N( pixel, tmp1,[16*16] );
     pixel *src0, *src1;
 
     MC_LUMA_BI( 0 );
@@ -256,25 +256,26 @@ int x264_macroblock_cache_allocate( x264_t *h )
 
     h->mb.b_interlaced = PARAM_INTERLACED;
 
-    CHECKED_MALLOC( h->mb.qp, i_mb_count * sizeof(int8_t) );
-    CHECKED_MALLOC( h->mb.cbp, i_mb_count * sizeof(int16_t) );
-    CHECKED_MALLOC( h->mb.mb_transform_size, i_mb_count * sizeof(int8_t) );
-    CHECKED_MALLOC( h->mb.slice_table, i_mb_count * sizeof(uint16_t) );
-    memset( h->mb.slice_table, -1, i_mb_count * sizeof(uint16_t) );
+    PREALLOC_INIT
+
+    PREALLOC( h->mb.qp, i_mb_count * sizeof(int8_t) );
+    PREALLOC( h->mb.cbp, i_mb_count * sizeof(int16_t) );
+    PREALLOC( h->mb.mb_transform_size, i_mb_count * sizeof(int8_t) );
+    PREALLOC( h->mb.slice_table, i_mb_count * sizeof(uint16_t) );
 
     /* 0 -> 3 top(4), 4 -> 6 : left(3) */
-    CHECKED_MALLOC( h->mb.intra4x4_pred_mode, i_mb_count * 8 * sizeof(int8_t) );
+    PREALLOC( h->mb.intra4x4_pred_mode, i_mb_count * 8 * sizeof(int8_t) );
 
     /* all coeffs */
-    CHECKED_MALLOC( h->mb.non_zero_count, i_mb_count * 48 * sizeof(uint8_t) );
+    PREALLOC( h->mb.non_zero_count, i_mb_count * 48 * sizeof(uint8_t) );
 
     if( h->param.b_cabac )
     {
-        CHECKED_MALLOC( h->mb.skipbp, i_mb_count * sizeof(int8_t) );
-        CHECKED_MALLOC( h->mb.chroma_pred_mode, i_mb_count * sizeof(int8_t) );
-        CHECKED_MALLOC( h->mb.mvd[0], i_mb_count * sizeof( **h->mb.mvd ) );
+        PREALLOC( h->mb.skipbp, i_mb_count * sizeof(int8_t) );
+        PREALLOC( h->mb.chroma_pred_mode, i_mb_count * sizeof(int8_t) );
+        PREALLOC( h->mb.mvd[0], i_mb_count * sizeof( **h->mb.mvd ) );
         if( h->param.i_bframe )
-            CHECKED_MALLOC( h->mb.mvd[1], i_mb_count * sizeof( **h->mb.mvd ) );
+            PREALLOC( h->mb.mvd[1], i_mb_count * sizeof( **h->mb.mvd ) );
     }
 
     for( int i = 0; i < 2; i++ )
@@ -284,11 +285,7 @@ int x264_macroblock_cache_allocate( x264_t *h )
             i_refs = X264_MIN(X264_REF_MAX, i_refs + 1 + (BIT_DEPTH == 8)); //smart weights add two duplicate frames, one in >8-bit
 
         for( int j = !i; j < i_refs; j++ )
-        {
-            CHECKED_MALLOC( h->mb.mvr[i][j], 2 * (i_mb_count + 1) * sizeof(int16_t) );
-            M32( h->mb.mvr[i][j][0] ) = 0;
-            h->mb.mvr[i][j]++;
-        }
+            PREALLOC( h->mb.mvr[i][j], 2 * (i_mb_count + 1) * sizeof(int16_t) );
     }
 
     if( h->param.analyse.i_weighted_pred )
@@ -325,7 +322,24 @@ int x264_macroblock_cache_allocate( x264_t *h )
         }
 
         for( int i = 0; i < numweightbuf; i++ )
-            CHECKED_MALLOC( h->mb.p_weight_buf[i], luma_plane_size * sizeof(pixel) );
+            PREALLOC( h->mb.p_weight_buf[i], luma_plane_size * sizeof(pixel) );
+    }
+
+    PREALLOC_END( h->mb.base );
+
+    memset( h->mb.slice_table, -1, i_mb_count * sizeof(uint16_t) );
+
+    for( int i = 0; i < 2; i++ )
+    {
+        int i_refs = X264_MIN(X264_REF_MAX, (i ? 1 + !!h->param.i_bframe_pyramid : h->param.i_frame_reference) ) << PARAM_INTERLACED;
+        if( h->param.analyse.i_weighted_pred == X264_WEIGHTP_SMART )
+            i_refs = X264_MIN(X264_REF_MAX, i_refs + 1 + (BIT_DEPTH == 8)); //smart weights add two duplicate frames, one in >8-bit
+
+        for( int j = !i; j < i_refs; j++ )
+        {
+            M32( h->mb.mvr[i][j][0] ) = 0;
+            h->mb.mvr[i][j]++;
+        }
     }
 
     return 0;
@@ -334,26 +348,7 @@ fail:
 }
 void x264_macroblock_cache_free( x264_t *h )
 {
-    for( int i = 0; i < 2; i++ )
-        for( int j = !i; j < X264_REF_MAX*2; j++ )
-            if( h->mb.mvr[i][j] )
-                x264_free( h->mb.mvr[i][j]-1 );
-    for( int i = 0; i < X264_REF_MAX; i++ )
-        x264_free( h->mb.p_weight_buf[i] );
-
-    if( h->param.b_cabac )
-    {
-        x264_free( h->mb.skipbp );
-        x264_free( h->mb.chroma_pred_mode );
-        x264_free( h->mb.mvd[0] );
-        x264_free( h->mb.mvd[1] );
-    }
-    x264_free( h->mb.slice_table );
-    x264_free( h->mb.intra4x4_pred_mode );
-    x264_free( h->mb.non_zero_count );
-    x264_free( h->mb.mb_transform_size );
-    x264_free( h->mb.cbp );
-    x264_free( h->mb.qp );
+    x264_free( h->mb.base );
 }
 
 int x264_macroblock_thread_allocate( x264_t *h, int b_lookahead )
@@ -387,7 +382,7 @@ int x264_macroblock_thread_allocate( x264_t *h, int b_lookahead )
     int scratch_size = 0;
     if( !b_lookahead )
     {
-        int buf_hpel = (h->thread[0]->fdec->i_width[0]+48) * sizeof(int16_t);
+        int buf_hpel = (h->thread[0]->fdec->i_width[0]+48+32) * sizeof(int16_t);
         int buf_ssim = h->param.analyse.b_ssim * 8 * (h->param.i_width/4+3) * sizeof(int);
         int me_range = X264_MIN(h->param.analyse.i_me_range, h->param.analyse.i_mv_range);
         int buf_tesa = (h->param.analyse.i_me_method >= X264_ME_ESA) *

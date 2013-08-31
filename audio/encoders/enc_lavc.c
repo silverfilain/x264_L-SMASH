@@ -4,6 +4,7 @@
 #include "libavcodec/avcodec.h"
 #include "libavutil/opt.h"
 #include "libavresample/avresample.h"
+#include "libavutil/channel_layout.h"
 
 #include <assert.h>
 
@@ -88,6 +89,10 @@ static int get_linesize( int nb_channels, int nb_samples, enum AVSampleFormat sa
 static int resample_audio( AVAudioResampleContext *avr, AVFrame *frame, audio_packet_t *pkt )
 {
     int channels = av_get_channel_layout_nb_channels( frame->channel_layout );
+        if( channels == 0 )
+        {
+            int channels = 2;
+        }
     int out_linesize = get_linesize( channels, frame->nb_samples, frame->format );
     int in_linesize  = get_linesize( pkt->channels, pkt->samplecount, AV_SAMPLE_FMT_FLTP );
     if( avresample_convert( avr, (void **)frame->data, out_linesize, frame->nb_samples,
@@ -172,6 +177,10 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
         else if( h->smpfmt < codec->sample_fmts[j] ) // or the best possible sample format (is this really The Right Thing?)
             h->smpfmt = codec->sample_fmts[j];
     }
+if( h->info.chanlayout == 0 )
+{
+        h->info.chanlayout = av_get_default_channel_layout( h->info.channels );
+}
 
     h->ctx                  = avcodec_alloc_context3( NULL );
     h->ctx->sample_fmt      = h->smpfmt;
@@ -182,13 +191,16 @@ static hnd_t init( hnd_t filter_chain, const char *opt_str )
 
     AVDictionary *avopts = NULL;
     av_dict_set( &avopts, "flags", "global_header", 0 ); // aac
-    av_dict_set( &avopts, "reservoir", "1", 0 ); // mp3
+    av_dict_set( &avopts, "strict", "-2", 0 );           // aac
+    av_dict_set( &avopts, "reservoir", "1", 0 );         // mp3
 
     char *acutoff = x264_otos( x264_get_option( "cutoff", opts ), NULL );
     if( acutoff )
         av_dict_set( &avopts, "cutoff", acutoff, 0 );
 
     char *aprofile = x264_otos( x264_get_option( "profile", opts ), NULL );
+    if( !strcmp(codecname, "libaacplus") )
+        aprofile = "aac_he";
     if( aprofile )
     {
         av_dict_set( &avopts, "profile", aprofile, 0 );

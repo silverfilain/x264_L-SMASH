@@ -5,6 +5,7 @@
  *
  * Authors: Mike Gurlitz <mike.gurlitz@gmail.com>
  *          Steven Walters <kemuri9@gmail.com>
+ *          Henrik Gramner <henrik@gramner.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,11 +32,10 @@
 #undef DECLARE_ALIGNED
 #include <libavcodec/avcodec.h>
 #include <libswscale/swscale.h>
+#include <libavutil/pixdesc.h>
 
 #ifdef _WIN32
 #include <windows.h>
-#else
-#define SetConsoleTitle(t)
 #endif
 
 #if HAVE_AUDIO
@@ -68,7 +68,7 @@ static int FFMS_CC update_progress( int64_t current, int64_t total, void *privat
     char buf[200];
     sprintf( buf, "ffms [info]: indexing input file [%.1f%%]", 100.0 * current / total );
     fprintf( stderr, "%s  \r", buf+5 );
-    SetConsoleTitle( buf );
+    x264_cli_set_console_title( buf );
     fflush( stderr );
     return 0;
 }
@@ -90,7 +90,21 @@ static int open_file( char *psz_filename, hnd_t *p_handle, video_info_t *info, c
     ffms_hnd_t *h = calloc( 1, sizeof(ffms_hnd_t) );
     if( !h )
         return -1;
+
+#ifdef __MINGW32__
+    /* FFMS supports UTF-8 filenames, but it uses std::fstream internally which is broken with Unicode in MinGW. */
     FFMS_Init( 0, 0 );
+    char src_filename[MAX_PATH];
+    char idx_filename[MAX_PATH];
+    FAIL_IF_ERROR( !x264_ansi_filename( psz_filename, src_filename, MAX_PATH, 0 ), "invalid ansi filename\n" );
+    if( opt->index_file )
+        FAIL_IF_ERROR( !x264_ansi_filename( opt->index_file, idx_filename, MAX_PATH, 1 ), "invalid ansi filename\n" );
+#else
+    FFMS_Init( 0, 1 );
+    char *src_filename = psz_filename;
+    char *idx_filename = opt->index_file;
+#endif
+
     FFMS_ErrorInfo e;
     e.BufferSize = 0;
     int seekmode = opt->seek ? FFMS_SEEK_NORMAL : FFMS_SEEK_LINEAR_NO_RW;
@@ -98,22 +112,22 @@ static int open_file( char *psz_filename, hnd_t *p_handle, video_info_t *info, c
     FFMS_Index *idx = NULL;
     if( opt->index_file )
     {
-        struct stat index_s, input_s;
-        if( !stat( opt->index_file, &index_s ) && !stat( psz_filename, &input_s ) &&
-            input_s.st_mtime < index_s.st_mtime )
-            idx = FFMS_ReadIndex( opt->index_file, &e );
+        x264_struct_stat index_s, input_s;
+        if( !x264_stat( opt->index_file, &index_s ) && !x264_stat( psz_filename, &input_s ) &&
+            input_s.st_mtime < index_s.st_mtime && index_s.st_size )
+            idx = FFMS_ReadIndex( idx_filename, &e );
     }
     if( !idx )
     {
         if( opt->progress )
         {
-            idx = FFMS_MakeIndex( psz_filename, 0, 0, NULL, NULL, 0, update_progress, &h->time, &e );
+            idx = FFMS_MakeIndex( src_filename, 0, 0, NULL, NULL, 0, update_progress, &h->time, &e );
             fprintf( stderr, "                                            \r" );
         }
         else
-            idx = FFMS_MakeIndex( psz_filename, 0, 0, NULL, NULL, 0, NULL, NULL, &e );
+            idx = FFMS_MakeIndex( src_filename, 0, 0, NULL, NULL, 0, NULL, NULL, &e );
         FAIL_IF_ERROR( !idx, "could not create index\n" )
-        if( opt->index_file && FFMS_WriteIndex( opt->index_file, idx, &e ) )
+        if( opt->index_file && FFMS_WriteIndex( idx_filename, idx, &e ) )
             x264_cli_log( "ffms", X264_LOG_WARNING, "could not write index file\n" );
     }
 
@@ -125,7 +139,7 @@ static int open_file( char *psz_filename, hnd_t *p_handle, video_info_t *info, c
     h->has_audio = !!( FFMS_GetFirstTrackOfType( idx, FFMS_TYPE_AUDIO, &e ) > 0 );
 #endif
 
-    h->video_source = FFMS_CreateVideoSource( psz_filename, trackno, idx, 1, seekmode, &e );
+    h->video_source = FFMS_CreateVideoSource( src_filename, trackno, idx, opt->demuxer_threads, seekmode, &e );
     FAIL_IF_ERROR( !h->video_source, "could not create video source\n" )
 
     h->track = FFMS_GetTrackFromVideo( h->video_source );
@@ -141,8 +155,16 @@ static int open_file( char *psz_filename, hnd_t *p_handle, video_info_t *info, c
     /* ffms is thread unsafe as it uses a single frame buffer for all frame requests */
     info->thread_safe  = 0;
 
+    x264_ntsc_fps( &info->fps_num, &info->fps_den );
+
     const FFMS_Frame *frame = FFMS_GetFrame( h->video_source, 0, &e );
     FAIL_IF_ERROR( !frame, "could not read frame 0\n" )
+
+    /* -1 = 'unset' (internal) , 2 from lavf|ffms = 'unset' */
+    if( frame->ColorSpace >= 0 && frame->ColorSpace <= 8 && frame->ColorSpace != 2 )
+        info->colormatrix = frame->ColorSpace;
+    else
+        info->colormatrix = -1;
 
     info->fullrange  = 0;
     info->width      = frame->EncodedWidth;
@@ -154,9 +176,9 @@ static int open_file( char *psz_filename, hnd_t *p_handle, video_info_t *info, c
 
     /* ffms timestamps are in milliseconds. ffms also uses int64_ts for timebase,
      * so we need to reduce large timebases to prevent overflow */
+    const FFMS_TrackTimeBase *timebase = FFMS_GetTimeBase( h->track );
     if( h->vfr_input )
     {
-        const FFMS_TrackTimeBase *timebase = FFMS_GetTimeBase( h->track );
         int64_t timebase_num = timebase->Num;
         int64_t timebase_den = timebase->Den * 1000;
         h->reduce_pts = 0;
@@ -170,6 +192,28 @@ static int open_file( char *psz_filename, hnd_t *p_handle, video_info_t *info, c
         info->timebase_num = timebase_num;
         info->timebase_den = timebase_den;
     }
+
+    /* show video info */
+    FFMS_Indexer *idxer     = FFMS_CreateIndexer( psz_filename, &e );
+    const char *format      = FFMS_GetFormatNameI( idxer );
+    const char *codec       = FFMS_GetCodecNameI( idxer, trackno );
+    double duration     = videop->NumFrames * videop->FPSDenominator / videop->FPSNumerator;
+    x264_cli_log( "ffms", X264_LOG_INFO,
+                  "\n Format    : %s"
+                  "\n Codec     : %s"
+                  "\n PixFmt    : %s"
+                  "\n Framerate : %d/%d"
+                  "\n Timebase  : %"PRIu64"/%"PRIu64
+                  "\n Duration  : %d:%02d:%02d\n",
+                  format,
+                  codec,
+                  av_pix_fmt_descriptors[frame->EncodedPixelFormat].name,
+                  videop->FPSNumerator, videop->FPSDenominator,
+                  (uint64_t)timebase->Num, (uint64_t)timebase->Den * 1000,
+                  (int)duration / 60 / 60, (int)duration / 60 % 60, (int)duration - (int)duration / 60 * 60 );
+    if( !strcmp( codec,"rawvideo" ) )
+        x264_cli_log( "ffms", X264_LOG_WARNING, "recommend using --demuxer lavf with rawvideo" );
+    FFMS_CancelIndexing( idxer );
 
     *p_handle = h;
     return 0;

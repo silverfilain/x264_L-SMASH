@@ -27,7 +27,7 @@
 #include "flv_bytestream.h"
 #include "audio/encoders.h"
 #if HAVE_AUDIO
-#include "mp4/lsmash.h"
+#include <lsmash.h>
 #endif
 
 #define CHECK(x)\

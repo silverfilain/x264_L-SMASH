@@ -29,8 +29,8 @@
 
 #include "common/common.h"
 #include "output.h"
-#include "mp4/lsmash.h"
-#include "mp4/importer.h"
+#include <lsmash.h>
+#include <lsmash_importer.h>
 
 #define H264_NALU_LENGTH_SIZE 4
 
@@ -107,6 +107,7 @@ typedef struct
     int b_brand_qt;
     int b_stdout;
     char *psz_chapter;
+    int b_add_bom;
     char *psz_language;
     uint32_t i_movie_timescale;
     uint32_t i_video_timescale;
@@ -331,6 +332,8 @@ static void remove_mp4_hnd( hnd_t handle )
     free( p_mp4 );
 }
 
+#if HAVE_ANY_AUDIO
+
 static int aac_init( mp4_audio_hnd_t *p_audio )
 {
     p_audio->codec_type = ISOM_CODEC_TYPE_MP4A_AUDIO;
@@ -459,6 +462,8 @@ static int alac_init( mp4_audio_hnd_t *p_audio )
     }
     return 0;
 }
+
+#endif /* #if HAVE_ANY_AUDIO */
 
 #if HAVE_AUDIO
 static int audio_init( hnd_t handle, cli_output_opt_t *opt, hnd_t filters, char *audio_enc, char *audio_parameters )
@@ -1036,7 +1041,7 @@ static int close_file( hnd_t handle, int64_t largest_pts, int64_t second_largest
 #endif
 
         if( p_mp4->psz_chapter && (p_mp4->major_brand != ISOM_BRAND_TYPE_QT) )
-            MP4_LOG_IF_ERR( lsmash_set_tyrant_chapter( p_mp4->p_root, p_mp4->psz_chapter, 0 ), "failed to set chapter list.\n" );
+            MP4_LOG_IF_ERR( lsmash_set_tyrant_chapter( p_mp4->p_root, p_mp4->psz_chapter, p_mp4->b_add_bom ), "failed to set chapter list.\n" );
 
         if( !p_mp4->b_no_remux )
         {
@@ -1102,6 +1107,7 @@ static int open_file( char *psz_filename, hnd_t *p_handle, cli_output_opt_t *opt
     if( opt->chapter )
     {
         p_mp4->psz_chapter = opt->chapter;
+        p_mp4->b_add_bom   = opt->add_bom;
         fh = fopen( p_mp4->psz_chapter, "rb" );
         MP4_FAIL_IF_ERR_EX( !fh, "can't open `%s'\n", p_mp4->psz_chapter );
         fclose( fh );
@@ -1190,11 +1196,17 @@ static int set_param( hnd_t handle, x264_param_t *p_param )
             brands[brand_count++] = ISOM_BRAND_TYPE_M4A;
         }
         brands[brand_count++] = ISOM_BRAND_TYPE_ISOM;
+#if HAVE_ANY_AUDIO
         if( p_mp4->audio_hnd || p_mp4->b_use_recovery )
+#else
+        if( p_mp4->b_use_recovery )
+#endif
         {
             brands[brand_count++] = ISOM_BRAND_TYPE_AVC1;   /* sdtp, sgpd, sbgp and visual roll recovery grouping */
+#if HAVE_ANY_AUDIO
             if( p_mp4->audio_hnd )
                 brands[brand_count++] = ISOM_BRAND_TYPE_ISO2;   /* audio roll recovery grouping */
+#endif
             if( p_param->b_open_gop )
                 brands[brand_count++] = ISOM_BRAND_TYPE_ISO6;   /* cslg and visual random access grouping */
         }

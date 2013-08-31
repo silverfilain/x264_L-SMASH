@@ -27,7 +27,7 @@
 #include "matroska_ebml.h"
 #if HAVE_AUDIO
 #include "audio/encoders.h"
-#include "mp4/lsmash.h"
+#include <lsmash.h>
 #endif
 
 #if HAVE_AUDIO

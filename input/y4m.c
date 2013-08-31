@@ -46,7 +46,6 @@ typedef struct
 static int parse_csp_and_depth( char *csp_name, int *bit_depth )
 {
     int csp    = X264_CSP_MAX;
-    *bit_depth = 8;
 
     /* Set colorspace from known variants */
     if( !strncmp( "420", csp_name, 3 ) )
@@ -57,8 +56,8 @@ static int parse_csp_and_depth( char *csp_name, int *bit_depth )
         csp = X264_CSP_I444;
 
     /* Set high bit depth from known extensions */
-    if( !strncmp( "p", csp_name + 3, 1 ) )
-        *bit_depth = strtol( csp_name + 4, NULL, 10 );
+    if( sscanf( csp_name, "%*d%*[pP]%d", bit_depth ) != 1 )
+        *bit_depth = 8;
 
     return csp;
 }
@@ -82,7 +81,7 @@ static int open_file( char *psz_filename, hnd_t *p_handle, video_info_t *info, c
     if( !strcmp( psz_filename, "-" ) )
         h->fh = stdin;
     else
-        h->fh = fopen(psz_filename, "rb");
+        h->fh = x264_fopen(psz_filename, "rb");
     if( h->fh == NULL )
         return -1;
 
@@ -148,6 +147,7 @@ static int open_file( char *psz_filename, hnd_t *p_handle, video_info_t *info, c
             case 'F': /* Frame rate - 0:0 if unknown */
                 if( sscanf( tokstart, "%u:%u", &n, &d ) == 2 && n && d )
                 {
+                    x264_ntsc_fps( &n, &d );
                     x264_reduce_fraction( &n, &d );
                     info->fps_num = n;
                     info->fps_den = d;
@@ -198,7 +198,14 @@ static int open_file( char *psz_filename, hnd_t *p_handle, video_info_t *info, c
     h->frame_size     = h->frame_header_len;
 
     if( h->bit_depth > 8 )
+    {
         info->csp |= X264_CSP_HIGH_DEPTH;
+        if( h->bit_depth == BIT_DEPTH )
+        {
+            /* HACK: totally skips depth filter to prevent dither error */
+            info->csp |= X264_CSP_SKIP_DEPTH_FILTER;
+        }
+    }
 
     const x264_cli_csp_t *csp = x264_cli_get_csp( info->csp );
 
@@ -250,7 +257,7 @@ static int read_frame_internal( cli_pic_t *pic, y4m_hnd_t *h )
     for( i = 0; i < pic->img.planes && !error; i++ )
     {
         error |= fread( pic->img.plane[i], pixel_depth, h->plane_size[i], h->fh ) != h->plane_size[i];
-        if( h->bit_depth & 7 )
+        if( h->bit_depth & 7 && h->bit_depth != BIT_DEPTH )
         {
             /* upconvert non 16bit high depth planes to 16bit using the same
              * algorithm as used in the depth filter. */

@@ -5,7 +5,7 @@
 #include <inttypes.h>
 #include "x264cli.h"
 #include "filters/filters.h"
-#include "output/mp4/lsmash.h"
+#include <lsmash.h>
 
 // Ripped from ffmpeg's audioconvert.h
 #ifndef AV_CH_FRONT_LEFT

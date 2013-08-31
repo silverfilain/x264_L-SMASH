@@ -8,6 +8,8 @@ vpath %.S $(SRCPATH)
 vpath %.asm $(SRCPATH)
 vpath %.rc $(SRCPATH)
 
+GENERATED =
+
 all: default
 default:
 
@@ -26,9 +28,8 @@ SRCCLI = x264.c input/input.c input/timecode.c input/raw.c input/y4m.c \
          filters/video/video.c filters/video/source.c filters/video/internal.c \
          filters/video/resize.c filters/video/cache.c filters/video/fix_vfr_pts.c \
          filters/video/select_every.c filters/video/crop.c filters/video/depth.c \
-         output/mp4.c audio/audio.c audio/encoders.c filters/audio/audio_filters.c filters/audio/internal.c
-
-SRCCLI += $(addprefix output/mp4/, isom.c utils.c write.c importer.c mp4sys.c mp4a.c summary.c chapter.c dts.c a52.c h264.c vc1.c alac.c meta.c description.c box.c)
+         output/mp4.c audio/audio.c audio/encoders.c filters/audio/audio_filters.c filters/audio/internal.c \
+         filters/video/hqdn3d.c filters/video/pad.c filters/video/vflip.c
 
 SRCSO =
 OBJS =
@@ -41,12 +42,21 @@ CONFIG := $(shell cat config.h)
 
 # GPL-only files
 ifneq ($(findstring HAVE_GPL 1, $(CONFIG)),)
-SRCCLI +=
+SRCCLI += filters/video/yadif.c filters/video/yadif_filter_line.c
+
+ifeq ($(ARCH),X86)
+SRCCLI += filters/video/x86/yadif_filter_line.c
+endif
+
 endif
 
 # Optional module sources
 ifneq ($(findstring HAVE_AVS 1, $(CONFIG)),)
 SRCCLI += input/avs.c
+endif
+
+ifeq ($(SYS),WINDOWS)
+SRCCLI += filters/video/subtitles.c
 endif
 
 ifneq ($(findstring HAVE_THREAD 1, $(CONFIG)),)
@@ -94,6 +104,10 @@ endif
 
 ifneq ($(findstring HAVE_AMRWB_3GPP 1, $(CONFIG)),)
 SRCCLI += audio/encoders/enc_amrwb_3gpp.c
+endif
+
+ifneq ($(findstring HAVE_AVI_OUTPUT 1, $(CONFIG)),)
+SRCCLI += output/avi.c
 endif
 
 # Visualization sources
@@ -174,6 +188,13 @@ OBJSO  += $(if $(RC), x264res.dll.o)
 endif
 endif
 
+ifeq ($(HAVE_OPENCL),yes)
+common/oclobj.h: common/opencl/x264-cl.h $(wildcard $(SRCPATH)/common/opencl/*.cl)
+	cat $^ | perl $(SRCPATH)/tools/cltostr.pl x264_opencl_source > $@
+GENERATED += common/oclobj.h
+SRCS += common/opencl.c encoder/slicetype-cl.c
+endif
+
 OBJS   += $(SRCS:%.c=%.o)
 OBJCLI += $(SRCCLI:%.c=%.o)
 OBJSO  += $(SRCSO:%.c=%.o)
@@ -184,12 +205,12 @@ cli: x264$(EXE)
 lib-static: $(LIBX264)
 lib-shared: $(SONAME)
 
-$(LIBX264): .depend $(OBJS) $(OBJASM)
+$(LIBX264): $(GENERATED) .depend $(OBJS) $(OBJASM)
 	rm -f $(LIBX264)
 	$(AR)$@ $(OBJS) $(OBJASM)
 	$(if $(RANLIB), $(RANLIB) $@)
 
-$(SONAME): .depend $(OBJS) $(OBJASM) $(OBJSO)
+$(SONAME): $(GENERATED) .depend $(OBJS) $(OBJASM) $(OBJSO)
 	$(LD)$@ $(OBJS) $(OBJASM) $(OBJSO) $(SOFLAGS) $(LDFLAGS)
 
 ifneq ($(EXE),)
@@ -198,10 +219,10 @@ x264: x264$(EXE)
 checkasm: checkasm$(EXE)
 endif
 
-x264$(EXE): .depend $(OBJCLI) $(CLI_LIBX264)
+x264$(EXE): $(GENERATED) .depend $(OBJCLI) $(CLI_LIBX264)
 	$(LD)$@ $(OBJCLI) $(CLI_LIBX264) $(LDFLAGSCLI) $(LDFLAGS)
 
-checkasm$(EXE): .depend $(OBJCHK) $(LIBX264)
+checkasm$(EXE): $(GENERATED) .depend $(OBJCHK) $(LIBX264)
 	$(LD)$@ $(OBJCHK) $(LIBX264) $(LDFLAGS)
 
 $(OBJS) $(OBJASM) $(OBJSO) $(OBJCLI) $(OBJCHK): .depend
@@ -238,7 +259,7 @@ OPT0 = --crf 30 -b1 -m1 -r1 --me dia --no-cabac --direct temporal --ssim --no-we
 OPT1 = --crf 16 -b2 -m3 -r3 --me hex --no-8x8dct --direct spatial --no-dct-decimate -t0  --slice-max-mbs 50
 OPT2 = --crf 26 -b4 -m5 -r2 --me hex --cqm jvt --nr 100 --psnr --no-mixed-refs --b-adapt 2 --slice-max-size 1500
 OPT3 = --crf 18 -b3 -m9 -r5 --me umh -t1 -A all --b-pyramid normal --direct auto --no-fast-pskip --no-mbtree
-OPT4 = --crf 22 -b3 -m7 -r4 --me esa -t2 -A all --psy-rd 1.0:1.0 --slices 4
+OPT4 = --crf 22 -b3 -m7 -r4 --me esa -t2 -A all --psy-rd 1.0:1.0 --slices 4 --fgo 8 --fade-compensate 0.5 --aq2-strength 0.5 --aq3-mode 2
 OPT5 = --frames 50 --crf 24 -b3 -m10 -r3 --me tesa -t2
 OPT6 = --frames 50 -q0 -m9 -r2 --me hex -Aall
 OPT7 = --frames 50 -q0 -m2 -r1 --me hex --no-cabac
@@ -260,7 +281,7 @@ endif
 
 clean:
 	rm -f $(OBJS) $(OBJASM) $(OBJCLI) $(OBJSO) $(SONAME) *.a *.lib *.exp *.pdb x264 x264.exe .depend TAGS
-	rm -f checkasm checkasm.exe $(OBJCHK)
+	rm -f checkasm checkasm.exe $(OBJCHK) $(GENERATED) x264_lookahead.clbin
 	rm -f $(SRC2:%.c=%.gcda) $(SRC2:%.c=%.gcno) *.dyn pgopti.dpi pgopti.dpi.lock
 
 distclean: clean

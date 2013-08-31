@@ -28,7 +28,7 @@
 #ifndef X264_X264_H
 #define X264_X264_H
 
-#if !defined(_STDINT_H) && !defined(_STDINT_H_) && \
+#if !defined(_STDINT_H) && !defined(_STDINT_H_) && !defined(_STDINT_H_INCLUDED) &&\
     !defined(_INTTYPES_H) && !defined(_INTTYPES_H_)
 # ifdef _MSC_VER
 #  pragma message("You must include stdint.h or inttypes.h before x264.h")
@@ -41,7 +41,7 @@
 
 #include "x264_config.h"
 
-#define X264_BUILD 129
+#define X264_BUILD 138
 
 /* Application developers planning to link against a shared library version of
  * libx264 from a Microsoft Visual Studio or similar development environment
@@ -98,54 +98,66 @@ typedef struct
     int i_first_mb; /* If this NAL is a slice, the index of the first MB in the slice. */
     int i_last_mb;  /* If this NAL is a slice, the index of the last MB in the slice. */
 
-    /* Size of payload in bytes. */
+    /* Size of payload (including any padding) in bytes. */
     int     i_payload;
     /* If param->b_annexb is set, Annex-B bytestream with startcode.
      * Otherwise, startcode is replaced with a 4-byte size.
      * This size is the size used in mp4/similar muxing; it is equal to i_payload-4 */
     uint8_t *p_payload;
+
+    /* Size of padding in bytes. */
+    int i_padding;
 } x264_nal_t;
 
 /****************************************************************************
  * Encoder parameters
  ****************************************************************************/
-/* CPU flags
- */
-#define X264_CPU_CACHELINE_32    0x0000001  /* avoid memory loads that span the border between two cachelines */
-#define X264_CPU_CACHELINE_64    0x0000002  /* 32/64 is the size of a cacheline in bytes */
-#define X264_CPU_ALTIVEC         0x0000004
-#define X264_CPU_MMX             0x0000008
-#define X264_CPU_MMX2            0x0000010  /* MMX2 aka MMXEXT aka ISSE */
-#define X264_CPU_MMXEXT          X264_CPU_MMX2
-#define X264_CPU_SSE             0x0000020
-#define X264_CPU_SSE2            0x0000040
-#define X264_CPU_SSE2_IS_SLOW    0x0000080  /* avoid most SSE2 functions on Athlon64 */
-#define X264_CPU_SSE2_IS_FAST    0x0000100  /* a few functions are only faster on Core2 and Phenom */
-#define X264_CPU_SSE3            0x0000200
-#define X264_CPU_SSSE3           0x0000400
-#define X264_CPU_SHUFFLE_IS_FAST 0x0000800  /* Penryn, Nehalem, and Phenom have fast shuffle units */
-#define X264_CPU_STACK_MOD4      0x0001000  /* if stack is only mod4 and not mod16 */
-#define X264_CPU_SSE4            0x0002000  /* SSE4.1 */
-#define X264_CPU_SSE42           0x0004000  /* SSE4.2 */
-#define X264_CPU_SSE_MISALIGN    0x0008000  /* Phenom support for misaligned SSE instruction arguments */
-#define X264_CPU_LZCNT           0x0010000  /* Phenom support for "leading zero count" instruction. */
-#define X264_CPU_ARMV6           0x0020000
-#define X264_CPU_NEON            0x0040000  /* ARM NEON */
-#define X264_CPU_FAST_NEON_MRC   0x0080000  /* Transfer from NEON to ARM register is fast (Cortex-A9) */
-#define X264_CPU_SLOW_CTZ        0x0100000  /* BSR/BSF x86 instructions are really slow on some CPUs */
-#define X264_CPU_SLOW_ATOM       0x0200000  /* The Atom just sucks */
-#define X264_CPU_AVX             0x0400000  /* AVX support: requires OS support even if YMM registers
-                                             * aren't used. */
-#define X264_CPU_XOP             0x0800000  /* AMD XOP */
-#define X264_CPU_FMA4            0x1000000  /* AMD FMA4 */
-#define X264_CPU_AVX2            0x2000000  /* AVX2 */
-#define X264_CPU_FMA3            0x4000000  /* Intel FMA3 */
-#define X264_CPU_BMI1            0x8000000  /* BMI1 */
-#define X264_CPU_BMI2           0x10000000  /* BMI2 */
-#define X264_CPU_TBM            0x20000000  /* AMD TBM */
+/* CPU flags */
 
-/* Analyse flags
- */
+/* x86 */
+#define X264_CPU_CMOV            0x0000001
+#define X264_CPU_MMX             0x0000002
+#define X264_CPU_MMX2            0x0000004  /* MMX2 aka MMXEXT aka ISSE */
+#define X264_CPU_MMXEXT          X264_CPU_MMX2
+#define X264_CPU_SSE             0x0000008
+#define X264_CPU_SSE2            0x0000010
+#define X264_CPU_SSE3            0x0000020
+#define X264_CPU_SSSE3           0x0000040
+#define X264_CPU_SSE4            0x0000080  /* SSE4.1 */
+#define X264_CPU_SSE42           0x0000100  /* SSE4.2 */
+#define X264_CPU_LZCNT           0x0000200  /* Phenom support for "leading zero count" instruction. */
+#define X264_CPU_AVX             0x0000400  /* AVX support: requires OS support even if YMM registers aren't used. */
+#define X264_CPU_XOP             0x0000800  /* AMD XOP */
+#define X264_CPU_FMA4            0x0001000  /* AMD FMA4 */
+#define X264_CPU_AVX2            0x0002000  /* AVX2 */
+#define X264_CPU_FMA3            0x0004000  /* Intel FMA3 */
+#define X264_CPU_BMI1            0x0008000  /* BMI1 */
+#define X264_CPU_BMI2            0x0010000  /* BMI2 */
+/* x86 modifiers */
+#define X264_CPU_CACHELINE_32    0x0020000  /* avoid memory loads that span the border between two cachelines */
+#define X264_CPU_CACHELINE_64    0x0040000  /* 32/64 is the size of a cacheline in bytes */
+#define X264_CPU_SSE2_IS_SLOW    0x0080000  /* avoid most SSE2 functions on Athlon64 */
+#define X264_CPU_SSE2_IS_FAST    0x0100000  /* a few functions are only faster on Core2 and Phenom */
+#define X264_CPU_SLOW_SHUFFLE    0x0200000  /* The Conroe has a slow shuffle unit (relative to overall SSE performance) */
+#define X264_CPU_STACK_MOD4      0x0400000  /* if stack is only mod4 and not mod16 */
+#define X264_CPU_SLOW_CTZ        0x0800000  /* BSR/BSF x86 instructions are really slow on some CPUs */
+#define X264_CPU_SLOW_ATOM       0x1000000  /* The Atom is terrible: slow SSE unaligned loads, slow
+                                             * SIMD multiplies, slow SIMD variable shifts, slow pshufb,
+                                             * cacheline split penalties -- gather everything here that
+                                             * isn't shared by other CPUs to avoid making half a dozen
+                                             * new SLOW flags. */
+#define X264_CPU_SLOW_PSHUFB     0x2000000  /* such as on the Intel Atom */
+#define X264_CPU_SLOW_PALIGNR    0x4000000  /* such as on the AMD Bobcat */
+
+/* PowerPC */
+#define X264_CPU_ALTIVEC         0x0000001
+
+/* ARM */
+#define X264_CPU_ARMV6           0x0000001
+#define X264_CPU_NEON            0x0000002  /* ARM NEON */
+#define X264_CPU_FAST_NEON_MRC   0x0000004  /* Transfer from NEON to ARM register is fast (Cortex-A9) */
+
+/* Analyse flags */
 #define X264_ANALYSE_I4x4       0x0001  /* Analyse i4x4 */
 #define X264_ANALYSE_I8x8       0x0002  /* Analyse i8x8 (requires 8x8 transform) */
 #define X264_ANALYSE_PSUB16x16  0x0010  /* Analyse p16x8, p8x16 and p8x8 */
@@ -168,8 +180,12 @@ typedef struct
 #define X264_RC_ABR                  2
 #define X264_QP_AUTO                 0
 #define X264_AQ_NONE                 0
-#define X264_AQ_VARIANCE             1
-#define X264_AQ_AUTOVARIANCE         2
+#define X264_AQ_MIX                  1
+#define X264_AQ_AUTOMIX              2
+#define X264_AQ_AUTOMIX_MOD1         3
+#define X264_AQ_AUTOMIX_MOD2         4
+#define X264_AQ_ORE                  1
+#define X264_AQ_MIXORE               2
 #define X264_B_ADAPT_NONE            0
 #define X264_B_ADAPT_FAST            1
 #define X264_B_ADAPT_TRELLIS         2
@@ -181,6 +197,7 @@ typedef struct
 #define X264_B_PYRAMID_NORMAL        2
 #define X264_KEYINT_MIN_AUTO         0
 #define X264_KEYINT_MAX_INFINITE     (1<<30)
+#define X264_LEVEL_IDC_AUTO          (-1)
 
 static const char * const x264_direct_pred_names[] = { "none", "spatial", "temporal", "auto", 0 };
 static const char * const x264_motion_est_names[] = { "dia", "hex", "umh", "esa", "tesa", 0 };
@@ -188,10 +205,12 @@ static const char * const x264_b_pyramid_names[] = { "none", "strict", "normal",
 static const char * const x264_overscan_names[] = { "undef", "show", "crop", 0 };
 static const char * const x264_vidformat_names[] = { "component", "pal", "ntsc", "secam", "mac", "undef", 0 };
 static const char * const x264_fullrange_names[] = { "off", "on", 0 };
-static const char * const x264_colorprim_names[] = { "", "bt709", "undef", "", "bt470m", "bt470bg", "smpte170m", "smpte240m", "film", 0 };
-static const char * const x264_transfer_names[] = { "", "bt709", "undef", "", "bt470m", "bt470bg", "smpte170m", "smpte240m", "linear", "log100", "log316", 0 };
-static const char * const x264_colmatrix_names[] = { "GBR", "bt709", "undef", "", "fcc", "bt470bg", "smpte170m", "smpte240m", "YCgCo", 0 };
+static const char * const x264_colorprim_names[] = { "", "bt709", "undef", "", "bt470m", "bt470bg", "smpte170m", "smpte240m", "film", "bt2020", 0 };
+static const char * const x264_transfer_names[] = { "", "bt709", "undef", "", "bt470m", "bt470bg", "smpte170m", "smpte240m", "linear", "log100", "log316",
+                                                    "iec61966-2-4", "bt1361e", "iec61966-2-1", "bt2020-10", "bt2020-12", 0 };
+static const char * const x264_colmatrix_names[] = { "GBR", "bt709", "undef", "", "fcc", "bt470bg", "smpte170m", "smpte240m", "YCgCo", "bt2020nc", "bt2020c", 0 };
 static const char * const x264_nal_hrd_names[] = { "none", "vbr", "cbr", 0 };
+static const char * const x264_log_level_names[] = { "none", "error", "warning", "info", "debug", 0 };
 
 /* Colorspace type */
 #define X264_CSP_MASK           0x00ff  /* */
@@ -210,6 +229,7 @@ static const char * const x264_nal_hrd_names[] = { "none", "vbr", "cbr", 0 };
 #define X264_CSP_MAX            0x000c  /* end of list */
 #define X264_CSP_VFLIP          0x1000  /* the csp is vertically flipped */
 #define X264_CSP_HIGH_DEPTH     0x2000  /* the csp has a depth of 16 bits per pixel component */
+#define X264_CSP_SKIP_DEPTH_FILTER 0x0100  /* HACK: totally skips depth filter to prevent dither error */
 
 /* Slice type */
 #define X264_TYPE_AUTO          0x0000  /* Let x264 choose the right type */
@@ -238,6 +258,19 @@ static const char * const x264_nal_hrd_names[] = { "none", "vbr", "cbr", 0 };
 #define X264_NAL_HRD_VBR             1
 #define X264_NAL_HRD_CBR             2
 
+/* SEI level */
+#define X264_OPTS_NONE          0x0000
+#define X264_OPTS_INFO          0x0001
+#define X264_OPTS_SETTING       0x0002
+#define X264_OPTS_FULL          0x0003
+
+#define X264_OPTS_PREINFO       0x0010
+#define X264_OPTS_POSTINFO      0x0020
+#define X264_OPTS_PREOPT        0x0040
+#define X264_OPTS_POSTOPT       0x0080
+
+#define X264_OPTS_MAX                4
+
 /* Zones: override ratecontrol or other options for specific sections of the video.
  * See x264_encoder_reconfig() for which options can be changed.
  * If zones overlap, whichever comes later in the list takes precedence. */
@@ -249,6 +282,54 @@ typedef struct
     float f_bitrate_factor;
     struct x264_param_t *param;
 } x264_zone_t;
+
+/* Auto VBV*/
+#define X264_VBV_MAXRATE_HIGH444 -5 /* Set the VBV maxrate to fit in the target level of High 4:4:4 Predictive Profile */
+#define X264_VBV_MAXRATE_HIGH422 -4 /* Set the VBV maxrate to fit in the target level of High 4:2:2 Profile */
+#define X264_VBV_MAXRATE_HIGH10  -3 /* Set the VBV maxrate to fit in the target level of High 10 Profile */
+#define X264_VBV_MAXRATE_HIGH    -2 /* Set the VBV maxrate to fit in the target level of High Profile */
+#define X264_VBV_MAXRATE_MAIN    -1 /* Set the VBV maxrate to fit in the target level of Main Profile */
+#define X264_VBV_BUFSIZE_HIGH444 -5 /* Set the VBV bufsize to fit in the target level of High 4:4:4 Predictive Profile */
+#define X264_VBV_BUFSIZE_HIGH422 -4 /* Set the VBV bufsize to fit in the target level of High 4:2:2 Profile */
+#define X264_VBV_BUFSIZE_HIGH10  -3 /* Set the VBV bufsize to fit in the target level of High 10 Profile */
+#define X264_VBV_BUFSIZE_HIGH    -2 /* Set the VBV bufsize to fit in the target level of High Profile */
+#define X264_VBV_BUFSIZE_MAIN    -1 /* Set the VBV bufsize to fit in the target level of Main Profile */
+
+/* Device capability */
+#define X264_LEVEL_IDC_DXVA         41
+#define X264_LEVEL_IDC_BLURAY       41
+#define X264_LEVEL_IDC_PSP          30 /* Actually the latest firmware supports Level 5.2, thus not restricted */
+#define X264_LEVEL_IDC_PSV          31 /* Actually the latest firmware supports Level 5.2, thus not restricted */
+#define X264_LEVEL_IDC_PS3          42
+#define X264_LEVEL_IDC_XBOX         41
+#define X264_LEVEL_IDC_IPHONE       41
+#define X264_LEVEL_IDC_GENERIC      30
+#define X264_VBV_MAXRATE_BLURAY  40000 /* Vbv restriction is taken from MeGUI */
+#define X264_VBV_BUFSIZE_BLURAY  30000
+#define X264_VBV_MAXRATE_PSP     10000
+#define X264_VBV_BUFSIZE_PSP     10000
+#define X264_VBV_MAXRATE_PS3     31250
+#define X264_VBV_BUFSIZE_PS3     31250
+#define X264_VBV_MAXRATE_XBOX    24000
+#define X264_VBV_BUFSIZE_XBOX    24000
+#define X264_VBV_MAXRATE_GENERIC 10000
+#define X264_VBV_BUFSIZE_GENERIC 10000
+
+/* Device mask */
+#define X264_DEVICE_HIGH_DEPTH 0x0001 /* Device supports high bit depth */
+#define X264_DEVICE_422        0x0002 /* Device supports 4:2:2 */
+#define X264_DEVICE_444        0x0004 /* Device supports 4:4:4 */
+#define X264_DEVICE_LOSSLESS   0x0008 /* Device supports lossless */
+#define X264_DEVICE_LEVEL_FREE 0x0010 /* Device has no level force */
+
+#define X264_DEVICE_DXVA    0x0000
+#define X264_DEVICE_BLURAY  0x0000
+#define X264_DEVICE_PSP     0x0000
+#define X264_DEVICE_PSV     0x0000
+#define X264_DEVICE_PS3     0x0000
+#define X264_DEVICE_XBOX    0x0000
+#define X264_DEVICE_IPHONE  0x0000
+#define X264_DEVICE_GENERIC 0x0000
 
 typedef struct x264_param_t
 {
@@ -266,6 +347,9 @@ typedef struct x264_param_t
     int         i_height;
     int         i_csp;         /* CSP of encoded bitstream */
     int         i_level_idc;
+    int         b_level_force; /* force ref etc. for level */
+    int         i_profile;
+    int         b_profile_force; /* do not automatically decrease profile settings even if not needed */
     int         i_frame_total; /* number of frames to encode if known, else 0 */
 
     /* NAL HRD
@@ -308,6 +392,7 @@ typedef struct x264_param_t
     int         i_bframe_pyramid;   /* Keep some B-frames as references: 0=off, 1=strict hierarchical, 2=normal */
     int         b_open_gop;
     int         b_bluray_compat;
+    int         b_avcintra_compat;
 
     int         b_deblocking_filter;
     int         i_deblocking_filter_alphac0;    /* [-6, 6] -6 light filter, 6 strong */
@@ -320,7 +405,7 @@ typedef struct x264_param_t
     int         b_constrained_intra;
 
     int         i_cqm_preset;
-    char        *psz_cqm_file;      /* JM format */
+    char        *psz_cqm_file;      /* filename (in UTF-8) of CQM file, JM format */
     uint8_t     cqm_4iy[16];        /* used only if i_cqm_preset == X264_CQM_CUSTOM */
     uint8_t     cqm_4py[16];
     uint8_t     cqm_4ic[16];
@@ -334,9 +419,12 @@ typedef struct x264_param_t
     void        (*pf_log)( void *, int i_level, const char *psz, va_list );
     void        *p_log_private;
     int         i_log_level;
+    int         i_log_file_level;
+    char        *psz_log_file;
     int         b_visualize;
     int         b_full_recon;   /* fully reconstruct frames, even when not necessary for encoding.  Implied by psz_dump_yuv */
-    char        *psz_dump_yuv;  /* filename for reconstructed frames */
+    int         b_stylish;
+    char        *psz_dump_yuv;  /* filename (in UTF-8) for reconstructed frames */
 
     /* Encoder analyser parameters */
     struct
@@ -361,6 +449,7 @@ typedef struct x264_param_t
         int          b_fast_pskip; /* early SKIP detection on P-frames */
         int          b_dct_decimate; /* transform coefficient thresholding on P-frames */
         int          i_noise_reduction; /* adaptive pseudo-deadzone */
+        int          i_fgo; /* psy film grain optimization */
         float        f_psy_rd; /* Psy RD strength */
         float        f_psy_trellis; /* Psy trellis strength */
         int          b_psy; /* Toggle all psy optimizations */
@@ -381,8 +470,10 @@ typedef struct x264_param_t
         int         i_rc_method;    /* X264_RC_* */
 
         int         i_qp_constant;  /* 0 to (51 + 6*(x264_bit_depth-8)). 0=lossless */
-        int         i_qp_min;       /* min allowed QP value */
-        int         i_qp_max;       /* max allowed QP value */
+        int         i_qp_min[3];    /* min allowed QP value of I:P:B slices */
+        int         i_qp_max[3];    /* max allowed QP value of I:P:B slices */
+        int         i_qp_min_min;   /* min allowed QP value */
+        int         i_qp_max_max;   /* max allowed QP value */
         int         i_qp_step;      /* max QP step between frames */
 
         int         i_bitrate;
@@ -397,14 +488,34 @@ typedef struct x264_param_t
 
         int         i_aq_mode;      /* psy adaptive QP. (X264_AQ_*) */
         float       f_aq_strength;
+        float       f_aq_sensitivity;
+        float       f_aq_ifactor;
+        float       f_aq_pfactor;
+        float       f_aq_bfactor;
+        int         b_aq2;          /* psy 2nd adaptive QP */
+        float       f_aq2_strength;
+        float       f_aq2_sensitivity;
+        float       f_aq2_ifactor;
+        float       f_aq2_pfactor;
+        float       f_aq2_bfactor;
+        int         i_aq3_mode;      /* psy 3rd adaptive QP */
+        float       f_aq3_strength;
+        float       f_aq3_strengths[2][4];   /* Up{ Bright, Middle, Dark, M.Dark }, Down{ Bright, Middle, Dark, Other stuff } */
+        float       f_aq3_sensitivity;
+        float       f_aq3_ifactor[2]; /* { Up, Down } */
+        float       f_aq3_pfactor[2]; /* { Up, Down } */
+        float       f_aq3_bfactor[2]; /* { Up, Down } */
+        int         b_aq3_boundary;
+        int         i_aq3_boundary[3];
+        float       f_fade_compensate; /* Give more bits to fades. */
         int         b_mb_tree;      /* Macroblock-tree ratecontrol. */
         int         i_lookahead;
 
         /* 2pass */
         int         b_stat_write;   /* Enable stat writing in psz_stat_out */
-        char        *psz_stat_out;
+        char        *psz_stat_out;  /* output filename (in UTF-8) of the 2pass stats file */
         int         b_stat_read;    /* Read stat from psz_stat_in and use it */
-        char        *psz_stat_in;
+        char        *psz_stat_in;   /* input filename (in UTF-8) of the 2pass stats file */
 
         /* 2pass params (same as ffmpeg ones) */
         float       f_qcompress;    /* 0.0 => cbr, 1.0 => constant qp */
@@ -441,6 +552,8 @@ typedef struct x264_param_t
     uint32_t i_fps_den;
     uint32_t i_timebase_num;    /* Timebase numerator */
     uint32_t i_timebase_den;    /* Timebase denominator */
+    int i_opts_write;
+    char *psz_opts[X264_OPTS_MAX];
 
     int b_tff;
 
@@ -464,10 +577,29 @@ typedef struct x264_param_t
 
     int b_fake_interlaced;
 
+    /* Don't optimize header parameters based on video content, e.g. ensure that splitting an input video, compressing
+     * each part, and stitching them back together will result in identical SPS/PPS. This is necessary for stitching
+     * with container formats that don't allow multiple SPS/PPS. */
+    int b_stitchable;
+
+    int b_opencl;            /* use OpenCL when available */
+    int i_opencl_device;     /* specify count of GPU devices to skip, for CLI users */
+    void *opencl_device_id;  /* pass explicit cl_device_id as void*, for API users */
+    char *psz_clbin_file;    /* filename (in UTF-8) of the compiled OpenCL kernel cache file */
+
     /* Slicing parameters */
     int i_slice_max_size;    /* Max size per slice in bytes; includes estimated NAL overhead. */
     int i_slice_max_mbs;     /* Max number of MBs per slice; overrides i_slice_count. */
+    int i_slice_min_mbs;     /* Min number of MBs per slice */
     int i_slice_count;       /* Number of slices per frame: forces rectangular slices. */
+    int i_slice_count_max;   /* Absolute cap on slices per frame; stops applying slice-max-size
+                              * and slice-max-mbs if this is reached. */
+
+    /* Filters */
+    struct
+    {
+        int b_sub;           /* Load subtitles or not */
+    } filters;
 
     /* Optional callback for freeing this x264_param_t when it is done being used.
      * Only used when the x264_param_t sits in memory for an indefinite period of time,
@@ -481,7 +613,7 @@ typedef struct x264_param_t
      * is done encoding.
      *
      * This callback MUST do the following in order to work correctly:
-     * 1) Have available an output buffer of at least size nal->i_payload*3/2 + 5 + 16.
+     * 1) Have available an output buffer of at least size nal->i_payload*3/2 + 5 + 64.
      * 2) Call x264_nal_encode( h, dst, nal ), where dst is the output buffer.
      * After these steps, the content of nal is valid and can be used in the same way as if
      * the NAL unit were output by x264_encoder_encode.
@@ -620,7 +752,7 @@ static const char * const x264_profile_names[] = { "baseline", "main", "high", "
  *      decrease them.
  *
  *      returns 0 on success, negative on failure (e.g. invalid profile name). */
-int     x264_param_apply_profile( x264_param_t *, const char *profile );
+int     x264_param_apply_profile( x264_param_t *, const char *profile, const char *device );
 
 /****************************************************************************
  * Picture structures and functions
@@ -837,7 +969,13 @@ x264_t *x264_encoder_open( x264_param_t * );
  *      due to delay, this may not be the next frame passed to encoder_encode.
  *      if the change should apply to some particular frame, use x264_picture_t->param instead.
  *      returns 0 on success, negative on parameter validation error.
- *      not all parameters can be changed; see the actual function for a detailed breakdown. */
+ *      not all parameters can be changed; see the actual function for a detailed breakdown.
+ *
+ *      since not all parameters can be changed, moving from preset to preset may not always
+ *      fully copy all relevant parameters, but should still work usably in practice. however,
+ *      more so than for other presets, many of the speed shortcuts used in ultrafast cannot be
+ *      switched out of; using reconfig to switch between ultrafast and other presets is not
+ *      recommended without a more fine-grained breakdown of parameters to take this into account. */
 int     x264_encoder_reconfig( x264_t *, x264_param_t * );
 /* x264_encoder_parameters:
  *      copies the current internal set of parameters to the pointer provided
