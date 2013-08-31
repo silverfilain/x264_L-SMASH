@@ -25,6 +25,7 @@ Configuration options:
   --system-libx264         use system libx264 instead of internal
   --enable-shared          build shared library
   --enable-static          build static library
+  --disable-opencl         disable OpenCL features
   --disable-gpl            disable GPL-only features
   --enable-nonfree         allow use of nonfree code, the resulting
                            binaries will be unredistributable
@@ -48,7 +49,7 @@ Cross-compilation:
   --sysroot=SYSROOT        root of cross-build tree
 
 External library support:
-  --disable-avs            disable avisynth support (windows only)
+  --disable-avs            disable avisynth support
   --disable-swscale        disable swscale support
   --disable-lavf           disable libavformat support
   --disable-ffms           disable ffmpegsource support
@@ -85,6 +86,9 @@ intel_cflags() {
         [[ "$arg" = -falign-loops* ]] && arg=
         [ "$arg" = -fno-tree-vectorize ] && arg=
         [ "$arg" = -Wshadow ] && arg=
+        [[ "$arg" = -mpreferred-stack-boundary* ]] && arg=
+        [[ "$arg" = -l* ]] && arg=
+        [[ "$arg" = -L* ]] && arg=
         if [ $compiler = ICL ]; then
             [ "$arg" = -Wall ] && arg=-W0
             [ "$arg" = -g ] && arg=-Z7
@@ -138,7 +142,7 @@ cc_check() {
     [ -n "$1" ] && echo "#include <$1>" > conftest.c
     echo "int main () { $3 return 0; }" >> conftest.c
     if [ $compiler = ICL ]; then
-        cc_cmd="$CC conftest.c $CFLAGS $2 -link $(icl_ldflags $2 $LDFLAGSCLI $LDFLAGS)"
+        cc_cmd="$CC conftest.c $(intel_cflags $CFLAGS $2) -link $(icl_ldflags $2 $LDFLAGSCLI $LDFLAGS)"
     else
         cc_cmd="$CC conftest.c $CFLAGS $2 $LDFLAGSCLI $LDFLAGS -o conftest"
     fi
@@ -279,6 +283,7 @@ vis="no"
 bit_depth="8"
 chroma_format="all"
 compiler="GNU"
+opencl="yes"
 
 nonfree="no"
 lsmash="yes"
@@ -300,7 +305,8 @@ cross_prefix=""
 EXE=""
 
 # list of all preprocessor HAVE values we can define
-CONFIG_HAVE="MALLOC_H ALTIVEC ALTIVEC_H MMX ARMV6 ARMV6T2 NEON BEOSTHREAD POSIXTHREAD WIN32THREAD THREAD LOG2F VISUALIZE SWSCALE LAVF FFMS AVS GPL VECTOREXT INTERLACED CPU_COUNT"
+CONFIG_HAVE="MALLOC_H ALTIVEC ALTIVEC_H MMX ARMV6 ARMV6T2 NEON BEOSTHREAD POSIXTHREAD WIN32THREAD THREAD LOG2F VISUALIZE SWSCALE \
+             LAVF FFMS AVS GPL VECTOREXT INTERLACED CPU_COUNT OPENCL THP"
 
 # list of all preprocessor HAVE values we can define for audio stuff
 CONFIG_AUDIO_HAVE="AUDIO LAME QT_AAC FAAC AMRWB_3GPP NONFREE LSMASH"
@@ -398,6 +404,9 @@ for opt do
             ;;
         --host=*)
             host="$optarg"
+            ;;
+        --disable-opencl)
+            opencl="no"
             ;;
         --cross-prefix=*)
             cross_prefix="$optarg"
@@ -526,12 +535,13 @@ case $host_os in
             CFLAGS="$CFLAGS -mno-cygwin"
             LDFLAGS="$LDFLAGS -mno-cygwin"
         fi
-        if cpp_check "" "" "defined(__CYGWIN32__)" ; then
+        if cpp_check "" "" "defined(__CYGWIN__)" ; then
             define HAVE_MALLOC_H
             SYS="CYGWIN"
         else
             SYS="WINDOWS"
             DEVNULL="NUL"
+            LDFLAGSCLI="$LDFLAGSCLI -lshell32"
             RC="${RC-${cross_prefix}windres}"
         fi
         ;;
@@ -539,6 +549,7 @@ case $host_os in
         SYS="WINDOWS"
         EXE=".exe"
         DEVNULL="NUL"
+        LDFLAGSCLI="$LDFLAGSCLI -lshell32"
         [ $compiler = ICL ] && RC="${RC-rc}" || RC="${RC-${cross_prefix}windres}"
         ;;
     sunos*|solaris*)
@@ -551,6 +562,13 @@ case $host_os in
             LDFLAGS="$LDFLAGS /usr/lib/values-xpg6.o"
         fi
         HAVE_GETOPT_LONG=0
+        ;;
+    *qnx*)
+        SYS="QNX"
+        define HAVE_MALLOC_H
+        libm="-lm"
+        HAVE_GETOPT_LONG=0
+        CFLAGS="$CFLAGS -I\$(SRCPATH)/extras"
         ;;
     *)
         die "Unknown system $host, edit the configure"
@@ -595,6 +613,7 @@ case $host_cpu in
         elif [ "$SYS" = WINDOWS -o "$SYS" = CYGWIN ]; then
             ASFLAGS="$ASFLAGS -f win32 -DPREFIX"
             LDFLAGS="$LDFLAGS -Wl,--large-address-aware"
+            [ $compiler = GNU ] && LDFLAGS="$LDFLAGS -Wl,--nxcompat -Wl,--dynamicbase"
             [ $compiler = GNU ] && RCFLAGS="--target=pe-i386 $RCFLAGS"
         else
             ASFLAGS="$ASFLAGS -f elf"
@@ -610,10 +629,11 @@ case $host_cpu in
                 CFLAGS="$CFLAGS -arch x86_64"
                 LDFLAGS="$LDFLAGS -arch x86_64"
             fi
-        elif [ "$SYS" = WINDOWS ]; then
+        elif [ "$SYS" = WINDOWS -o "$SYS" = CYGWIN ]; then
             ASFLAGS="$ASFLAGS -f win32 -m amd64"
             # only the GNU toolchain is inconsistent in prefixing function names with _
             [ $compiler = GNU ] && cc_check "" "-S" && grep -q "_main:" conftest && ASFLAGS="$ASFLAGS -DPREFIX"
+            [ $compiler = GNU ] && LDFLAGS="$LDFLAGS -Wl,--nxcompat -Wl,--dynamicbase"
             [ $compiler = GNU ] && RCFLAGS="--target=pe-x86-64 $RCFLAGS"
         else
             ASFLAGS="$ASFLAGS -f elf -m amd64"
@@ -734,6 +754,10 @@ if [ $asm = auto -a \( $ARCH = X86 -o $ARCH = X86_64 \) ] ; then
         exit 1
     fi
     define HAVE_MMX
+    if cc_check '' -mpreferred-stack-boundary=5 ; then
+        CFLAGS="$CFLAGS -mpreferred-stack-boundary=5"
+        define HAVE_32B_STACK_ALIGNMENT
+    fi
 fi
 
 if [ $asm = auto -a $ARCH = ARM ] ; then
@@ -801,6 +825,9 @@ if [ "$thread" = "auto" ]; then
                 thread="win32"
             fi
             ;;
+        QNX)
+            cc_check pthread.h -lc && thread="posix" && libpthread="-lc"
+            ;;
         *)
             cc_check pthread.h -lpthread && thread="posix" && libpthread="-lpthread"
             ;;
@@ -825,6 +852,10 @@ fi
 
 if cc_check "math.h" "-Werror" "return log2f(2);" ; then
     define HAVE_LOG2F
+fi
+
+if [ "$SYS" = "LINUX" -a \( "$ARCH" = "X86" -o "$ARCH" = "X86_64" \) ] && cc_check "sys/mman.h" "" "MADV_HUGEPAGE;" ; then
+    define HAVE_THP
 fi
 
 if [ "$vis" = "yes" ] ; then
@@ -1050,9 +1081,17 @@ done
 if [ "$avs" = "auto" ] ; then
     avs="no"
     # cygwin can use avisynth if it can use LoadLibrary
-    if [ $SYS = WINDOWS ] || ([ $SYS = CYGWIN ] && cc_check windows.h "" "LoadLibrary(0);") ; then
-        avs="yes"
+    if [ $SYS = WINDOWS ] || ([ $SYS = CYGWIN ] && cc_check windows.h "" "LoadLibraryW(0);") ; then
+        avs="avisynth"
         define HAVE_AVS
+        define USE_AVXSYNTH 0
+    elif [ "$SYS" = "LINUX" -o "$SYS" = "MACOSX" ] ; then
+    # AvxSynth currently only supports Linux and OSX
+        avs="avxsynth"
+        define HAVE_AVS
+        define USE_AVXSYNTH 1
+        AVS_LIBS="-ldl"
+        LDFLAGSCLI="$AVS_LIBS $LDFLAGSCLI"
     fi
 fi
 
@@ -1112,6 +1151,7 @@ fi
 if [ "$bit_depth" -gt "8" ]; then
     define HIGH_BIT_DEPTH
     ASFLAGS="$ASFLAGS -DHIGH_BIT_DEPTH=1"
+    opencl="no"
 else
     ASFLAGS="$ASFLAGS -DHIGH_BIT_DEPTH=0"
 fi
@@ -1125,6 +1165,30 @@ ASFLAGS="$ASFLAGS -DBIT_DEPTH=$bit_depth"
 [ $gpl = yes ] && define HAVE_GPL && x264_gpl=1 || x264_gpl=0
 
 [ $interlaced = yes ] && define HAVE_INTERLACED && x264_interlaced=1 || x264_interlaced=0
+
+libdl=""
+if [ "$opencl" = "yes" ]; then
+    opencl="no"
+    log_check "for perl"
+    output=$(perl -v)
+    if [ "$output" = "" ]; then
+        log_fail
+        echo 'OpenCL support requires perl to compile.'
+        echo 'use --disable-opencl to compile without OpenCL.'
+        exit 1
+    fi
+    log_ok
+    # cygwin can use opencl if it can use LoadLibrary
+    if [ $SYS = WINDOWS ] || ([ $SYS = CYGWIN ] && cc_check windows.h "" "LoadLibraryW(0);") ; then
+        opencl="yes"
+        define HAVE_OPENCL
+    elif [ "$SYS" = "LINUX" -o "$SYS" = "MACOSX" ] ; then
+        opencl="yes"
+        define HAVE_OPENCL
+        libdl="-ldl"
+    fi
+    LDFLAGS="$LDFLAGS $libdl"
+fi
 
 #define undefined vars as 0
 for var in $CONFIG_HAVE; do
@@ -1217,6 +1281,7 @@ PROF_GEN_CC=$PROF_GEN_CC
 PROF_GEN_LD=$PROF_GEN_LD
 PROF_USE_CC=$PROF_USE_CC
 PROF_USE_LD=$PROF_USE_LD
+HAVE_OPENCL=$opencl
 EOF
 
 if [ $compiler = ICL ]; then
@@ -1296,7 +1361,7 @@ Name: x264
 Description: H.264 (MPEG4 AVC) encoder library
 Version: $(grep POINTVER < x264_config.h | sed -e 's/.* "//; s/".*//')
 Libs: -L$libdir -lx264
-Libs.private: $libpthread $libm
+Libs.private: $libpthread $libm $libdl
 Cflags: -I$includedir
 EOF
 
@@ -1321,6 +1386,7 @@ audio:         $audio$(test $audio = "yes" && echo " ($audio_encs)")
 gpl:           $gpl
 nonfree:       $nonfree
 thread:        $thread
+opencl:        $opencl
 filters:       $filters
 debug:         $debug
 gprof:         $gprof

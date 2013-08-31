@@ -40,6 +40,7 @@
 #define IS_DISPOSABLE(type) ( type == X264_TYPE_B )
 #define FIX8(f) ((int)(f*(1<<8)+.5))
 #define ALIGN(x,a) (((x)+((a)-1))&~((a)-1))
+#define ARRAY_ELEMS(a) ((sizeof(a))/(sizeof(a[0])))
 
 #define CHECKED_MALLOC( var, size )\
 do {\
@@ -52,6 +53,33 @@ do {\
     CHECKED_MALLOC( var, size );\
     memset( var, 0, size );\
 } while( 0 )
+
+/* Macros for merging multiple allocations into a single large malloc, for improved
+ * use with huge pages. */
+
+/* Needs to be enough to contain any set of buffers that use combined allocations */
+#define PREALLOC_BUF_SIZE 1024
+
+#define PREALLOC_INIT\
+    int    prealloc_idx = 0;\
+    size_t prealloc_size = 0;\
+    uint8_t **preallocs[PREALLOC_BUF_SIZE];
+
+#define PREALLOC( var, size )\
+do {\
+    var = (void*)prealloc_size;\
+    preallocs[prealloc_idx++] = (uint8_t**)&var;\
+    prealloc_size += ALIGN(size, NATIVE_ALIGN);\
+} while(0)
+
+#define PREALLOC_END( ptr )\
+do {\
+    CHECKED_MALLOC( ptr, prealloc_size );\
+    while( prealloc_idx-- )\
+        *preallocs[prealloc_idx] += (intptr_t)ptr;\
+} while(0)
+
+#define ARRAY_SIZE(array)  (sizeof(array)/sizeof(array[0]))
 
 #define X264_BFRAME_MAX 16
 #define X264_REF_MAX 16
@@ -81,6 +109,7 @@ do {\
 
 #define NALU_OVERHEAD 5 // startcode + NAL type costs 5 bytes per frame
 #define FILLER_OVERHEAD (NALU_OVERHEAD+1)
+#define SEI_OVERHEAD (NALU_OVERHEAD - (h->param.b_annexb && !h->param.b_avcintra_compat && (h->out.i_nal-1)))
 
 /****************************************************************************
  * Includes
@@ -202,6 +231,10 @@ static const uint8_t x264_scan8[16*3 + 3] =
 };
 
 #include "x264.h"
+#if HAVE_OPENCL
+#include "opencl.h"
+#endif
+#include "cabac.h"
 #include "bitstream.h"
 #include "set.h"
 #include "predict.h"
@@ -209,7 +242,6 @@ static const uint8_t x264_scan8[16*3 + 3] =
 #include "mc.h"
 #include "frame.h"
 #include "dct.h"
-#include "cabac.h"
 #include "quant.h"
 #include "cpu.h"
 #include "threadpool.h"
@@ -289,17 +321,6 @@ static ALWAYS_INLINE uint16_t x264_cabac_mvd_sum( uint8_t *mvdleft, uint8_t *mvd
     amvd0 = (amvd0 > 2) + (amvd0 > 32);
     amvd1 = (amvd1 > 2) + (amvd1 > 32);
     return amvd0 + (amvd1<<8);
-}
-
-static void ALWAYS_INLINE x264_predictor_roundclip( int16_t (*dst)[2], int16_t (*mvc)[2], int i_mvc, int mv_x_min, int mv_x_max, int mv_y_min, int mv_y_max )
-{
-    for( int i = 0; i < i_mvc; i++ )
-    {
-        int mx = (mvc[i][0] + 2) >> 2;
-        int my = (mvc[i][1] + 2) >> 2;
-        dst[i][0] = x264_clip3( mx, mv_x_min, mv_x_max );
-        dst[i][1] = x264_clip3( my, mv_y_min, mv_y_max );
-    }
 }
 
 extern const uint8_t x264_exp2_lut[64];
@@ -614,11 +635,11 @@ struct x264_t
     /* Current MB DCT coeffs */
     struct
     {
-        ALIGNED_16( dctcoef luma16x16_dc[3][16] );
+        ALIGNED_N( dctcoef luma16x16_dc[3][16] );
         ALIGNED_16( dctcoef chroma_dc[2][8] );
         // FIXME share memory?
-        ALIGNED_16( dctcoef luma8x8[12][64] );
-        ALIGNED_16( dctcoef luma4x4[16*3][16] );
+        ALIGNED_N( dctcoef luma8x8[12][64] );
+        ALIGNED_N( dctcoef luma4x4[16*3][16] );
     } dct;
 
     /* MB table and cache for current frame/mb */
@@ -671,8 +692,7 @@ struct x264_t
         int     mv_miny_spel_row[3];
         int     mv_maxy_spel_row[3];
         /* Fullpel MV range for motion search */
-        int     mv_min_fpel[2];
-        int     mv_max_fpel[2];
+        ALIGNED_8( int16_t mv_limit_fpel[2][2] ); /* min_x, min_y, max_x, max_y */
         int     mv_miny_fpel_row[3];
         int     mv_maxy_fpel_row[3];
 
@@ -705,6 +725,7 @@ struct x264_t
          * and won't be copied from one thread to another */
 
         /* mb table */
+        uint8_t *base;                      /* base pointer for all malloced data in this mb */
         int8_t  *type;                      /* mb type */
         uint8_t *partition;                 /* mb partition */
         int8_t  *qp;                        /* mb qp */
@@ -758,7 +779,7 @@ struct x264_t
 #define FENC_STRIDE 16
 #define FDEC_STRIDE 32
             ALIGNED_16( pixel fenc_buf[48*FENC_STRIDE] );
-            ALIGNED_16( pixel fdec_buf[52*FDEC_STRIDE] );
+            ALIGNED_N( pixel fdec_buf[52*FDEC_STRIDE] );
 
             /* i4x4 and i8x8 backup data, for skipping the encode stage when possible */
             ALIGNED_16( pixel i4x4_fdec_buf[16*16] );
@@ -775,8 +796,8 @@ struct x264_t
             ALIGNED_16( dctcoef fenc_dct4[16][16] );
 
             /* Psy RD SATD/SA8D scores cache */
-            ALIGNED_16( uint64_t fenc_hadamard_cache[9] );
-            ALIGNED_16( uint32_t fenc_satd_cache[32] );
+            ALIGNED_N( uint64_t fenc_hadamard_cache[9] );
+            ALIGNED_N( uint32_t fenc_satd_cache[32] );
 
             /* pointer over mb of the frame to be compressed */
             pixel *p_fenc[3]; /* y,u,v */
@@ -910,8 +931,8 @@ struct x264_t
     uint32_t (*nr_residual_sum)[64];
     uint32_t *nr_count;
 
-    ALIGNED_16( udctcoef nr_offset_denoise[4][64] );
-    ALIGNED_16( uint32_t nr_residual_sum_buf[2][4][64] );
+    ALIGNED_N( udctcoef nr_offset_denoise[4][64] );
+    ALIGNED_N( uint32_t nr_residual_sum_buf[2][4][64] );
     uint32_t nr_count_buf[2][4];
 
     uint8_t luma2chroma_pixel[7]; /* Subsampled pixel size */
@@ -947,10 +968,47 @@ struct x264_t
     struct visualize_t *visualize;
 #endif
     x264_lookahead_t *lookahead;
+
+#if HAVE_OPENCL
+    x264_opencl_t opencl;
+#endif
 };
 
 // included at the end because it needs x264_t
 #include "macroblock.h"
+
+static int ALWAYS_INLINE x264_predictor_roundclip( int16_t (*dst)[2], int16_t (*mvc)[2], int i_mvc, int16_t mv_limit[2][2], uint32_t pmv )
+{
+    int cnt = 0;
+    for( int i = 0; i < i_mvc; i++ )
+    {
+        int mx = (mvc[i][0] + 2) >> 2;
+        int my = (mvc[i][1] + 2) >> 2;
+        uint32_t mv = pack16to32_mask(mx, my);
+        if( !mv || mv == pmv ) continue;
+        dst[cnt][0] = x264_clip3( mx, mv_limit[0][0], mv_limit[1][0] );
+        dst[cnt][1] = x264_clip3( my, mv_limit[0][1], mv_limit[1][1] );
+        cnt++;
+    }
+    return cnt;
+}
+
+static int ALWAYS_INLINE x264_predictor_clip( int16_t (*dst)[2], int16_t (*mvc)[2], int i_mvc, int16_t mv_limit[2][2], uint32_t pmv )
+{
+    int cnt = 0;
+    int qpel_limit[4] = {mv_limit[0][0] << 2, mv_limit[0][1] << 2, mv_limit[1][0] << 2, mv_limit[1][1] << 2};
+    for( int i = 0; i < i_mvc; i++ )
+    {
+        uint32_t mv = M32( mvc[i] );
+        int mx = mvc[i][0];
+        int my = mvc[i][1];
+        if( !mv || mv == pmv ) continue;
+        dst[cnt][0] = x264_clip3( mx, qpel_limit[0], qpel_limit[2] );
+        dst[cnt][1] = x264_clip3( my, qpel_limit[1], qpel_limit[3] );
+        cnt++;
+    }
+    return cnt;
+}
 
 #if ARCH_X86 || ARCH_X86_64
 #include "x86/util.h"

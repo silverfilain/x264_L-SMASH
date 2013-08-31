@@ -47,18 +47,19 @@
 
 const x264_cpu_name_t x264_cpu_names[] =
 {
-    {"Altivec",     X264_CPU_ALTIVEC},
-//  {"MMX",         X264_CPU_MMX}, // we don't support asm on mmx1 cpus anymore
-    {"MMX2",        X264_CPU_MMX|X264_CPU_MMX2},
-    {"MMXEXT",      X264_CPU_MMX|X264_CPU_MMX2},
-//  {"SSE",         X264_CPU_MMX|X264_CPU_MMX2|X264_CPU_SSE}, // there are no sse1 functions in x264
-#define SSE2 X264_CPU_MMX|X264_CPU_MMX2|X264_CPU_SSE|X264_CPU_SSE2
+#if HAVE_MMX
+//  {"MMX",         X264_CPU_MMX},  // we don't support asm on mmx1 cpus anymore
+//  {"CMOV",        X264_CPU_CMOV}, // we require this unconditionally, so don't print it
+#define MMX2 X264_CPU_MMX|X264_CPU_MMX2|X264_CPU_CMOV
+    {"MMX2",        MMX2},
+    {"MMXEXT",      MMX2},
+    {"SSE",         MMX2|X264_CPU_SSE},
+#define SSE2 MMX2|X264_CPU_SSE|X264_CPU_SSE2
     {"SSE2Slow",    SSE2|X264_CPU_SSE2_IS_SLOW},
     {"SSE2",        SSE2},
     {"SSE2Fast",    SSE2|X264_CPU_SSE2_IS_FAST},
     {"SSE3",        SSE2|X264_CPU_SSE3},
     {"SSSE3",       SSE2|X264_CPU_SSE3|X264_CPU_SSSE3},
-    {"FastShuffle", SSE2|X264_CPU_SHUFFLE_IS_FAST},
     {"SSE4.1",      SSE2|X264_CPU_SSE3|X264_CPU_SSSE3|X264_CPU_SSE4},
     {"SSE4",        SSE2|X264_CPU_SSE3|X264_CPU_SSSE3|X264_CPU_SSE4},
     {"SSE4.2",      SSE2|X264_CPU_SSE3|X264_CPU_SSSE3|X264_CPU_SSE4|X264_CPU_SSE42},
@@ -70,19 +71,25 @@ const x264_cpu_name_t x264_cpu_names[] =
     {"FMA3",        AVX|X264_CPU_FMA3},
 #undef AVX
 #undef SSE2
+#undef MMX2
     {"Cache32",         X264_CPU_CACHELINE_32},
     {"Cache64",         X264_CPU_CACHELINE_64},
-    {"SSEMisalign",     X264_CPU_SSE_MISALIGN},
     {"LZCNT",           X264_CPU_LZCNT},
     {"BMI1",            X264_CPU_BMI1},
     {"BMI2",            X264_CPU_BMI1|X264_CPU_BMI2},
-    {"TBM",             X264_CPU_TBM},
-    {"Slow_mod4_stack", X264_CPU_STACK_MOD4},
-    {"ARMv6",           X264_CPU_ARMV6},
-    {"NEON",            X264_CPU_NEON},
-    {"Fast_NEON_MRC",   X264_CPU_FAST_NEON_MRC},
     {"SlowCTZ",         X264_CPU_SLOW_CTZ},
     {"SlowAtom",        X264_CPU_SLOW_ATOM},
+    {"SlowPshufb",      X264_CPU_SLOW_PSHUFB},
+    {"SlowPalignr",     X264_CPU_SLOW_PALIGNR},
+    {"SlowShuffle",     X264_CPU_SLOW_SHUFFLE},
+    {"UnalignedStack",  X264_CPU_STACK_MOD4},
+#elif ARCH_PPC
+    {"Altivec",         X264_CPU_ALTIVEC},
+#elif ARCH_ARM
+    {"ARMv6",           X264_CPU_ARMV6},
+    {"NEON",            X264_CPU_NEON},
+    {"FastNeonMRC",     X264_CPU_FAST_NEON_MRC},
+#endif
     {"", 0},
 };
 
@@ -115,7 +122,7 @@ uint32_t x264_cpu_detect( void )
     uint32_t cpu = 0;
     uint32_t eax, ebx, ecx, edx;
     uint32_t vendor[4] = {0};
-    uint32_t max_extended_cap;
+    uint32_t max_extended_cap, max_basic_cap;
     int cache;
 
 #if !ARCH_X86_64
@@ -124,16 +131,21 @@ uint32_t x264_cpu_detect( void )
 #endif
 
     x264_cpu_cpuid( 0, &eax, vendor+0, vendor+2, vendor+1 );
-    if( eax == 0 )
+    max_basic_cap = eax;
+    if( max_basic_cap == 0 )
         return 0;
 
     x264_cpu_cpuid( 1, &eax, &ebx, &ecx, &edx );
     if( edx&0x00800000 )
         cpu |= X264_CPU_MMX;
     else
-        return 0;
+        return cpu;
     if( edx&0x02000000 )
         cpu |= X264_CPU_MMX2|X264_CPU_SSE;
+    if( edx&0x00008000 )
+        cpu |= X264_CPU_CMOV;
+    else
+        return cpu;
     if( edx&0x04000000 )
         cpu |= X264_CPU_SSE2;
     if( ecx&0x00000001 )
@@ -157,59 +169,66 @@ uint32_t x264_cpu_detect( void )
         }
     }
 
-    x264_cpu_cpuid( 7, &eax, &ebx, &ecx, &edx );
-    /* AVX2 requires OS support, but BMI1/2 don't. */
-    if( (cpu&X264_CPU_AVX) && (ebx&0x00000020) )
-        cpu |= X264_CPU_AVX2;
-    if( ebx&0x00000008 )
+    if( max_basic_cap >= 7 )
     {
-        cpu |= X264_CPU_BMI1;
-        if( ebx&0x00000100 )
-            cpu |= X264_CPU_BMI2;
+        x264_cpu_cpuid( 7, &eax, &ebx, &ecx, &edx );
+        /* AVX2 requires OS support, but BMI1/2 don't. */
+        if( (cpu&X264_CPU_AVX) && (ebx&0x00000020) )
+            cpu |= X264_CPU_AVX2;
+        if( ebx&0x00000008 )
+        {
+            cpu |= X264_CPU_BMI1;
+            if( ebx&0x00000100 )
+                cpu |= X264_CPU_BMI2;
+        }
     }
 
     if( cpu & X264_CPU_SSSE3 )
         cpu |= X264_CPU_SSE2_IS_FAST;
-    if( cpu & X264_CPU_SSE4 )
-        cpu |= X264_CPU_SHUFFLE_IS_FAST;
 
     x264_cpu_cpuid( 0x80000000, &eax, &ebx, &ecx, &edx );
     max_extended_cap = eax;
 
-    if( !strcmp((char*)vendor, "AuthenticAMD") && max_extended_cap >= 0x80000001 )
+    if( max_extended_cap >= 0x80000001 )
     {
-        cpu |= X264_CPU_SLOW_CTZ;
         x264_cpu_cpuid( 0x80000001, &eax, &ebx, &ecx, &edx );
-        if( edx&0x00400000 )
-            cpu |= X264_CPU_MMX2;
-        if( cpu & X264_CPU_SSE2 )
+
+        if( ecx&0x00000020 )
+            cpu |= X264_CPU_LZCNT;             /* Supported by Intel chips starting with Haswell */
+        if( ecx&0x00000040 ) /* SSE4a, AMD only */
         {
-            if( ecx&0x00000040 ) /* SSE4a */
+            int family = ((eax>>8)&0xf) + ((eax>>20)&0xff);
+            cpu |= X264_CPU_SSE2_IS_FAST;      /* Phenom and later CPUs have fast SSE units */
+            if( family == 0x14 )
             {
-                cpu |= X264_CPU_SSE2_IS_FAST;
-                cpu |= X264_CPU_LZCNT;
-                cpu |= X264_CPU_SHUFFLE_IS_FAST;
-                cpu &= ~X264_CPU_SLOW_CTZ;
+                cpu &= ~X264_CPU_SSE2_IS_FAST; /* SSSE3 doesn't imply fast SSE anymore... */
+                cpu |= X264_CPU_SSE2_IS_SLOW;  /* Bobcat has 64-bit SIMD units */
+                cpu |= X264_CPU_SLOW_PALIGNR;  /* palignr is insanely slow on Bobcat */
             }
-            else
-                cpu |= X264_CPU_SSE2_IS_SLOW;
-
-            if( ecx&0x00000080 ) /* Misalign SSE */
+            if( family == 0x16 )
             {
-                cpu |= X264_CPU_SSE_MISALIGN;
-                x264_cpu_mask_misalign_sse();
+                cpu |= X264_CPU_SLOW_PSHUFB;   /* Jaguar's pshufb isn't that slow, but it's slow enough
+                                                * compared to alternate instruction sequences that this
+                                                * is equal or faster on almost all such functions. */
             }
+        }
 
-            if( cpu & X264_CPU_AVX )
-            {
-                if( ecx&0x00000800 ) /* XOP */
-                    cpu |= X264_CPU_XOP;
-                if( ecx&0x00010000 ) /* FMA4 */
-                    cpu |= X264_CPU_FMA4;
-            }
+        if( cpu & X264_CPU_AVX )
+        {
+            if( ecx&0x00000800 ) /* XOP */
+                cpu |= X264_CPU_XOP;
+            if( ecx&0x00010000 ) /* FMA4 */
+                cpu |= X264_CPU_FMA4;
+        }
 
-            if( ecx&0x00200000 )
-                cpu |= X264_CPU_TBM;
+        if( !strcmp((char*)vendor, "AuthenticAMD") )
+        {
+            if( edx&0x00400000 )
+                cpu |= X264_CPU_MMX2;
+            if( !(cpu&X264_CPU_LZCNT) )
+                cpu |= X264_CPU_SLOW_CTZ;
+            if( (cpu&X264_CPU_SSE2) && !(cpu&X264_CPU_SSE2_IS_FAST) )
+                cpu |= X264_CPU_SSE2_IS_SLOW; /* AMD CPUs come in two types: terrible at SSE and great at it */
         }
     }
 
@@ -233,11 +252,12 @@ uint32_t x264_cpu_detect( void )
             {
                 cpu |= X264_CPU_SLOW_ATOM;
                 cpu |= X264_CPU_SLOW_CTZ;
+                cpu |= X264_CPU_SLOW_PSHUFB;
             }
-            /* Some Penryns and Nehalems are pointlessly crippled (SSE4 disabled), so
-             * detect them here. */
-            else if( model >= 23 )
-                cpu |= X264_CPU_SHUFFLE_IS_FAST;
+            /* Conroe has a slow shuffle unit. Check the model number to make sure not
+             * to include crippled low-end Penryns and Nehalems that don't have SSE4. */
+            else if( (cpu&X264_CPU_SSSE3) && !(cpu&X264_CPU_SSE4) && model < 23 )
+                cpu |= X264_CPU_SLOW_SHUFFLE;
         }
     }
 
@@ -251,7 +271,7 @@ uint32_t x264_cpu_detect( void )
             x264_cpu_cpuid( 0x80000006, &eax, &ebx, &ecx, &edx );
             cache = ecx&0xff; // cacheline size
         }
-        if( !cache )
+        if( !cache && max_basic_cap >= 2 )
         {
             // Cache and TLB Information
             static const char cache32_ids[] = { 0x0a, 0x0c, 0x41, 0x42, 0x43, 0x44, 0x45, 0x82, 0x83, 0x84, 0x85, 0 };
